@@ -1,0 +1,55 @@
+name: MediaKeyHub
+options:
+  bundleIdPrefix: dev.local
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+targets:
+  MediaKeyKit:
+    type: framework
+    platform: macOS
+    sources: [Sources/MediaKeyKit]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.local.MediaKeyKit
+        GENERATE_INFOPLIST_FILE: YES
+  MediaKeyHub:
+    type: application
+    platform: macOS
+    sources: [Sources/MediaKeyHub]
+    dependencies:
+      - target: MediaKeyKit
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.local.MediaKeyHub
+        INFOPLIST_FILE: Sources/MediaKeyHub/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/MediaKeyHub/MediaKeyHub.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
+  MediaKeyKitTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [Tests/MediaKeyKitTests]
+    dependencies:
+      - target: MediaKeyKit
+schemes:
+  MediaKeyKit:
+    build:
+      targets:
+        MediaKeyKit: all
+        MediaKeyKitTests: [test]
+    test:
+      targets: [MediaKeyKitTests]
+  MediaKeyHub:
+    build:
+      targets:
+        MediaKeyHub: all
+    run:
+      config: Debug
