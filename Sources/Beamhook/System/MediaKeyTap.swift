@@ -1,6 +1,6 @@
 import Cocoa
 import CoreGraphics
-import MediaKeyKit
+import BeamhookKit
 
 /// NSSystemDefined event type (NX_SYSDEFINED from <IOKit/hidsystem/IOLLEvent.h>).
 private let kSystemDefinedEventType: UInt32 = 14
@@ -28,7 +28,7 @@ final class MediaKeyTap {
     func start() {
         guard thread == nil else { return }
         let t = Thread { [weak self] in self?.threadMain() }
-        t.name = "com.mediakeyhub.tap"
+        t.name = "com.beamhook.tap"
         t.qualityOfService = .userInteractive
         thread = t
         t.start()

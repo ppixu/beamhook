@@ -10,11 +10,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
-struct MediaKeyHubApp: App {
+struct BeamhookApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra("MediaKeyHub", systemImage: "playpause") {
+        MenuBarExtra("Beamhook", systemImage: "playpause") {
             MenuContentView()
                 .environmentObject(appDelegate.state)
         }

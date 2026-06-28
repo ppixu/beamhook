@@ -1,5 +1,5 @@
 import Foundation
-@testable import MediaKeyKit
+@testable import BeamhookKit
 
 final class MockScriptExecutor: ScriptExecuting {
     var ranScripts: [String] = []

@@ -1,5 +1,5 @@
 import XCTest
-@testable import MediaKeyKit
+@testable import BeamhookKit
 
 final class MediaKeyDecoderTests: XCTestCase {
     // data1 = (keyCode << 16) | (keyState << 8) | repeatBit

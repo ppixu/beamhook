@@ -1,5 +1,5 @@
 import XCTest
-@testable import MediaKeyKit
+@testable import BeamhookKit
 
 final class ScriptedMediaAppTests: XCTestCase {
     private func makeVLC(executor: MockScriptExecutor, presence: MockPresence) -> ScriptedMediaApp {

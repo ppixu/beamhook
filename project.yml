@@ -1,4 +1,4 @@
-name: MediaKeyHub
+name: Beamhook
 options:
   bundleIdPrefix: dev.local
   deploymentTarget:
@@ -12,45 +12,45 @@ settings:
     CODE_SIGN_STYLE: Automatic
     ARCHS: "$(ARCHS_STANDARD)"
 targets:
-  MediaKeyKit:
+  BeamhookKit:
     type: framework
     platform: macOS
-    sources: [Sources/MediaKeyKit]
+    sources: [Sources/BeamhookKit]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.local.MediaKeyKit
+        PRODUCT_BUNDLE_IDENTIFIER: dev.local.BeamhookKit
         GENERATE_INFOPLIST_FILE: YES
-  MediaKeyHub:
+  Beamhook:
     type: application
     platform: macOS
-    sources: [Sources/MediaKeyHub]
+    sources: [Sources/Beamhook]
     dependencies:
-      - target: MediaKeyKit
+      - target: BeamhookKit
         embed: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.local.MediaKeyHub
-        INFOPLIST_FILE: Sources/MediaKeyHub/Info.plist
-        CODE_SIGN_ENTITLEMENTS: Sources/MediaKeyHub/MediaKeyHub.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: dev.local.Beamhook
+        INFOPLIST_FILE: Sources/Beamhook/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Sources/Beamhook/Beamhook.entitlements
         ENABLE_HARDENED_RUNTIME: YES
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
-  MediaKeyKitTests:
+  BeamhookKitTests:
     type: bundle.unit-test
     platform: macOS
-    sources: [Tests/MediaKeyKitTests]
+    sources: [Tests/BeamhookKitTests]
     dependencies:
-      - target: MediaKeyKit
+      - target: BeamhookKit
 schemes:
-  MediaKeyKit:
+  BeamhookKit:
     build:
       targets:
-        MediaKeyKit: all
-        MediaKeyKitTests: [test]
+        BeamhookKit: all
+        BeamhookKitTests: [test]
     test:
-      targets: [MediaKeyKitTests]
-  MediaKeyHub:
+      targets: [BeamhookKitTests]
+  Beamhook:
     build:
       targets:
-        MediaKeyHub: all
+        Beamhook: all
     run:
       config: Debug

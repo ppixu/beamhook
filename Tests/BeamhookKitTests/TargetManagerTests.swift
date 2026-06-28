@@ -1,5 +1,5 @@
 import XCTest
-@testable import MediaKeyKit
+@testable import BeamhookKit
 
 final class TargetManagerTests: XCTestCase {
     final class MockResolver: MediaAppResolver {

@@ -1,5 +1,5 @@
 import SwiftUI
-import MediaKeyKit
+import BeamhookKit
 
 struct MenuContentView: View {
     @EnvironmentObject var state: AppState
@@ -43,7 +43,7 @@ struct MenuContentView: View {
     private var permissionBanner: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Accessibility permission needed").font(.headline).foregroundStyle(.red)
-            Text("MediaKeyHub needs Accessibility access to capture the media keys.")
+            Text("Beamhook needs Accessibility access to capture the media keys.")
                 .font(.caption)
             HStack {
                 Button("Open Settings") { state.permissions.openAccessibilitySettings() }

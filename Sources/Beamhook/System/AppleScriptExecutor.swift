@@ -1,5 +1,5 @@
 import Foundation
-import MediaKeyKit
+import BeamhookKit
 
 /// Runs AppleScript via NSAppleScript. Call on the main thread.
 final class AppleScriptExecutor: ScriptExecuting {

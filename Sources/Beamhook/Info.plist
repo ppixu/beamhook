@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>MediaKeyHub</string>
+    <string>Beamhook</string>
     <key>CFBundleDisplayName</key>
-    <string>MediaKeyHub</string>
+    <string>Beamhook</string>
     <key>CFBundleIdentifier</key>
     <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundlePackageType</key>
@@ -19,6 +19,6 @@
     <key>LSUIElement</key>
     <true/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>MediaKeyHub controls your chosen media app (play/pause, next, previous, volume) on your behalf.</string>
+    <string>Beamhook controls your chosen media app (play/pause, next, previous, volume) on your behalf.</string>
 </dict>
 </plist>

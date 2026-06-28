@@ -1,5 +1,5 @@
 import SwiftUI
-import MediaKeyKit
+import BeamhookKit
 
 struct PreferencesView: View {
     @EnvironmentObject var state: AppState

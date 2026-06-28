@@ -1,5 +1,5 @@
 import AppKit
-import MediaKeyKit
+import BeamhookKit
 
 final class WorkspacePresenceChecker: AppPresenceChecking {
     func isRunning(bundleID: String) -> Bool {

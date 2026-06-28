@@ -1,6 +1,6 @@
 import AppKit
 import Combine
-import MediaKeyKit
+import BeamhookKit
 
 @MainActor
 final class AppState: ObservableObject {
