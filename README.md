@@ -7,8 +7,9 @@ scriptable apps.
 ## Build
 
 ```bash
+git clone https://github.com/ppixu/beamhook
+cd beamhook
 brew install xcodegen
-cd Beamhook
 xcodegen generate
 xcodebuild build -project Beamhook.xcodeproj -scheme Beamhook -configuration Release
 ```
