@@ -19,6 +19,10 @@ final class TapWatchdog {
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(systemDidWake),
             name: NSWorkspace.didWakeNotification, object: nil)
+
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(systemDidWake),
+            name: NSWorkspace.sessionDidBecomeActiveNotification, object: nil)
     }
 
     @objc private func systemDidWake() {
