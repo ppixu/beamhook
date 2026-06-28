@@ -4,6 +4,7 @@ import BeamhookKit
 struct MenuContentView: View {
     @EnvironmentObject var state: AppState
     @State private var showingPrefs = false
+    @State private var playing: Bool?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -23,6 +24,8 @@ struct MenuContentView: View {
             .labelsHidden()
             .pickerStyle(.menu)
 
+            playPauseButton
+
             Divider()
             PlayingAppsList()
 
@@ -38,6 +41,33 @@ struct MenuContentView: View {
         .sheet(isPresented: $showingPrefs) {
             PreferencesView().environmentObject(state)
         }
+        .onAppear { playing = state.isTargetPlaying() }
+        .task {
+            while !Task.isCancelled {
+                playing = state.isTargetPlaying()
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+            }
+        }
+    }
+
+    private var targetName: String {
+        let id = state.selectedTargetID
+        return state.availableApps.first { $0.id == id }?.displayName ?? "target"
+    }
+
+    private var playPauseButton: some View {
+        Button {
+            state.togglePlayPauseTarget()
+            playing = state.isTargetPlaying()
+        } label: {
+            HStack {
+                Image(systemName: playing == true ? "pause.fill" : "play.fill")
+                Text(playing == true ? "Pause" : "Play")
+                Text(targetName).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .controlSize(.large)
     }
 
     private var permissionBanner: some View {

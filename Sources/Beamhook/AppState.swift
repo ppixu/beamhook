@@ -11,6 +11,7 @@ final class AppState: ObservableObject {
 
     private let tap: MediaKeyTap
     private let watchdog: TapWatchdog
+    private var permissionTimer: Timer?
 
     @Published var selectedTargetID: String?
     @Published var availableApps: [AppDefinition]
@@ -47,13 +48,45 @@ final class AppState: ObservableObject {
 
     func startInput() {
         hasAccessibility = permissions.hasAccessibility
-        if hasAccessibility { activateInput() } else { permissions.requestAccessibility() }
+        if hasAccessibility {
+            activateInput()
+        } else {
+            permissions.requestAccessibility()
+            startPermissionPolling()
+        }
     }
 
     func refreshPermission() {
         hasAccessibility = permissions.hasAccessibility
         if hasAccessibility { activateInput() }
     }
+
+    /// Polls the Accessibility permission so the UI flips automatically once the
+    /// user grants it in System Settings — no relaunch or manual "Re-check".
+    private func startPermissionPolling() {
+        permissionTimer?.invalidate()
+        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] timer in
+            Task { @MainActor in
+                guard let self else { timer.invalidate(); return }
+                if self.permissions.hasAccessibility {
+                    self.hasAccessibility = true
+                    self.activateInput()
+                    timer.invalidate()
+                    self.permissionTimer = nil
+                }
+            }
+        }
+        permissionTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    // Play/pause helpers used by the in-menu control.
+    func isTargetPlaying() -> Bool? {
+        guard let id = selectedTargetID else { return nil }
+        return registry.app(withID: id)?.isPlaying()
+    }
+
+    func togglePlayPauseTarget() { targetManager.handle(.playPause) }
 
     func setTarget(_ id: String) {
         selectedTargetID = id
