@@ -43,3 +43,24 @@ xcrun stapler staple "build/Build/Products/Release/Beamhook.app"
 - **Accessibility** — required to capture the media keys. Grant in System Settings →
   Privacy & Security → Accessibility, then quit and reopen the app.
 - **Automation** — a one-time per-app prompt the first time Beamhook controls each app.
+
+## Customizing the icons
+
+The icons that ship are **placeholders** (a blue→indigo rounded-rect app icon with a
+white play/pause glyph, and a monochrome menubar glyph). To make them your own, edit
+the two master images and regenerate the asset catalog:
+
+1. Replace `Icon/master-1024.png` — a 1024×1024 PNG used as the app icon.
+2. Replace `Icon/menubar-master.png` — a simple monochrome (black-on-transparent)
+   glyph used as the menu-bar template image. Keep it flat black with alpha; macOS
+   re-tints it automatically for light/dark menu bars.
+3. Regenerate every sized PNG and refresh the Xcode project:
+
+   ```bash
+   ./Icon/make-icons.sh && xcodegen generate
+   ```
+
+`make-icons.sh` uses `sips` to resize the two masters into the full macOS app-icon set
+(`Sources/Beamhook/Assets.xcassets/AppIcon.appiconset/`) and the menu-bar image set
+(`Sources/Beamhook/Assets.xcassets/MenuBarIcon.imageset/`). To regenerate the
+placeholder masters themselves, run `swift Icon/make-masters.swift`.

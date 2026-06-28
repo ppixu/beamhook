@@ -14,7 +14,7 @@ struct BeamhookApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra("Beamhook", systemImage: "playpause") {
+        MenuBarExtra("Beamhook", image: "MenuBarIcon") {
             MenuContentView()
                 .environmentObject(appDelegate.state)
         }
