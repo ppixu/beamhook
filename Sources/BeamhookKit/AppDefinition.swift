@@ -11,10 +11,12 @@ public struct AppDefinition: Codable, Identifiable, Equatable {
     public var volumeScaleKind: VolumeScaleKind
     public var volumeGetScript: String?
     public var volumeSetScript: String?   // must contain the token {volume}
+    public var playStateScript: String?
 
     public init(id: String, displayName: String, bundleID: String, isBuiltIn: Bool,
                 playPauseScript: String, nextScript: String?, previousScript: String?,
-                volumeScaleKind: VolumeScaleKind, volumeGetScript: String?, volumeSetScript: String?) {
+                volumeScaleKind: VolumeScaleKind, volumeGetScript: String?, volumeSetScript: String?,
+                playStateScript: String? = nil) {
         self.id = id
         self.displayName = displayName
         self.bundleID = bundleID
@@ -25,5 +27,6 @@ public struct AppDefinition: Codable, Identifiable, Equatable {
         self.volumeScaleKind = volumeScaleKind
         self.volumeGetScript = volumeGetScript
         self.volumeSetScript = volumeSetScript
+        self.playStateScript = playStateScript
     }
 }

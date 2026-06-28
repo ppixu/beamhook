@@ -10,7 +10,8 @@ public enum BuiltInApps {
         previousScript: "tell application \"Spotify\" to previous track",
         volumeScaleKind: .integer(max: 100),
         volumeGetScript: "tell application \"Spotify\" to return sound volume",
-        volumeSetScript: "tell application \"Spotify\" to set sound volume to {volume}")
+        volumeSetScript: "tell application \"Spotify\" to set sound volume to {volume}",
+        playStateScript: "tell application \"Spotify\" to return player state")
 
     public static let music = AppDefinition(
         id: "music", displayName: "Apple Music", bundleID: "com.apple.Music", isBuiltIn: true,
@@ -19,7 +20,8 @@ public enum BuiltInApps {
         previousScript: "tell application \"Music\" to previous track",
         volumeScaleKind: .integer(max: 100),
         volumeGetScript: "tell application \"Music\" to return sound volume",
-        volumeSetScript: "tell application \"Music\" to set sound volume to {volume}")
+        volumeSetScript: "tell application \"Music\" to set sound volume to {volume}",
+        playStateScript: "tell application \"Music\" to return player state")
 
     public static let vlc = AppDefinition(
         id: "vlc", displayName: "VLC", bundleID: "org.videolan.vlc", isBuiltIn: true,
@@ -28,7 +30,8 @@ public enum BuiltInApps {
         previousScript: "tell application \"VLC\" to previous",
         volumeScaleKind: .integer(max: 512),
         volumeGetScript: "tell application \"VLC\" to return audio volume",
-        volumeSetScript: "tell application \"VLC\" to set audio volume to {volume}")
+        volumeSetScript: "tell application \"VLC\" to set audio volume to {volume}",
+        playStateScript: "tell application \"VLC\" to return playing")
 
     public static let vox = AppDefinition(
         id: "vox", displayName: "VOX", bundleID: "com.coppertino.Vox", isBuiltIn: true,

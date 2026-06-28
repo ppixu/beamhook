@@ -28,6 +28,7 @@ public protocol MediaApp: AnyObject {
     var supportsVolume: Bool { get }
     func currentVolume() -> Int?    // 0...100, nil if unsupported/unavailable
     func setVolume(_ percent: Int)  // 0...100
+    func isPlaying() -> Bool?       // true=playing, false=paused/stopped, nil=unknown/unavailable
 }
 
 public protocol MediaAppResolver: AnyObject {

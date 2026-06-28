@@ -62,6 +62,53 @@ final class ScriptedMediaAppTests: XCTestCase {
         XCTAssertNil(app.currentVolume())
     }
 
+    private func makeSpotify(executor: MockScriptExecutor, presence: MockPresence) -> ScriptedMediaApp {
+        ScriptedMediaApp(definition: BuiltInApps.spotify, executor: executor, presence: presence)
+    }
+
+    func testIsPlayingTrueWhenOutputPlaying() {
+        let exec = MockScriptExecutor()
+        exec.cannedOutput = "playing"
+        let presence = MockPresence()
+        presence.runningBundleIDs = ["com.spotify.client"]
+        let app = makeSpotify(executor: exec, presence: presence)
+        XCTAssertEqual(app.isPlaying(), true)
+    }
+
+    func testIsPlayingFalseWhenOutputPaused() {
+        let exec = MockScriptExecutor()
+        exec.cannedOutput = "paused"
+        let presence = MockPresence()
+        presence.runningBundleIDs = ["com.spotify.client"]
+        let app = makeSpotify(executor: exec, presence: presence)
+        XCTAssertEqual(app.isPlaying(), false)
+    }
+
+    func testIsPlayingFalseWhenOutputStopped() {
+        let exec = MockScriptExecutor()
+        exec.cannedOutput = "stopped"
+        let presence = MockPresence()
+        presence.runningBundleIDs = ["com.spotify.client"]
+        let app = makeSpotify(executor: exec, presence: presence)
+        XCTAssertEqual(app.isPlaying(), false)
+    }
+
+    func testIsPlayingNilWhenNotRunning() {
+        let exec = MockScriptExecutor()
+        exec.cannedOutput = "playing"
+        let app = makeSpotify(executor: exec, presence: MockPresence()) // nothing running
+        XCTAssertNil(app.isPlaying())
+    }
+
+    func testIsPlayingNilWhenNoPlayStateScript() {
+        let exec = MockScriptExecutor()
+        exec.cannedOutput = "playing"
+        let presence = MockPresence()
+        presence.runningBundleIDs = ["com.coppertino.Vox"]
+        let app = ScriptedMediaApp(definition: BuiltInApps.vox, executor: exec, presence: presence)
+        XCTAssertNil(app.isPlaying())
+    }
+
     func testPerformDispatchesCorrectScript() {
         let cases: [(MediaCommand, String)] = [
             (.playPause, "tell application \"VLC\" to play"),

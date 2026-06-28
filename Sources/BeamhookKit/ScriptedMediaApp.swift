@@ -52,4 +52,15 @@ public final class ScriptedMediaApp: MediaApp {
         let script = template.replacingOccurrences(of: "{volume}", with: rawStr)
         _ = executor.run(script)
     }
+
+    public func isPlaying() -> Bool? {
+        guard isRunning, let script = definition.playStateScript else { return nil }
+        let result = executor.run(script)
+        guard result.succeeded,
+              let out = result.output?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        else { return nil }
+        if out == "playing" || out == "true" { return true }
+        if out == "paused" || out == "stopped" || out == "false" { return false }
+        return nil
+    }
 }

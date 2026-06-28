@@ -26,6 +26,7 @@ final class MockMediaApp: MediaApp {
     var supportsVolume: Bool = false
     var volumeValue: Int? = nil
     var setVolumeCalls: [Int] = []
+    var playingState: Bool? = nil
 
     init(id: String, isRunning: Bool) {
         self.id = id
@@ -37,4 +38,5 @@ final class MockMediaApp: MediaApp {
     func perform(_ command: MediaCommand) { performedCommands.append(command) }
     func currentVolume() -> Int? { volumeValue }
     func setVolume(_ percent: Int) { setVolumeCalls.append(percent) }
+    func isPlaying() -> Bool? { playingState }
 }
