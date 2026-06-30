@@ -60,6 +60,31 @@ xcrun stapler staple "build/Build/Products/Release/Beamhook.app"
   Privacy & Security → Accessibility, then quit and reopen the app.
 - **Automation** — a one-time per-app prompt the first time Beamhook controls each app.
 
+### Why the Accessibility grant kept disappearing (and why it doesn't now)
+
+macOS binds the Accessibility grant to the app's **code-signing identity**. An
+**ad-hoc** signed build (`codesign -s -`) has no stable identity, so its `cdhash`
+changes on every rebuild and macOS silently drops the grant: the toggle still shows
+"on", but `AXIsProcessTrusted()` returns `false`, the media-key tap never starts, and
+the keys fall back to whatever the system wants (Safari/Music hijack them).
+
+`run.sh` therefore signs with your **Apple Development** identity (auto-detected from
+the login keychain via `security find-identity`), using *manual* signing — no Apple-ID
+login or provisioning profile needed. That gives a designated requirement based on the
+bundle id + certificate, identical across rebuilds, so the grant sticks.
+
+**First time / after upgrading from an old ad-hoc build**, clear the stale grant so
+macOS prompts fresh for the newly-signed app:
+
+```bash
+tccutil reset Accessibility dev.local.Beamhook   # removes any orphaned grant
+./run.sh                                          # rebuild + launch (now signed)
+# then grant Accessibility once when prompted — it will persist from here on
+```
+
+If `run.sh` warns it found **no signing identity**, add a free Apple ID in
+Xcode → Settings → Accounts (creates an "Apple Development" identity), then rerun.
+
 ## Customizing the icons
 
 The icons that ship are **placeholders** (a blue→indigo rounded-rect app icon with a
