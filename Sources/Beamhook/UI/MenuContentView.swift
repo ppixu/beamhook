@@ -3,7 +3,6 @@ import BeamhookKit
 
 struct MenuContentView: View {
     @EnvironmentObject var state: AppState
-    @State private var showingPrefs = false
     @State private var playing: Bool?
 
     var body: some View {
@@ -30,17 +29,16 @@ struct MenuContentView: View {
             PlayingAppsList()
 
             Divider()
+            SettingsSection()
+
+            Divider()
             HStack {
-                Button("Preferences…") { showingPrefs = true }
                 Spacer()
                 Button("Quit") { NSApplication.shared.terminate(nil) }
             }
         }
         .padding(12)
-        .frame(width: 320)
-        .sheet(isPresented: $showingPrefs) {
-            PreferencesView().environmentObject(state)
-        }
+        .frame(width: 340)
         .onAppear { playing = state.isTargetPlaying() }
         .task {
             while !Task.isCancelled {
@@ -57,8 +55,9 @@ struct MenuContentView: View {
 
     private var playPauseButton: some View {
         Button {
+            let wasPlaying = (playing == true)
             state.togglePlayPauseTarget()
-            playing = state.isTargetPlaying()
+            playing = !wasPlaying   // optimistic; the 1.5s poll reconciles with reality
         } label: {
             HStack {
                 Image(systemName: playing == true ? "pause.fill" : "play.fill")
