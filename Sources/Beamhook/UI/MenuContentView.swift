@@ -12,7 +12,7 @@ struct MenuContentView: View {
                 Divider()
             }
 
-            Text("Media-key target").font(.headline)
+            Text("Hook play to").font(.headline)
             Picker("Target", selection: Binding(
                 get: { state.selectedTargetID ?? state.availableApps.first?.id ?? "" },
                 set: { state.setTarget($0) })) {
@@ -25,7 +25,8 @@ struct MenuContentView: View {
 
             playPauseButton
 
-            Divider()
+            // Playing-apps section renders its own leading divider + rows, and
+            // nothing at all when nothing is playing.
             PlayingAppsList()
 
             Divider()
@@ -83,28 +84,23 @@ struct MenuContentView: View {
 }
 
 private struct PlayingAppsList: View {
-    @EnvironmentObject var state: AppState
-
     var body: some View {
-        Text("Recently playing").font(.headline)
         if #available(macOS 14.2, *) {
             PlayingAppsListAvailable()
-        } else {
-            Text("Requires macOS 14.2+").font(.caption).foregroundStyle(.secondary)
         }
     }
 }
 
 @available(macOS 14.2, *)
 private struct PlayingAppsListAvailable: View {
-    @EnvironmentObject var state: AppState
     @StateObject private var monitor = AudioProcessMonitor()
 
     var body: some View {
-        Group {
-            if monitor.playingApps.isEmpty {
-                Text("Nothing playing").font(.caption).foregroundStyle(.secondary)
-            } else {
+        // Always present (so the monitor starts), but shows content only when
+        // something is actually playing.
+        VStack(alignment: .leading, spacing: 8) {
+            if !monitor.playingApps.isEmpty {
+                Divider()
                 ForEach(monitor.playingApps) { app in
                     AppVolumeRow(playing: app)
                 }
@@ -122,9 +118,24 @@ private struct AppVolumeRow: View {
     @State private var volume: Double = 50
     @State private var scriptable = false
 
+    private var isTarget: Bool {
+        guard let id = state.selectedTargetID,
+              let def = state.availableApps.first(where: { $0.id == id }) else { return false }
+        return def.bundleID == playing.bundleID
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(playing.displayName).font(.subheadline)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(playing.displayName).font(.subheadline)
+                Spacer()
+                Button(isTarget ? "Hooked" : "Hook") { hook() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(isTarget)
+                    .help(isTarget ? "The media keys already control this app"
+                                   : "Send the media keys to this app")
+            }
             if scriptable {
                 Slider(value: $volume, in: 0...100) { editing in
                     if !editing { state.setVolume(Int(volume), for: playing.bundleID) }
@@ -139,6 +150,18 @@ private struct AppVolumeRow: View {
             } else {
                 scriptable = false
             }
+        }
+    }
+
+    /// Hook the media keys to this app. If it's a known app, just select it;
+    /// otherwise open the Add-an-app window prefilled with its details.
+    private func hook() {
+        if let def = state.availableApps.first(where: { $0.bundleID == playing.bundleID }) {
+            state.setTarget(def.id)
+        } else {
+            AddAppWindow.shared.show(state: state,
+                                     prefillName: playing.displayName,
+                                     prefillBundleID: playing.bundleID)
         }
     }
 }
