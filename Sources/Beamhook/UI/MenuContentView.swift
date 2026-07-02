@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import BeamhookKit
 
 struct MenuContentView: View {
@@ -93,21 +94,48 @@ private struct PlayingAppsList: View {
 
 @available(macOS 14.2, *)
 private struct PlayingAppsListAvailable: View {
+    @EnvironmentObject var state: AppState
     @StateObject private var monitor = AudioProcessMonitor()
+    // Volume-scriptable apps (Spotify, Music, …) that have played this session,
+    // so we can keep offering their volume slider after they stop — as long as
+    // they're still running. Non-scriptable ("system volume") apps aren't kept.
+    @State private var everPlayedScriptable: [String: String] = [:]   // bundleID -> name
+
+    /// Currently-playing apps, plus scriptable apps that played and are still
+    /// running (deduplicated, current ones first).
+    private var rows: [PlayingApp] {
+        var seen = Set<String>()
+        var out: [PlayingApp] = []
+        for app in monitor.playingApps where seen.insert(app.bundleID).inserted {
+            out.append(app)
+        }
+        for (bid, name) in everPlayedScriptable.sorted(by: { $0.value.localizedCaseInsensitiveCompare($1.value) == .orderedAscending }) {
+            guard !seen.contains(bid), state.isRunning(bundleID: bid) else { continue }
+            out.append(PlayingApp(id: bid, displayName: name, bundleID: bid))
+            seen.insert(bid)
+        }
+        return out
+    }
 
     var body: some View {
         // Always present (so the monitor starts), but shows content only when
-        // something is actually playing.
+        // there is something to control.
         VStack(alignment: .leading, spacing: 8) {
-            if !monitor.playingApps.isEmpty {
+            let list = rows
+            if !list.isEmpty {
                 Divider()
-                ForEach(monitor.playingApps) { app in
+                ForEach(list) { app in
                     AppVolumeRow(playing: app)
                 }
             }
         }
         .onAppear { monitor.start() }
         .onDisappear { monitor.stop() }
+        .onReceive(monitor.$playingApps) { apps in
+            for app in apps where state.volumeScriptable(bundleID: app.bundleID) {
+                everPlayedScriptable[app.bundleID] = app.displayName
+            }
+        }
     }
 }
 

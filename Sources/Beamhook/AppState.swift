@@ -110,4 +110,15 @@ final class AppState: ObservableObject {
     func setVolume(_ percent: Int, for bundleID: String) {
         registry.allApps().first { $0.bundleID == bundleID }?.setVolume(percent)
     }
+
+    /// Can we control this app's volume via AppleScript? (Independent of whether
+    /// it's running — reflects whether a matching definition supports volume.)
+    func volumeScriptable(bundleID: String) -> Bool {
+        registry.allApps().contains { $0.bundleID == bundleID && $0.supportsVolume }
+    }
+
+    /// Is an app with this bundle id currently running?
+    func isRunning(bundleID: String) -> Bool {
+        NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == bundleID }
+    }
 }
