@@ -17,6 +17,16 @@ final class AppState: ObservableObject {
     @Published var availableApps: [AppDefinition]
     @Published var hasAccessibility: Bool = false
     @Published var loginItemEnabled: Bool = LoginItem.isEnabled
+    /// Bundle ids the user opted into hardware-volume-key control for.
+    @Published var volumeHookedBundleIDs: Set<String> = []
+    /// Whether the current output device's volume is adjustable (false → auto-hijack).
+    @Published private(set) var outputVolumeControllable: Bool = true
+    /// True when the volume keys are currently being routed to the target app.
+    @Published private(set) var volumeKeysActive: Bool = false
+
+    let outputMonitor = AudioOutputMonitor()
+    private var cancellables = Set<AnyCancellable>()
+    private static let volumeHookKey = "volumeHookBundleIDs"
 
     init() {
         let store = AppDefinitionStore()
@@ -38,13 +48,32 @@ final class AppState: ObservableObject {
         }
 
         let tap = MediaKeyTap(handler: { [weak targetManager] key in
-            targetManager?.handle(key)
+            guard let targetManager else { return }
+            switch key {
+            case .volumeUp:   targetManager.stepVolume(up: true)
+            case .volumeDown: targetManager.stepVolume(up: false)
+            default:          targetManager.handle(key)
+            }
         })
         self.tap = tap
         self.watchdog = TapWatchdog(tap: tap)
+
+        volumeHookedBundleIDs = Set((UserDefaults.standard.array(forKey: Self.volumeHookKey) as? [String]) ?? [])
+        outputMonitor.$outputVolumeControllable
+            .receive(on: RunLoop.main)
+            .sink { [weak self] controllable in
+                self?.outputVolumeControllable = controllable
+                self?.updateVolumeHijack()
+            }
+            .store(in: &cancellables)
     }
 
-    private func activateInput() { tap.start(); watchdog.start() }
+    private func activateInput() {
+        tap.start()
+        watchdog.start()
+        outputMonitor.start()
+        updateVolumeHijack()
+    }
 
     func startInput() {
         hasAccessibility = permissions.hasAccessibility
@@ -91,6 +120,7 @@ final class AppState: ObservableObject {
     func setTarget(_ id: String) {
         selectedTargetID = id
         targetManager.selectedTargetID = id
+        updateVolumeHijack()
     }
 
     func reloadApps() {
@@ -120,5 +150,28 @@ final class AppState: ObservableObject {
     /// Is an app with this bundle id currently running?
     func isRunning(bundleID: String) -> Bool {
         NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == bundleID }
+    }
+
+    // MARK: - Volume-key hijacking
+
+    func isVolumeHooked(bundleID: String) -> Bool {
+        volumeHookedBundleIDs.contains(bundleID)
+    }
+
+    func setVolumeHooked(_ on: Bool, bundleID: String) {
+        if on { volumeHookedBundleIDs.insert(bundleID) } else { volumeHookedBundleIDs.remove(bundleID) }
+        UserDefaults.standard.set(Array(volumeHookedBundleIDs), forKey: Self.volumeHookKey)
+        updateVolumeHijack()
+    }
+
+    /// The volume keys are hijacked for the target when it exposes a scriptable
+    /// volume AND either the user enabled it for that app, or the current output
+    /// device has no adjustable volume (so the keys would otherwise do nothing).
+    private func updateVolumeHijack() {
+        let supported = targetManager.targetSupportsVolume
+        let manual = targetManager.targetBundleID.map { volumeHookedBundleIDs.contains($0) } ?? false
+        let active = supported && (manual || !outputVolumeControllable)
+        tap.volumeKeysHijacked = active
+        if volumeKeysActive != active { volumeKeysActive = active }
     }
 }

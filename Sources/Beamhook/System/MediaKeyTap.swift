@@ -15,6 +15,10 @@ final class MediaKeyTap {
     typealias Handler = (MediaKey) -> Void
 
     private let handler: Handler
+    /// When true, hardware volume up/down keys are swallowed and forwarded to the
+    /// target app instead of the system. Set from the main thread; read on the tap
+    /// thread — a plain Bool is safe here (single-word, tolerates a one-tick stale read).
+    var volumeKeysHijacked = false
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var thread: Thread?
@@ -76,18 +80,32 @@ final class MediaKeyTap {
               let nsEvent = NSEvent(cgEvent: event),
               nsEvent.subtype.rawValue == Int16(MediaKeyDecoder.systemDefinedMediaKeysSubtype),
               let decoded = MediaKeyDecoder.decode(subtype: Int(nsEvent.subtype.rawValue),
-                                                   data1: nsEvent.data1),
-              decoded.key.isHandledTransport
+                                                   data1: nsEvent.data1)
         else {
-            return Unmanaged.passUnretained(event)  // pass through volume keys, mouse events, etc.
+            return Unmanaged.passUnretained(event)  // mouse events, other system events
         }
 
-        // Act on key-down only; swallow both down and up to stop other apps / Music auto-launch.
-        if decoded.isDown && !decoded.isRepeat {
-            let key = decoded.key
-            DispatchQueue.main.async { [weak self] in self?.handler(key) }
+        let key = decoded.key
+
+        if key.isHandledTransport {
+            // Act on key-down only; swallow both down and up to stop other apps /
+            // Music auto-launch.
+            if decoded.isDown && !decoded.isRepeat {
+                DispatchQueue.main.async { [weak self] in self?.handler(key) }
+            }
+            return nil
         }
-        return nil
+
+        if key.isVolume && volumeKeysHijacked {
+            // Forward on key-down AND repeats so holding the key ramps the volume.
+            if decoded.isDown {
+                DispatchQueue.main.async { [weak self] in self?.handler(key) }
+            }
+            return nil
+        }
+
+        // Everything else (volume keys when not hijacked, mute, ff/rewind) passes through.
+        return Unmanaged.passUnretained(event)
     }
 
     var isEnabled: Bool {

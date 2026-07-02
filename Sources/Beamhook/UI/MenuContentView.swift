@@ -26,6 +26,11 @@ struct MenuContentView: View {
 
             playPauseButton
 
+            if state.volumeKeysActive {
+                Label("Volume keys set \(targetName)'s volume", systemImage: "speaker.wave.2.fill")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+
             // Playing-apps section renders its own leading divider + rows, and
             // nothing at all when nothing is playing.
             PlayingAppsList()
@@ -168,6 +173,13 @@ private struct AppVolumeRow: View {
                 Slider(value: $volume, in: 0...100) { editing in
                     if !editing { state.setVolume(Int(volume), for: playing.bundleID) }
                 }
+                Toggle("Volume keys", isOn: Binding(
+                    get: { state.isVolumeHooked(bundleID: playing.bundleID) },
+                    set: { state.setVolumeHooked($0, bundleID: playing.bundleID) }))
+                    .toggleStyle(.checkbox)
+                    .controlSize(.small)
+                    .font(.caption)
+                    .help("Send the hardware volume keys to this app (when it's the hooked target)")
             } else {
                 Text("system volume only").font(.caption2).foregroundStyle(.secondary)
             }

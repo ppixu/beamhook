@@ -30,6 +30,14 @@ public enum MediaKey: Equatable {
         }
     }
 
+    /// Hardware volume up/down (mute is intentionally left to the system).
+    public var isVolume: Bool {
+        switch self {
+        case .volumeUp, .volumeDown: return true
+        default: return false
+        }
+    }
+
     public var command: MediaCommand? {
         switch self {
         case .playPause: return .playPause
