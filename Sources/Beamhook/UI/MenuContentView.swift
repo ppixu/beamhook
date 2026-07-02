@@ -7,13 +7,13 @@ struct MenuContentView: View {
     @State private var playing: Bool?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             if !state.hasAccessibility {
                 permissionBanner
                 Divider()
             }
 
-            Text("Hook play to").font(.headline)
+            Text("Hook play to").font(.caption).foregroundStyle(.secondary)
             Picker("Target", selection: Binding(
                 get: { state.selectedTargetID ?? state.availableApps.first?.id ?? "" },
                 set: { state.setTarget($0) })) {
@@ -40,7 +40,7 @@ struct MenuContentView: View {
             }
         }
         .padding(12)
-        .frame(width: 340)
+        .frame(width: 260)
         .onAppear { playing = state.isTargetPlaying() }
         .task {
             while !Task.isCancelled {
@@ -68,7 +68,7 @@ struct MenuContentView: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .controlSize(.large)
+        .controlSize(.regular)
     }
 
     private var permissionBanner: some View {

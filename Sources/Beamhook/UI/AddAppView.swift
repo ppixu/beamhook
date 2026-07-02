@@ -2,6 +2,11 @@ import AppKit
 import SwiftUI
 import BeamhookKit
 
+extension Notification.Name {
+    /// Posted to ask the menu-bar popover to close (e.g. when opening a window).
+    static let closeBeamhookMenu = Notification.Name("beamhook.closeMenu")
+}
+
 /// Opens the "Add an App" form in a real window (not a sheet — a sheet would
 /// dismiss the menu-bar popover). Beamhook is an agent app (LSUIElement), so we
 /// briefly switch the activation policy to `.regular` while the window is open so
@@ -12,6 +17,8 @@ final class AddAppWindow {
     private var window: NSWindow?
 
     func show(state: AppState, prefillName: String = "", prefillBundleID: String = "") {
+        NotificationCenter.default.post(name: .closeBeamhookMenu, object: nil)
+
         let root = AddAppView(prefillName: prefillName, prefillBundleID: prefillBundleID)
             .environmentObject(state)
         let hosting = NSHostingController(rootView: root)
@@ -49,6 +56,8 @@ struct AddAppView: View {
     @State private var next = ""
     @State private var previous = ""
     @State private var playState = ""
+    @State private var showMore = false
+    @State private var showManual = false
     @State private var copied = false
 
     init(prefillName: String = "", prefillBundleID: String = "") {
@@ -58,55 +67,63 @@ struct AddAppView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                header
-                Divider()
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Add an app").font(.title2).bold()
+                Text("Beamhook controls a native macOS app via a few AppleScript commands. The easiest way to get them:")
+                    .foregroundStyle(.secondary)
+
+                aiHelper
                 form
             }
-            .padding(22)
+            .padding(24)
         }
-        .frame(width: 540, height: 660)
+        .frame(width: 460, height: 560)
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Add an app").font(.title2).bold()
-            Text("Beamhook controls **native macOS apps** through their AppleScript dictionary. To add one, it needs the app's bundle identifier and a few AppleScript commands.")
-                .font(.callout).foregroundStyle(.secondary)
+    // The recommended path: let an AI figure out the settings.
+    private var aiHelper: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                copyAIPrompt()
+            } label: {
+                Label(copied ? "Copied — paste into your AI" : "Copy instructions for AI",
+                      systemImage: copied ? "checkmark" : "sparkles")
+                    .frame(maxWidth: .infinity)
+            }
+            .controlSize(.large)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Label("Find the **bundle ID** in Terminal:", systemImage: "1.circle.fill")
-                Text("osascript -e 'id of app \"App Name\"'")
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(6).background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
-                Label("Find the **commands** in Script Editor → File → Open Dictionary → pick the app (or `sdef /Applications/App.app`).", systemImage: "2.circle.fill")
-                Label("Electron / web apps (Amazon Music, TIDAL, Deezer, Plexamp) usually have **no** AppleScript and can't be added.", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.secondary)
+            DisclosureGroup("Prefer to do it by hand?", isExpanded: $showManual) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Bundle ID — in Terminal:")
+                    Text("osascript -e 'id of app \"App Name\"'")
+                        .font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                        .padding(6).background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+                    Text("Commands — Script Editor → File → Open Dictionary → pick the app.")
+                    Text("Electron/web apps (Amazon Music, TIDAL, Deezer…) have no AppleScript and can't be added.")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.callout)
+                .padding(.top, 6)
             }
             .font(.callout)
-
-            HStack(spacing: 10) {
-                Button {
-                    copyAIPrompt()
-                } label: {
-                    Label(copied ? "Copied!" : "Copy instructions for AI", systemImage: copied ? "checkmark" : "doc.on.clipboard")
-                }
-                Text("Paste into Claude / ChatGPT to get the exact settings, then fill them in below.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            .padding(.top, 2)
         }
     }
 
     private var form: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            field("Display name", $displayName, "My Player")
+        VStack(alignment: .leading, spacing: 12) {
+            field("Name", $displayName, "My Player")
             field("Bundle ID", $bundleID, "com.example.player")
-            field("Play / Pause  (required)", $playPause, "tell application \"My Player\" to playpause")
-            field("Next  (optional)", $next, "tell application \"My Player\" to next track")
-            field("Previous  (optional)", $previous, "tell application \"My Player\" to previous track")
-            field("Play state  (optional)", $playState, "tell application \"My Player\" to return (player state as text)")
+            field("Play / Pause", $playPause, "tell application \"My Player\" to playpause")
+
+            DisclosureGroup("More commands (optional)", isExpanded: $showMore) {
+                VStack(alignment: .leading, spacing: 12) {
+                    field("Next", $next, "tell application \"My Player\" to next track")
+                    field("Previous", $previous, "tell application \"My Player\" to previous track")
+                    field("Play state", $playState, "tell application \"My Player\" to return (player state as text)")
+                }
+                .padding(.top, 8)
+            }
+            .font(.callout)
 
             HStack {
                 Spacer()
