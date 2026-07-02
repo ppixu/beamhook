@@ -17,8 +17,11 @@ final class AppState: ObservableObject {
     @Published var availableApps: [AppDefinition]
     @Published var hasAccessibility: Bool = false
     @Published var loginItemEnabled: Bool = LoginItem.isEnabled
-    /// Bundle ids the user opted into hardware-volume-key control for.
-    @Published var volumeHookedBundleIDs: Set<String> = []
+    /// Per-app explicit choice for volume-key control (nil = follow automatic
+    /// behavior). true = always hijack, false = never (even under auto).
+    @Published var volumeKeyOverride: [String: Bool] = [:]
+    /// Latest known volume (0...100) per bundle id, so sliders update live.
+    @Published var volumeByBundle: [String: Int] = [:]
     /// Whether the current output device's volume is adjustable (false → auto-hijack).
     @Published private(set) var outputVolumeControllable: Bool = true
     /// True when the volume keys are currently being routed to the target app.
@@ -26,7 +29,8 @@ final class AppState: ObservableObject {
 
     let outputMonitor = AudioOutputMonitor()
     private var cancellables = Set<AnyCancellable>()
-    private static let volumeHookKey = "volumeHookBundleIDs"
+    private static let volumeOverrideKey = "volumeKeyOverride"
+    private static let legacyVolumeHookKey = "volumeHookBundleIDs"
 
     init() {
         let store = AppDefinitionStore()
@@ -58,7 +62,10 @@ final class AppState: ObservableObject {
         self.tap = tap
         self.watchdog = TapWatchdog(tap: tap)
 
-        volumeHookedBundleIDs = Set((UserDefaults.standard.array(forKey: Self.volumeHookKey) as? [String]) ?? [])
+        loadVolumeOverrides()
+        targetManager.onVolumeChanged = { [weak self] bundleID, volume in
+            self?.volumeByBundle[bundleID] = volume
+        }
         outputMonitor.$outputVolumeControllable
             .receive(on: RunLoop.main)
             .sink { [weak self] controllable in
@@ -139,6 +146,7 @@ final class AppState: ObservableObject {
 
     func setVolume(_ percent: Int, for bundleID: String) {
         registry.allApps().first { $0.bundleID == bundleID }?.setVolume(percent)
+        volumeByBundle[bundleID] = percent
     }
 
     /// Can we control this app's volume via AppleScript? (Independent of whether
@@ -154,23 +162,38 @@ final class AppState: ObservableObject {
 
     // MARK: - Volume-key hijacking
 
-    func isVolumeHooked(bundleID: String) -> Bool {
-        volumeHookedBundleIDs.contains(bundleID)
+    private func loadVolumeOverrides() {
+        if let dict = UserDefaults.standard.dictionary(forKey: Self.volumeOverrideKey) as? [String: Bool] {
+            volumeKeyOverride = dict
+        } else if let legacy = UserDefaults.standard.array(forKey: Self.legacyVolumeHookKey) as? [String] {
+            // Migrate the old "manually on" set → explicit `true` overrides.
+            volumeKeyOverride = Dictionary(uniqueKeysWithValues: legacy.map { ($0, true) })
+        }
     }
 
-    func setVolumeHooked(_ on: Bool, bundleID: String) {
-        if on { volumeHookedBundleIDs.insert(bundleID) } else { volumeHookedBundleIDs.remove(bundleID) }
-        UserDefaults.standard.set(Array(volumeHookedBundleIDs), forKey: Self.volumeHookKey)
+    /// Effective on/off for an app: the user's explicit choice, or the automatic
+    /// behavior (on when the current output has no adjustable volume).
+    func volumeKeysEnabled(bundleID: String) -> Bool {
+        volumeKeyOverride[bundleID] ?? !outputVolumeControllable
+    }
+
+    /// Whether the user has made an explicit choice for this app (vs. following auto).
+    func hasVolumeKeyOverride(bundleID: String) -> Bool {
+        volumeKeyOverride[bundleID] != nil
+    }
+
+    func setVolumeKeysEnabled(_ on: Bool, bundleID: String) {
+        volumeKeyOverride[bundleID] = on
+        UserDefaults.standard.set(volumeKeyOverride, forKey: Self.volumeOverrideKey)
         updateVolumeHijack()
     }
 
     /// The volume keys are hijacked for the target when it exposes a scriptable
-    /// volume AND either the user enabled it for that app, or the current output
-    /// device has no adjustable volume (so the keys would otherwise do nothing).
+    /// volume AND is effectively enabled (explicit choice, else the auto behavior).
     private func updateVolumeHijack() {
         let supported = targetManager.targetSupportsVolume
-        let manual = targetManager.targetBundleID.map { volumeHookedBundleIDs.contains($0) } ?? false
-        let active = supported && (manual || !outputVolumeControllable)
+        let enabled = targetManager.targetBundleID.map { volumeKeysEnabled(bundleID: $0) } ?? false
+        let active = supported && enabled
         tap.volumeKeysHijacked = active
         if volumeKeysActive != active { volumeKeysActive = active }
     }

@@ -5,6 +5,10 @@ public final class TargetManager {
     private let resolver: MediaAppResolver
     private static let storageKey = "selectedTargetAppID"
 
+    /// Called (bundleID, newVolume 0...100) whenever stepVolume changes the target's
+    /// volume, so the UI can reflect volume-key presses live.
+    public var onVolumeChanged: ((String, Int) -> Void)?
+
     public init(defaults: UserDefaults, resolver: MediaAppResolver) {
         self.defaults = defaults
         self.resolver = resolver
@@ -32,6 +36,7 @@ public final class TargetManager {
               let current = app.currentVolume() else { return }
         let next = min(100, max(0, current + (up ? step : -step)))
         app.setVolume(next)
+        onVolumeChanged?(app.bundleID, next)
     }
 
     /// Whether the current target exposes a scriptable volume.

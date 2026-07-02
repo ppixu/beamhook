@@ -13,7 +13,7 @@ struct MenuContentView: View {
                 Divider()
             }
 
-            Text("Hook play to").font(.caption).foregroundStyle(.secondary)
+            Text("Hook media keys to:").font(.caption).foregroundStyle(.secondary)
             Picker("Target", selection: Binding(
                 get: { state.selectedTargetID ?? state.availableApps.first?.id ?? "" },
                 set: { state.setTarget($0) })) {
@@ -157,11 +157,6 @@ private struct AppVolumeRow: View {
         return def.bundleID == playing.bundleID
     }
 
-    /// Volume keys are taken over automatically (regardless of the checkbox) when
-    /// this app is the hooked target and the current output has no adjustable volume.
-    private var autoVolumeKeys: Bool {
-        isTarget && scriptable && !state.outputVolumeControllable
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -180,25 +175,30 @@ private struct AppVolumeRow: View {
                     if !editing { state.setVolume(Int(volume), for: playing.bundleID) }
                 }
                 Toggle("Volume keys", isOn: Binding(
-                    get: { autoVolumeKeys || state.isVolumeHooked(bundleID: playing.bundleID) },
-                    set: { state.setVolumeHooked($0, bundleID: playing.bundleID) }))
+                    get: { state.volumeKeysEnabled(bundleID: playing.bundleID) },
+                    set: { state.setVolumeKeysEnabled($0, bundleID: playing.bundleID) }))
                     .toggleStyle(.checkbox)
                     .controlSize(.small)
                     .font(.caption)
-                    .disabled(autoVolumeKeys)
-                    .help(autoVolumeKeys
-                          ? "On automatically — this output device has no volume control"
-                          : "Send the hardware volume keys to this app when it's the hooked target")
+                    .help(state.hasVolumeKeyOverride(bundleID: playing.bundleID)
+                          ? "Route the hardware volume keys to this app when it's the hooked target"
+                          : "On automatically because this output has no volume control — uncheck to disable")
             } else {
                 Text("system volume only").font(.caption2).foregroundStyle(.secondary)
             }
         }
         .onAppear {
-            if let v = state.volume(for: playing.bundleID) {
+            if let cached = state.volumeByBundle[playing.bundleID] {
+                volume = Double(cached); scriptable = true
+            } else if let v = state.volume(for: playing.bundleID) {
                 volume = Double(v); scriptable = true
+                state.volumeByBundle[playing.bundleID] = v
             } else {
                 scriptable = false
             }
+        }
+        .onChange(of: state.volumeByBundle[playing.bundleID]) { _, newVal in
+            if let v = newVal { volume = Double(v) }
         }
     }
 
