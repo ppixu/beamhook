@@ -14,11 +14,10 @@ struct BeamhookApp: App {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     let state = AppState()
     private var statusItem: NSStatusItem?
     private let popover = NSPopover()
-    private var outsideClickMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         state.startInput()
@@ -26,12 +25,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let hosting = NSHostingController(rootView: MenuContentView().environmentObject(state))
         hosting.sizingOptions = [.preferredContentSize]   // popover sizes to the content
         popover.contentViewController = hosting
-        // We manage dismissal ourselves so that dragging a volume slider never
-        // closes the popover, while a click in any OTHER app does. (`.transient`
-        // is unreliable for an agent app that isn't the active application.)
-        popover.behavior = .applicationDefined
+        // .transient dismisses on any click OUTSIDE the popover, but not while you
+        // interact inside it (e.g. dragging a volume slider). We activate the app
+        // when showing it so that dismissal is reliable for an agent app.
+        popover.behavior = .transient
         popover.animates = true
-        popover.delegate = self
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
@@ -45,28 +43,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
         statusItem = item
 
-        // Let the Add-an-app window (and anything else) ask the popover to close.
+        // Let the Add-an-app window ask the popover to close when it opens.
         NotificationCenter.default.addObserver(
             forName: .closeBeamhookMenu, object: nil, queue: .main
         ) { [weak self] _ in self?.popover.performClose(nil) }
     }
 
     @objc private func togglePopover() {
-        popover.isShown ? popover.performClose(nil) : showPopover()
-    }
-
-    private func showPopover() {
         guard let button = statusItem?.button else { return }
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        // A GLOBAL monitor only sees events destined for OTHER processes, so clicks
-        // and slider drags inside the popover never trigger it — only clicking away
-        // (another app, the desktop, another menu-bar item) closes the popover.
-        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown]
-        ) { [weak self] _ in self?.popover.performClose(nil) }
-    }
-
-    func popoverDidClose(_ notification: Notification) {
-        if let m = outsideClickMonitor { NSEvent.removeMonitor(m); outsideClickMonitor = nil }
+        if popover.isShown {
+            popover.performClose(nil)
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
     }
 }

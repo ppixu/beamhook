@@ -157,6 +157,12 @@ private struct AppVolumeRow: View {
         return def.bundleID == playing.bundleID
     }
 
+    /// Volume keys are taken over automatically (regardless of the checkbox) when
+    /// this app is the hooked target and the current output has no adjustable volume.
+    private var autoVolumeKeys: Bool {
+        isTarget && scriptable && !state.outputVolumeControllable
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -174,12 +180,15 @@ private struct AppVolumeRow: View {
                     if !editing { state.setVolume(Int(volume), for: playing.bundleID) }
                 }
                 Toggle("Volume keys", isOn: Binding(
-                    get: { state.isVolumeHooked(bundleID: playing.bundleID) },
+                    get: { autoVolumeKeys || state.isVolumeHooked(bundleID: playing.bundleID) },
                     set: { state.setVolumeHooked($0, bundleID: playing.bundleID) }))
                     .toggleStyle(.checkbox)
                     .controlSize(.small)
                     .font(.caption)
-                    .help("Send the hardware volume keys to this app (when it's the hooked target)")
+                    .disabled(autoVolumeKeys)
+                    .help(autoVolumeKeys
+                          ? "On automatically — this output device has no volume control"
+                          : "Send the hardware volume keys to this app when it's the hooked target")
             } else {
                 Text("system volume only").font(.caption2).foregroundStyle(.secondary)
             }
