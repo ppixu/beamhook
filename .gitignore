@@ -2,8 +2,10 @@
 .build/
 build/
 DerivedData/
+.landingpage-temp/
 
 # Local planning notes — never published
 MONETIZATION.md
+MONETIZATION.html
 NOTARIZING.html
 .DS_Store

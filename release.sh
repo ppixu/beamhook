@@ -42,11 +42,16 @@ DEVID=$(echo "$DEVID_LINE" | sed -n 's/^[[:space:]]*[0-9][0-9]*)[[:space:]]*\([0
 echo "==> Regenerating project"
 xcodegen generate
 
+# CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO is essential: without it Xcode merges a
+# debug-only `com.apple.security.get-task-allow` entitlement into the signature,
+# which the Apple notary service rejects ("Archive contains critical validation
+# errors"). We only want the entitlements in Beamhook-Release.entitlements.
 echo "==> Building Release, signed with Developer ID ($DEVID)"
 xcodebuild -project Beamhook.xcodeproj -scheme Beamhook -configuration Release \
   -derivedDataPath build \
   CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$DEVID" PROVISIONING_PROFILE_SPECIFIER="" \
   CODE_SIGN_ENTITLEMENTS=Sources/Beamhook/Beamhook-Release.entitlements \
+  CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
   OTHER_CODE_SIGN_FLAGS="--timestamp --options runtime" \
   CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES \
   clean build
@@ -65,14 +70,32 @@ hdiutil create -volname "Beamhook" -srcfolder "$APP" -ov -format UDZO "$DMG" >/d
 echo "==> Notarizing (this can take a few minutes)"
 xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
 
-echo "==> Stapling the notarization ticket"
+echo "==> Stapling the notarization ticket to the app"
 xcrun stapler staple "$APP"
-# Re-pack so the DMG contains the stapled app, then staple the DMG too.
+
+# Re-pack so the DMG contains the *stapled* app. This changes the DMG's hash, so
+# it must be notarized again before it can be stapled — you can only staple an
+# artifact that was itself submitted. Two submissions is the price of shipping a
+# DMG where BOTH the app and the disk image carry offline-verifiable tickets.
+echo "==> Repackaging DMG with the stapled app"
 rm -f "$DMG"
 hdiutil create -volname "Beamhook" -srcfolder "$APP" -ov -format UDZO "$DMG" >/dev/null
-xcrun stapler staple "$DMG" || true
 
-echo "==> Gatekeeper assessment (expect: accepted)"
+# Code-sign the DMG itself (not just the app inside). Notarization alone makes a
+# DMG open cleanly, but signing it gives the disk image its own Developer ID
+# signature — so the Gatekeeper assessment below reports the real verdict instead
+# of "no usable signature", and the download is signed + notarized + stapled.
+echo "==> Signing the DMG with Developer ID"
+codesign --force --sign "$DEVID" --timestamp "$DMG"
+
+echo "==> Notarizing the final DMG (this can take a few minutes)"
+xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
+
+echo "==> Stapling the notarization ticket to the DMG"
+xcrun stapler staple "$DMG"
+
+echo "==> Verifying the finished DMG (expect: 'validate action worked' + 'accepted')"
+xcrun stapler validate "$DMG"
 spctl -a -t open --context context:primary-signature -vv "$DMG" 2>&1 | head -3 || true
 
 echo ""

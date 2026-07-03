@@ -37,6 +37,14 @@ brew install xcodegen
 Then grant **Accessibility** when prompted, pick your app, and press play.
 Requires macOS 14+.
 
+## Download
+
+Building from source (above) is free. If you'd rather not, a signed &
+notarized, ready-to-run build is **$5** on
+[Gumroad](https://ppixu.gumroad.com/l/beamhook) — same app, and it supports
+development.
+
 ## License
 
-MIT.
+[GPL-3.0](LICENSE). Use it, study it, change it, share it — derivative works
+must stay under the GPL.

@@ -1,0 +1,4 @@
+# Beamhook is free to build from source (GPLv3). If it saves you the trouble,
+# the signed & notarized build is a small paid convenience — which also
+# supports development.
+custom: ["https://ppixu.gumroad.com/l/beamhook"]
