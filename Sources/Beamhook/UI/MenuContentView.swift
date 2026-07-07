@@ -23,17 +23,18 @@ struct MenuContentView: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
+            .frame(maxWidth: .infinity)
+            // labelsHidden still reserves the label column on macOS, leaving a
+            // leading gap; pull the control flush with the rest of the content.
+            .padding(.leading, -8)
 
             playPauseButton
-
-            if state.volumeKeysActive {
-                Label("Volume keys set \(targetName)'s volume", systemImage: "speaker.wave.2.fill")
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
 
             // Playing-apps section renders its own leading divider + rows, and
             // nothing at all when nothing is playing.
             PlayingAppsList()
+
+            addAppButton
 
             Divider()
             SettingsSection()
@@ -45,11 +46,10 @@ struct MenuContentView: View {
             }
         }
         .padding(12)
-        .frame(width: 260)
-        .onAppear { playing = state.isTargetPlaying() }
+        .frame(width: 200)
         .task {
             while !Task.isCancelled {
-                playing = state.isTargetPlaying()
+                playing = await state.isTargetPlaying()
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
             }
         }
@@ -66,14 +66,20 @@ struct MenuContentView: View {
             state.togglePlayPauseTarget()
             playing = !wasPlaying   // optimistic; the 1.5s poll reconciles with reality
         } label: {
-            HStack {
-                Image(systemName: playing == true ? "pause.fill" : "play.fill")
-                Text(playing == true ? "Pause" : "Play")
-                Text(targetName).foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
+            Image(systemName: playing == true ? "pause.fill" : "play.fill")
+                .frame(maxWidth: .infinity)
         }
         .controlSize(.regular)
+        .help(playing == true ? "Pause \(targetName)" : "Play \(targetName)")
+    }
+
+    private var addAppButton: some View {
+        Button {
+            AddAppWindow.shared.show(state: state)
+        } label: {
+            Label("Add an app…", systemImage: "plus")
+        }
+        .controlSize(.small)
     }
 
     private var permissionBanner: some View {
@@ -180,9 +186,16 @@ private struct AppVolumeRow: View {
                     .toggleStyle(.checkbox)
                     .controlSize(.small)
                     .font(.caption)
-                    .help(state.hasVolumeKeyOverride(bundleID: playing.bundleID)
-                          ? "Route the hardware volume keys to this app when it's the hooked target"
-                          : "On automatically because this output has no volume control — uncheck to disable")
+                    .help("Route the hardware volume keys to this app while it's the hooked target")
+                // Non-silent nudge: if the current output has no adjustable volume the
+                // hardware keys do nothing, so suggest routing them here — but only if
+                // the user turns it on.
+                if isTarget && !state.outputVolumeControllable
+                    && !state.volumeKeysEnabled(bundleID: playing.bundleID) {
+                    Text("This output has no volume control — turn this on to use the volume keys here.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 Text("system volume only").font(.caption2).foregroundStyle(.secondary)
             }
@@ -190,11 +203,15 @@ private struct AppVolumeRow: View {
         .onAppear {
             if let cached = state.volumeByBundle[playing.bundleID] {
                 volume = Double(cached); scriptable = true
-            } else if let v = state.volume(for: playing.bundleID) {
-                volume = Double(v); scriptable = true
-                state.volumeByBundle[playing.bundleID] = v
             } else {
-                scriptable = false
+                Task {
+                    if let v = await state.volume(for: playing.bundleID) {
+                        volume = Double(v); scriptable = true
+                        state.volumeByBundle[playing.bundleID] = v
+                    } else {
+                        scriptable = false
+                    }
+                }
             }
         }
         .onChange(of: state.volumeByBundle[playing.bundleID]) { _, newVal in

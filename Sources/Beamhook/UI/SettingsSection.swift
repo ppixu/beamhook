@@ -1,9 +1,10 @@
 import SwiftUI
 import BeamhookKit
 
-/// Login toggle, custom-app management, and the "Add an app…" entry point.
-/// Adding an app opens a dedicated window (AddAppWindow), not a sheet — a sheet
-/// would dismiss the menu-bar popover.
+/// Login toggle and custom-app management (removal). The "Add an app…" button
+/// lives up in MenuContentView, directly under the apps list. Adding an app
+/// opens a dedicated window (AddAppWindow), not a sheet — a sheet would dismiss
+/// the menu-bar popover.
 struct SettingsSection: View {
     @EnvironmentObject var state: AppState
 
@@ -16,13 +17,6 @@ struct SettingsSection: View {
                 .controlSize(.small)
 
             customAppsList
-
-            Button {
-                AddAppWindow.shared.show(state: state)
-            } label: {
-                Label("Add an app…", systemImage: "plus")
-            }
-            .controlSize(.small)
         }
     }
 

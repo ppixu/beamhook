@@ -1,6 +1,8 @@
 import Foundation
 
-public final class ScriptedMediaApp: MediaApp {
+/// Immutable after init; its collaborators (executor, presence) are stateless, so
+/// it is safe to hand to `ScriptRunning.run` and touch on the scripting queue.
+public final class ScriptedMediaApp: MediaApp, @unchecked Sendable {
     public let definition: AppDefinition
     private let executor: ScriptExecuting
     private let presence: AppPresenceChecking
@@ -15,9 +17,12 @@ public final class ScriptedMediaApp: MediaApp {
     public var displayName: String { definition.displayName }
     public var bundleID: String { definition.bundleID }
     public var isRunning: Bool { presence.isRunning(bundleID: definition.bundleID) }
+    public var isReady: Bool { presence.isReady(bundleID: definition.bundleID) }
 
     public func perform(_ command: MediaCommand) {
-        guard isRunning else { return }
+        // Ready (not merely running): scripting a still-launching app can block the
+        // Apple-event send for a long time.
+        guard isReady else { return }
         let script: String?
         switch command {
         case .playPause: script = definition.playPauseScript
@@ -35,7 +40,7 @@ public final class ScriptedMediaApp: MediaApp {
     }
 
     public func currentVolume() -> Int? {
-        guard supportsVolume, isRunning, let getScript = definition.volumeGetScript else { return nil }
+        guard supportsVolume, isReady, let getScript = definition.volumeGetScript else { return nil }
         let result = executor.run(getScript)
         guard result.succeeded,
               let out = result.output?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -44,7 +49,7 @@ public final class ScriptedMediaApp: MediaApp {
     }
 
     public func setVolume(_ percent: Int) {
-        guard supportsVolume, isRunning,
+        guard supportsVolume, isReady,
               let template = definition.volumeSetScript,
               let rawStr = VolumeScale.rawString(fromPercent: percent, kind: definition.volumeScaleKind)
         else { return }
@@ -54,7 +59,7 @@ public final class ScriptedMediaApp: MediaApp {
     }
 
     public func isPlaying() -> Bool? {
-        guard isRunning, let script = definition.playStateScript else { return nil }
+        guard isReady, let script = definition.playStateScript else { return nil }
         let result = executor.run(script)
         guard result.succeeded,
               let out = result.output?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

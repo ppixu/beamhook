@@ -14,7 +14,19 @@ final class MockScriptExecutor: ScriptExecuting {
 
 final class MockPresence: AppPresenceChecking {
     var runningBundleIDs: Set<String> = []
+    /// nil → "ready" tracks "running"; set to model a running-but-still-launching app.
+    var readyBundleIDs: Set<String>? = nil
     func isRunning(bundleID: String) -> Bool { runningBundleIDs.contains(bundleID) }
+    func isReady(bundleID: String) -> Bool {
+        if let readyBundleIDs { return readyBundleIDs.contains(bundleID) }
+        return isRunning(bundleID: bundleID)
+    }
+}
+
+/// Runs work synchronously inline so async TargetManager methods resolve
+/// deterministically in tests (no real queue hops or timing).
+final class InlineScriptRunner: ScriptRunning {
+    func run<T>(_ work: @escaping () -> T) async -> T { work() }
 }
 
 final class MockMediaApp: MediaApp {
@@ -22,6 +34,9 @@ final class MockMediaApp: MediaApp {
     let displayName: String
     let bundleID: String
     var isRunning: Bool
+    /// nil → "ready" tracks "running"; set false to model a launching app.
+    var readyValue: Bool? = nil
+    var isReady: Bool { readyValue ?? isRunning }
     var performedCommands: [MediaCommand] = []
     var supportsVolume: Bool = false
     var volumeValue: Int? = nil

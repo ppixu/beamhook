@@ -13,19 +13,32 @@ final class AppState: ObservableObject {
     private let watchdog: TapWatchdog
     private var permissionTimer: Timer?
 
+    /// Serial off-main queue for user-initiated commands (media keys → target, volume
+    /// steps, slider writes), driven via the target manager.
+    private let scripting: ScriptRunner
+    /// A SEPARATE serial queue for background/best-effort reads (the 1.5s play-state
+    /// poll, a row's initial volume read). Kept apart from `scripting` so a slow read
+    /// against a wedged target can never sit in front of a user's key press.
+    private let pollRunner = ScriptRunner()
+    /// Coalescing state for volume-key repeats (main-actor isolated → race-free):
+    /// each key press bumps `pendingVolumeSteps`; a single drain task applies the
+    /// net delta off-main, so a held key never stacks up blocked Apple-event sends.
+    private var pendingVolumeSteps = 0
+    private var volumeDrainInFlight = false
+
     @Published var selectedTargetID: String?
     @Published var availableApps: [AppDefinition]
     @Published var hasAccessibility: Bool = false
     @Published var loginItemEnabled: Bool = LoginItem.isEnabled
-    /// Per-app explicit choice for volume-key control (nil = follow automatic
-    /// behavior). true = always hijack, false = never (even under auto).
+    /// Per-app opt-in for volume-key control. Absent (nil) means OFF — the volume
+    /// keys are never taken over unless the user explicitly turns them on for that
+    /// app. There is no automatic/silent hijack.
     @Published var volumeKeyOverride: [String: Bool] = [:]
     /// Latest known volume (0...100) per bundle id, so sliders update live.
     @Published var volumeByBundle: [String: Int] = [:]
-    /// Whether the current output device's volume is adjustable (false → auto-hijack).
+    /// Whether the current output device's volume is adjustable. Informational only
+    /// (drives a UI hint); it does NOT auto-enable the volume-key hijack.
     @Published private(set) var outputVolumeControllable: Bool = true
-    /// True when the volume keys are currently being routed to the target app.
-    @Published private(set) var volumeKeysActive: Bool = false
 
     let outputMonitor = AudioOutputMonitor()
     private var cancellables = Set<AnyCancellable>()
@@ -33,11 +46,14 @@ final class AppState: ObservableObject {
     private static let legacyVolumeHookKey = "volumeHookBundleIDs"
 
     init() {
+        let scripting = ScriptRunner()
+        self.scripting = scripting
+
         let store = AppDefinitionStore()
         let registry = AppRegistry(store: store,
                                    executor: AppleScriptExecutor(),
                                    presence: WorkspacePresenceChecker())
-        let targetManager = TargetManager(defaults: .standard, resolver: registry)
+        let targetManager = TargetManager(defaults: .standard, resolver: registry, runner: scripting)
 
         self.store = store
         self.registry = registry
@@ -45,34 +61,46 @@ final class AppState: ObservableObject {
         self.selectedTargetID = targetManager.selectedTargetID
         self.availableApps = store.allDefinitions()
 
-        // Default the target to Spotify on first run if nothing chosen yet.
-        if targetManager.selectedTargetID == nil {
+        // Default the target to Spotify on first run — or if the persisted target no
+        // longer resolves (e.g. a built-in was removed/renamed, like Swinsian), so a
+        // stale selection can't silently strand the user with a dead target.
+        if targetManager.selectedTargetID == nil || registry.app(withID: targetManager.selectedTargetID!) == nil {
             targetManager.selectedTargetID = BuiltInApps.spotify.id
             self.selectedTargetID = BuiltInApps.spotify.id
         }
 
-        let tap = MediaKeyTap(handler: { [weak targetManager] key in
-            guard let targetManager else { return }
-            switch key {
-            case .volumeUp:   targetManager.stepVolume(up: true)
-            case .volumeDown: targetManager.stepVolume(up: false)
-            default:          targetManager.handle(key)
-            }
+        // The tap invokes its handler on the main queue. We can't capture `self` in a
+        // closure until init finishes, so route through a box whose reference we set
+        // at the end of init; it's only ever read/written on the main queue.
+        let handlerBox = KeyHandlerBox()
+        let tap = MediaKeyTap(handler: { key in
+            MainActor.assumeIsolated { handlerBox.state?.handleKey(key) }
         })
         self.tap = tap
         self.watchdog = TapWatchdog(tap: tap)
 
         loadVolumeOverrides()
-        targetManager.onVolumeChanged = { [weak self] bundleID, volume in
-            self?.volumeByBundle[bundleID] = volume
-        }
         outputMonitor.$outputVolumeControllable
             .receive(on: RunLoop.main)
             .sink { [weak self] controllable in
+                // Informational only: controllability no longer auto-enables the
+                // volume-key hijack. It just powers a UI hint suggesting the user
+                // turn it on. (Silent auto-takeover was removed.)
                 self?.outputVolumeControllable = controllable
-                self?.updateVolumeHijack()
             }
             .store(in: &cancellables)
+
+        handlerBox.state = self
+    }
+
+    /// Entry point for a media key from the tap (already on the main queue). Volume
+    /// keys are coalesced; transport keys are routed to the target off the main thread.
+    func handleKey(_ key: MediaKey) {
+        switch key {
+        case .volumeUp:   nudgeVolume(up: true)
+        case .volumeDown: nudgeVolume(up: false)
+        default:          Task { await targetManager.route(key) }
+        }
     }
 
     private func activateInput() {
@@ -116,13 +144,15 @@ final class AppState: ObservableObject {
         RunLoop.main.add(timer, forMode: .common)
     }
 
-    // Play/pause helpers used by the in-menu control.
-    func isTargetPlaying() -> Bool? {
-        guard let id = selectedTargetID else { return nil }
-        return registry.app(withID: id)?.isPlaying()
+    // Play/pause helpers used by the in-menu control. Both run their AppleScript
+    // off the main thread so a slow/launching target can't freeze the popover. The
+    // read runs on the poll runner, so a slow status read can't delay key commands.
+    func isTargetPlaying() async -> Bool? {
+        guard let id = selectedTargetID, let app = registry.app(withID: id) else { return nil }
+        return await pollRunner.run { app.isPlaying() }
     }
 
-    func togglePlayPauseTarget() { targetManager.handle(.playPause) }
+    func togglePlayPauseTarget() { Task { await targetManager.route(.playPause) } }
 
     func setTarget(_ id: String) {
         selectedTargetID = id
@@ -139,14 +169,44 @@ final class AppState: ObservableObject {
         loginItemEnabled = LoginItem.isEnabled
     }
 
-    // Volume helpers used by the sliders.
-    func volume(for bundleID: String) -> Int? {
-        registry.allApps().first { $0.bundleID == bundleID }?.currentVolume()
+    // Volume helpers used by the sliders (AppleScript runs off the main thread).
+    // The initial read uses the poll runner (best-effort); the write uses the command
+    // runner since it's a user action.
+    func volume(for bundleID: String) async -> Int? {
+        guard let app = registry.allApps().first(where: { $0.bundleID == bundleID }) else { return nil }
+        return await pollRunner.run { app.currentVolume() }
     }
 
     func setVolume(_ percent: Int, for bundleID: String) {
-        registry.allApps().first { $0.bundleID == bundleID }?.setVolume(percent)
-        volumeByBundle[bundleID] = percent
+        volumeByBundle[bundleID] = percent   // optimistic: the slider reflects it at once
+        guard let app = registry.allApps().first(where: { $0.bundleID == bundleID }) else { return }
+        Task { await scripting.run { app.setVolume(percent) } }
+    }
+
+    // MARK: - Volume-key coalescing
+
+    /// Records one volume-key press and kicks off the drain if it isn't already
+    /// running. Presses that arrive mid-flight just accumulate, so holding the key
+    /// collapses into a few off-main round-trips instead of one blocked send each.
+    private func nudgeVolume(up: Bool) {
+        pendingVolumeSteps += up ? 1 : -1
+        guard !volumeDrainInFlight else { return }
+        volumeDrainInFlight = true
+        Task { await drainVolumeSteps() }
+    }
+
+    private func drainVolumeSteps() async {
+        defer { volumeDrainInFlight = false }
+        while pendingVolumeSteps != 0 {
+            let steps = pendingVolumeSteps
+            pendingVolumeSteps = 0
+            // Key the cache to the app adjustVolume actually acted on (resolved inside
+            // its off-main closure), not a separately-read target that may have changed
+            // across the await.
+            if let result = await targetManager.adjustVolume(bySteps: steps) {
+                volumeByBundle[result.bundleID] = result.volume
+            }
+        }
     }
 
     /// Can we control this app's volume via AppleScript? (Independent of whether
@@ -171,15 +231,10 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Effective on/off for an app: the user's explicit choice, or the automatic
-    /// behavior (on when the current output has no adjustable volume).
+    /// On only when the user has explicitly opted this app in. Defaults to OFF —
+    /// Beamhook never silently takes over the volume keys.
     func volumeKeysEnabled(bundleID: String) -> Bool {
-        volumeKeyOverride[bundleID] ?? !outputVolumeControllable
-    }
-
-    /// Whether the user has made an explicit choice for this app (vs. following auto).
-    func hasVolumeKeyOverride(bundleID: String) -> Bool {
-        volumeKeyOverride[bundleID] != nil
+        volumeKeyOverride[bundleID] ?? false
     }
 
     func setVolumeKeysEnabled(_ on: Bool, bundleID: String) {
@@ -188,13 +243,18 @@ final class AppState: ObservableObject {
         updateVolumeHijack()
     }
 
-    /// The volume keys are hijacked for the target when it exposes a scriptable
-    /// volume AND is effectively enabled (explicit choice, else the auto behavior).
+    /// The volume keys are hijacked for the target only when it exposes a scriptable
+    /// volume AND the user has explicitly enabled it for that app.
     private func updateVolumeHijack() {
         let supported = targetManager.targetSupportsVolume
         let enabled = targetManager.targetBundleID.map { volumeKeysEnabled(bundleID: $0) } ?? false
-        let active = supported && enabled
-        tap.volumeKeysHijacked = active
-        if volumeKeysActive != active { volumeKeysActive = active }
+        tap.volumeKeysHijacked = supported && enabled
     }
+}
+
+/// Bridges the media-key tap's handler to `AppState` without capturing `self` during
+/// `AppState.init`. Only touched on the main queue, where the tap dispatches its
+/// handler, so the plain `weak var` needs no further synchronization.
+private final class KeyHandlerBox {
+    weak var state: AppState?
 }

@@ -23,6 +23,31 @@ final class ScriptedMediaAppTests: XCTestCase {
         XCTAssertTrue(exec.ranScripts.isEmpty)
     }
 
+    func testPerformDoesNothingWhenRunningButNotReady() {
+        // Running but still launching — scripting it is what wedged the app before.
+        let exec = MockScriptExecutor()
+        let presence = MockPresence()
+        presence.runningBundleIDs = ["org.videolan.vlc"]
+        presence.readyBundleIDs = []   // not finished launching
+        let app = makeVLC(executor: exec, presence: presence)
+
+        app.perform(.playPause)
+        XCTAssertTrue(exec.ranScripts.isEmpty)
+    }
+
+    func testVolumeAndPlayStateSkippedWhenNotReady() {
+        let exec = MockScriptExecutor()
+        exec.cannedOutput = "256"
+        let presence = MockPresence()
+        presence.runningBundleIDs = ["org.videolan.vlc"]
+        presence.readyBundleIDs = []   // running, not ready
+        let app = makeVLC(executor: exec, presence: presence)
+
+        XCTAssertNil(app.currentVolume())
+        app.setVolume(50)
+        XCTAssertTrue(exec.ranScripts.isEmpty)
+    }
+
     func testCurrentVolumeParsesAndScales() {
         let exec = MockScriptExecutor()
         exec.cannedOutput = "256"           // VLC raw, max 512

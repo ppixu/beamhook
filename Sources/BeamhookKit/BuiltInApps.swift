@@ -1,7 +1,7 @@
 import Foundation
 
 public enum BuiltInApps {
-    public static let all: [AppDefinition] = [spotify, music, appleTV, vlc, vox, quickTime, swinsian, downcast]
+    public static let all: [AppDefinition] = [spotify, music, appleTV, vlc, vox, quickTime, downcast]
 
     public static let spotify = AppDefinition(
         id: "spotify", displayName: "Spotify", bundleID: "com.spotify.client", isBuiltIn: true,
@@ -66,18 +66,6 @@ public enum BuiltInApps {
         volumeGetScript: nil,
         volumeSetScript: nil,
         playStateScript: "tell application \"QuickTime Player\" to return (playing of document 1) as text")
-
-    // Swinsian (Potion Factory) — full iTunes-style dictionary: playpause, next/
-    // previous track, player state, sound volume 0–100.
-    public static let swinsian = AppDefinition(
-        id: "swinsian", displayName: "Swinsian", bundleID: "com.potionfactory.Swinsian", isBuiltIn: true,
-        playPauseScript: "tell application \"Swinsian\" to playpause",
-        nextScript: "tell application \"Swinsian\" to next track",
-        previousScript: "tell application \"Swinsian\" to previous track",
-        volumeScaleKind: .integer(max: 100),
-        volumeGetScript: "tell application \"Swinsian\" to return sound volume",
-        volumeSetScript: "tell application \"Swinsian\" to set sound volume to {volume}",
-        playStateScript: "tell application \"Swinsian\" to return (player state as text)")
 
     // Downcast (podcasts) — playpause/next/previous; play state from now-playing info.
     public static let downcast = AppDefinition(

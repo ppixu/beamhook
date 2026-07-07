@@ -3,8 +3,9 @@ import Foundation
 
 /// Tracks whether the current default output device has an adjustable volume.
 /// When it doesn't (many audio interfaces / aggregate / HDMI devices — e.g. a
-/// Scarlett Solo), the hardware volume keys do nothing, so Beamhook can safely
-/// take them over automatically.
+/// Scarlett Solo), the hardware volume keys do nothing. Beamhook surfaces this as a
+/// UI hint suggesting the user route the keys to the target app; it does NOT take
+/// them over automatically (that silent behavior was removed).
 final class AudioOutputMonitor: ObservableObject {
     @Published private(set) var outputVolumeControllable: Bool = true
 
