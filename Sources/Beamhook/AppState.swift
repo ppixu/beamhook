@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import os
 import BeamhookKit
 
 @MainActor
@@ -44,6 +45,7 @@ final class AppState: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private static let volumeOverrideKey = "volumeKeyOverride"
     private static let legacyVolumeHookKey = "volumeHookBundleIDs"
+    private static let log = Logger(subsystem: "com.github.ppixu.beamhook", category: "HUD")
 
     init() {
         let scripting = ScriptRunner()
@@ -115,10 +117,20 @@ final class AppState: ObservableObject {
 
         // On first activation, confirm the default hook (Spotify) — but only if
         // that app is actually running, so we don't flash it on a bare login.
+        // Deferred a runloop turn so the app is fully up before we show a panel
+        // (showing one mid-launch left it invisible).
         if !didAnnounceStartupHook {
             didAnnounceStartupHook = true
-            if let def = currentTargetDefinition(), isRunning(bundleID: def.bundleID) {
-                HookHUD.shared.show(appName: def.displayName, bundleID: def.bundleID)
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    let def = self.currentTargetDefinition()
+                    let running = def.map { self.isRunning(bundleID: $0.bundleID) } ?? false
+                    Self.log.info("startup hook: target=\(def?.displayName ?? "nil", privacy: .public) running=\(running)")
+                    if let def, running {
+                        HookHUD.shared.show(appName: def.displayName, bundleID: def.bundleID)
+                    }
+                }
             }
         }
     }

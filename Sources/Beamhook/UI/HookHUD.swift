@@ -1,4 +1,5 @@
 import AppKit
+import os
 
 /// A transient, click-through overlay — like the macOS volume/brightness HUD —
 /// shown in the centre of the active screen to confirm which app the media keys
@@ -8,6 +9,8 @@ import AppKit
 final class HookHUD {
     static let shared = HookHUD()
     private init() {}
+
+    private static let log = Logger(subsystem: "com.github.ppixu.beamhook", category: "HUD")
 
     private let panelSize = NSSize(width: 210, height: 210)
     private var panel: NSPanel?
@@ -36,12 +39,11 @@ final class HookHUD {
         let gen = generation
         hideWork?.cancel()
 
-        panel.alphaValue = 0
+        // Show immediately (no fade-in): an implicit alpha animation isn't reliably
+        // committed when this fires during app launch, which left the HUD invisible.
+        panel.alphaValue = 1
         panel.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.14
-            panel.animator().alphaValue = 1
-        }
+        Self.log.info("HUD shown: \(appName, privacy: .public) hooked; screen=\(screen?.localizedName ?? "nil", privacy: .public) visible=\(panel.isVisible)")
 
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated { self?.dismiss(gen: gen) }
