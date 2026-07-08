@@ -22,8 +22,8 @@ Music can't hijack them.
 - Pick one target app — nothing else can steal the keys.
 - Play/pause button reflects what's actually playing.
 - Volume sliders for the scriptable apps currently making sound.
-- Built in: Spotify, Apple Music, Apple TV, VLC, VOX, QuickTime, Swinsian,
-  Downcast — or add any AppleScriptable app.
+- Built in: Spotify, Apple Music, Apple TV, VLC, VOX, QuickTime, Downcast —
+  or add any AppleScriptable app.
 
 ## Install
 
