@@ -8,4 +8,9 @@ DerivedData/
 MONETIZATION.md
 MONETIZATION.html
 NOTARIZING.html
+docs/design.md
+docs/implementation-plan.md
 .DS_Store
+
+# Claude Code guidance — kept local, not tracked
+CLAUDE.md
