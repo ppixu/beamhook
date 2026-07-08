@@ -14,3 +14,6 @@ docs/implementation-plan.md
 
 # Claude Code guidance — kept local, not tracked
 CLAUDE.md
+
+# Release/distribution tooling — kept local, not published
+release.sh
