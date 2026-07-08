@@ -13,19 +13,19 @@
 
 ---
 
-A tiny macOS menu-bar app that captures the hardware media keys and sends
-play/pause/next/previous to the **one app you choose** — so Safari and Apple
-Music can't hijack them.
+A tiny macOS menu-bar app that sends the hardware media keys
+(play/pause/next/previous) to **one app you choose** — so Safari and Apple
+Music can't hijack them. macOS 14+.
 
 ## Features
 
 - Pick one target app — nothing else can steal the keys.
-- Play/pause button reflects what's actually playing.
-- Volume sliders for the scriptable apps currently making sound.
+- Play/pause button that reflects what's actually playing.
+- Volume sliders for scriptable apps while they're open.
 - Built in: Spotify, Apple Music, Apple TV, VLC, VOX, QuickTime, Downcast —
   or add any AppleScriptable app.
 
-## Install
+## Build it yourself — free
 
 ```bash
 git clone https://github.com/ppixu/beamhook
@@ -35,13 +35,11 @@ brew install xcodegen
 ```
 
 Then grant **Accessibility** when prompted, pick your app, and press play.
-Requires macOS 14+.
 
-## Download
+## Or download it — €2
 
-Building from source (above) is free. If you'd rather not, a signed &
-notarized, ready-to-run build is **$5** on
-[Gumroad](https://ppixu.gumroad.com/l/beamhook) — same app, and it supports
+Rather not build? A signed & notarized, ready-to-run build is **€2** on
+[Gumroad](https://ppixu.gumroad.com/l/beamhook) — the same app, and it supports
 development.
 
 ## License
