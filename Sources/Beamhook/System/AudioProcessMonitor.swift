@@ -35,10 +35,23 @@ final class AudioProcessMonitor: ObservableObject {
                   let running = NSRunningApplication(processIdentifier: pid),
                   let bid = running.bundleIdentifier else { continue }
             if !apps.contains(where: { $0.bundleID == bid }) {
-                apps.append(PlayingApp(id: bid, displayName: running.localizedName ?? bid, bundleID: bid))
+                apps.append(PlayingApp(id: bid, displayName: Self.displayName(for: running, bundleID: bid), bundleID: bid))
             }
         }
         if apps != playingApps { playingApps = apps }
+    }
+
+    /// Human-facing name for an audio-emitting process. Safari (and any WebKit host,
+    /// e.g. an app embedding a web view) plays through the shared WebKit GPU helper
+    /// "com.apple.WebKit.GPU", which macOS names "<Owning app> Graphics and Media".
+    /// Strip the helper suffix so we show "Safari" rather than "Safari Graphics and Media".
+    private static func displayName(for app: NSRunningApplication, bundleID: String) -> String {
+        let raw = app.localizedName ?? bundleID
+        guard bundleID.hasPrefix("com.apple.WebKit") else { return raw }
+        for suffix in [" Graphics and Media", " Web Content", " Networking"] where raw.hasSuffix(suffix) {
+            return String(raw.dropLast(suffix.count))
+        }
+        return raw
     }
 
     // MARK: - Core Audio helpers

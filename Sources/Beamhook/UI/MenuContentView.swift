@@ -107,23 +107,28 @@ private struct PlayingAppsList: View {
 private struct PlayingAppsListAvailable: View {
     @EnvironmentObject var state: AppState
     @StateObject private var monitor = AudioProcessMonitor()
-    // Volume-scriptable apps (Spotify, Music, …) that have played this session,
-    // so we can keep offering their volume slider after they stop — as long as
-    // they're still running. Non-scriptable ("system volume") apps aren't kept.
-    @State private var everPlayedScriptable: [String: String] = [:]   // bundleID -> name
 
-    /// Currently-playing apps, plus scriptable apps that played and are still
-    /// running (deduplicated, current ones first).
+    /// What to show, deduplicated with currently-playing apps first:
+    ///   1. apps with a live audio stream (from Core Audio), plus
+    ///   2. known volume-scriptable apps (Spotify, Apple Music, VLC, …) that are
+    ///      running — so their volume slider stays available while the app is open,
+    ///      not only while it's actively making sound.
+    /// Non-scriptable apps ("system volume only", e.g. Safari) appear only while
+    /// they're actually emitting audio.
     private var rows: [PlayingApp] {
         var seen = Set<String>()
         var out: [PlayingApp] = []
         for app in monitor.playingApps where seen.insert(app.bundleID).inserted {
-            out.append(app)
+            // Prefer a known app's own name (e.g. "Apple Music") over the OS process
+            // name ("Music") so the label is the same whether it's playing or just open.
+            let name = state.availableApps.first { $0.bundleID == app.bundleID }?.displayName ?? app.displayName
+            out.append(PlayingApp(id: app.bundleID, displayName: name, bundleID: app.bundleID))
         }
-        for (bid, name) in everPlayedScriptable.sorted(by: { $0.value.localizedCaseInsensitiveCompare($1.value) == .orderedAscending }) {
-            guard !seen.contains(bid), state.isRunning(bundleID: bid) else { continue }
-            out.append(PlayingApp(id: bid, displayName: name, bundleID: bid))
-            seen.insert(bid)
+        let scriptableRunning = state.availableApps
+            .filter { state.volumeScriptable(bundleID: $0.bundleID) && state.isRunning(bundleID: $0.bundleID) }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        for def in scriptableRunning where seen.insert(def.bundleID).inserted {
+            out.append(PlayingApp(id: def.bundleID, displayName: def.displayName, bundleID: def.bundleID))
         }
         return out
     }
@@ -142,11 +147,6 @@ private struct PlayingAppsListAvailable: View {
         }
         .onAppear { monitor.start() }
         .onDisappear { monitor.stop() }
-        .onReceive(monitor.$playingApps) { apps in
-            for app in apps where state.volumeScriptable(bundleID: app.bundleID) {
-                everPlayedScriptable[app.bundleID] = app.displayName
-            }
-        }
     }
 }
 
