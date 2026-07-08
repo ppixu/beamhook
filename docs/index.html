@@ -39,10 +39,13 @@
     border:1px solid var(--line);border-radius:11px;padding:13px 16px;display:block;text-align:left;
     white-space:pre;overflow-x:auto;margin:0}
   .path-desc{color:var(--soft);font-size:.95rem;line-height:1.5;margin:0 0 14px}
-  .buy{display:inline-block;font-family:var(--sans);font-size:.92rem;font-weight:600;color:var(--ink);
-    text-decoration:none;border:1px solid var(--line);border-radius:10px;padding:9px 16px;
-    transition:border-color .15s}
-  .buy:hover{border-color:var(--ink)}
+  /* Gumroad-style CTA: their signature pink, black edge + hard offset shadow. */
+  .buy{display:inline-block;font-family:var(--sans);font-size:.98rem;font-weight:700;
+    color:#000;background:#ff90e8;text-decoration:none;
+    border:1.5px solid #111;border-radius:8px;padding:11px 20px;
+    transition:transform .08s ease,box-shadow .08s ease;box-shadow:2px 2px 0 #111}
+  .buy:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 #111}
+  .buy:active{transform:translate(1px,1px);box-shadow:1px 1px 0 #111}
 
   .links{display:flex;flex-wrap:wrap;gap:24px;row-gap:10px;justify-content:center;font-size:.96rem}
   .links a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line);padding-bottom:2px;transition:border-color .15s}
@@ -60,20 +63,20 @@
   <div class="paths">
     <section class="path">
       <div class="path-head">
-        <span class="path-title">Build it</span>
+        <span class="path-title">Get the app</span>
+        <span class="path-note">$2 · ready to run</span>
+      </div>
+      <p class="path-desc">A signed &amp; notarized build — download and run, no Xcode needed. Same app as the source, and it supports development.</p>
+      <a class="buy" href="https://ppixu.gumroad.com/l/beamhook">Get it on Gumroad</a>
+    </section>
+    <section class="path">
+      <div class="path-head">
+        <span class="path-title">Or build it yourself</span>
         <span class="path-note">free · open source</span>
       </div>
       <p class="path-desc">The code’s open — you can see exactly what handles your keystrokes.</p>
       <div class="cmd">git clone https://github.com/ppixu/beamhook
 cd beamhook &amp;&amp; ./run.sh</div>
-    </section>
-    <section class="path">
-      <div class="path-head">
-        <span class="path-title">Or get the build</span>
-        <span class="path-note">$5 · convenience</span>
-      </div>
-      <p class="path-desc">Rather not build it yourself? A signed &amp; notarized build, ready to run — no Xcode needed. Same app, and it supports development.</p>
-      <a class="buy" href="https://ppixu.gumroad.com/l/beamhook">Get it on Gumroad ↗</a>
     </section>
   </div>
 
