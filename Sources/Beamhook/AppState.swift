@@ -103,11 +103,29 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Guards the one-shot "hooked" HUD shown at launch, so re-activations
+    /// (e.g. after wake / fast user switch) don't re-flash it.
+    private var didAnnounceStartupHook = false
+
     private func activateInput() {
         tap.start()
         watchdog.start()
         outputMonitor.start()
         updateVolumeHijack()
+
+        // On first activation, confirm the default hook (Spotify) — but only if
+        // that app is actually running, so we don't flash it on a bare login.
+        if !didAnnounceStartupHook {
+            didAnnounceStartupHook = true
+            if let def = currentTargetDefinition(), isRunning(bundleID: def.bundleID) {
+                HookHUD.shared.show(appName: def.displayName, bundleID: def.bundleID)
+            }
+        }
+    }
+
+    private func currentTargetDefinition() -> AppDefinition? {
+        guard let id = selectedTargetID else { return nil }
+        return availableApps.first { $0.id == id }
     }
 
     func startInput() {
@@ -158,6 +176,10 @@ final class AppState: ObservableObject {
         selectedTargetID = id
         targetManager.selectedTargetID = id
         updateVolumeHijack()
+        // Confirm the new hook with a centre-screen HUD (user-initiated, so always).
+        if let def = currentTargetDefinition() {
+            HookHUD.shared.show(appName: def.displayName, bundleID: def.bundleID)
+        }
     }
 
     func reloadApps() {
