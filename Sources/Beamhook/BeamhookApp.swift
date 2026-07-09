@@ -43,6 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusItem = item
 
+        // Let the hook HUD anchor itself just below this status item.
+        HookHUD.shared.menuBarAnchor = { [weak self] in self?.statusItem?.button?.window?.frame }
+
         // Let the Add-an-app window ask the popover to close when it opens.
         NotificationCenter.default.addObserver(
             forName: .closeBeamhookMenu, object: nil, queue: .main

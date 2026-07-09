@@ -1,14 +1,11 @@
 import AppKit
 import os
 
-/// A transient, click-through overlay — like the macOS volume/brightness HUD —
-/// shown in the centre of the active screen to confirm which app the media keys
-/// are now hooked to (e.g. "Spotify hooked"). It never takes focus, so it can't
-/// interrupt whatever the user is doing.
-///
-/// Chrome-free by design: the Beamhook hook glyph over the label, with no boxy
-/// panel. A soft radial scrim + a dark halo on the white glyph/text keep both
-/// clearly legible over any window behind them (light or dark).
+/// A transient, click-through overlay confirming which app the media keys are
+/// hooked to (e.g. "Spotify hooked"). Styled like a macOS Control-Center panel —
+/// a frosted rounded box — and shown just below the menu bar near Beamhook's
+/// status item, echoing where the system shows volume/now-playing feedback. It
+/// never takes focus, so it can't interrupt whatever the user is doing.
 @MainActor
 final class HookHUD {
     static let shared = HookHUD()
@@ -16,23 +13,25 @@ final class HookHUD {
 
     private static let log = Logger(subsystem: "com.github.ppixu.beamhook", category: "HUD")
 
-    private let panelSize = NSSize(width: 400, height: 360)
+    /// Screen frame of the menu-bar status item, so we can anchor under it.
+    /// Set by the AppDelegate once the status item exists.
+    var menuBarAnchor: (() -> NSRect?)?
+
     private var panel: NSPanel?
     private var label: NSTextField?
+    private var box: NSView?
     private var hideWork: DispatchWorkItem?
     private var generation = 0
 
-    /// Flash "<appName> hooked" in the centre of the screen.
+    /// Flash "<appName> hooked" just below the menu bar.
     func show(appName: String) {
         let panel = ensurePanel()
         label?.stringValue = "\(appName) hooked"
 
-        // Centre on the screen holding the cursor (fall back to the main screen).
-        let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
-        if let frame = screen?.frame {
-            panel.setFrameOrigin(NSPoint(x: frame.midX - panelSize.width / 2,
-                                         y: frame.midY - panelSize.height / 2))
-        }
+        // Size the window to the (variable-width) content, then anchor it.
+        box?.layoutSubtreeIfNeeded()
+        if let fitting = box?.fittingSize { panel.setContentSize(fitting) }
+        position(panel)
 
         generation += 1
         let gen = generation
@@ -42,13 +41,31 @@ final class HookHUD {
         // committed when this fires during app launch, which left the HUD invisible.
         panel.alphaValue = 1
         panel.orderFrontRegardless()
-        Self.log.info("HUD shown: \(appName, privacy: .public) hooked; screen=\(screen?.localizedName ?? "nil", privacy: .public) visible=\(panel.isVisible)")
+        Self.log.info("HUD shown: \(appName, privacy: .public) hooked; visible=\(panel.isVisible)")
 
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated { self?.dismiss(gen: gen) }
         }
         hideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4, execute: work)
+    }
+
+    private func position(_ panel: NSPanel) {
+        let size = panel.frame.size
+        let gap: CGFloat = 8, margin: CGFloat = 10
+
+        if let anchor = menuBarAnchor?() {
+            let screen = NSScreen.screens.first { $0.frame.intersects(anchor) } ?? NSScreen.main
+            var x = anchor.midX - size.width / 2
+            let y = anchor.minY - gap - size.height   // just below the menu bar
+            if let f = screen?.frame {
+                x = min(max(x, f.minX + margin), f.maxX - size.width - margin)
+            }
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+        } else if let f = (NSScreen.main ?? NSScreen.screens.first)?.frame {
+            // Fallback: top-right, just under the menu bar.
+            panel.setFrameOrigin(NSPoint(x: f.maxX - size.width - 16, y: f.maxY - size.height - 32))
+        }
     }
 
     private func dismiss(gen: Int) {
@@ -57,9 +74,7 @@ final class HookHUD {
             ctx.duration = 0.35
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
-            // Runs on the main thread once the fade-out finishes.
             MainActor.assumeIsolated {
-                // Skip if a newer show() has since re-displayed the HUD.
                 guard let self, gen == self.generation else { return }
                 self.panel?.orderOut(nil)
             }
@@ -69,82 +84,61 @@ final class HookHUD {
     private func ensurePanel() -> NSPanel {
         if let panel { return panel }
 
-        let panel = NSPanel(contentRect: NSRect(origin: .zero, size: panelSize),
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 220, height: 60),
                             styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: false)
         panel.isFloatingPanel = true
         panel.level = .statusBar
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = false
+        panel.hasShadow = true
         panel.ignoresMouseEvents = true
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
 
-        // Soft radial glow behind the content (fades to clear — no boxy edges).
-        let content = ScrimView(frame: NSRect(origin: .zero, size: panelSize))
-
-        // Dark halo so the white glyph + text separate from any background.
-        func halo() -> NSShadow {
-            let s = NSShadow()
-            s.shadowColor = NSColor.black.withAlphaComponent(0.9)
-            s.shadowBlurRadius = 14
-            s.shadowOffset = .zero
-            return s
-        }
+        // Frosted rounded box (Control-Center look).
+        let box = NSVisualEffectView()
+        box.material = .popover
+        box.blendingMode = .behindWindow
+        box.state = .active
+        box.wantsLayer = true
+        box.layer?.cornerRadius = 16
+        box.layer?.cornerCurve = .continuous
+        box.layer?.masksToBounds = true
 
         let icon = NSImageView()
-        icon.image = NSImage(named: "HookGlyph")
+        icon.image = NSImage(named: "HookGlyph")   // template → tinted below
+        icon.contentTintColor = .labelColor
         icon.imageScaling = .scaleProportionallyUpOrDown
-        icon.wantsLayer = true
-        icon.shadow = halo()
         icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.setContentHuggingPriority(.required, for: .horizontal)
 
         let text = NSTextField(labelWithString: "")
-        text.alignment = .center
-        text.font = .systemFont(ofSize: 24, weight: .semibold)
-        text.textColor = .white
+        text.font = .systemFont(ofSize: 15, weight: .semibold)
+        text.textColor = .labelColor
         text.lineBreakMode = .byTruncatingTail
-        text.maximumNumberOfLines = 2
-        text.wantsLayer = true
-        text.shadow = halo()
         text.translatesAutoresizingMaskIntoConstraints = false
 
         let stack = NSStackView(views: [icon, text])
-        stack.orientation = .vertical
-        stack.alignment = .centerX
-        stack.spacing = 18
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
 
-        content.addSubview(stack)
-        let padding: CGFloat = 28
+        box.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: content.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: content.centerYAnchor),
-            stack.leadingAnchor.constraint(greaterThanOrEqualTo: content.leadingAnchor, constant: padding),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -padding),
-            icon.widthAnchor.constraint(equalToConstant: 132),
-            icon.heightAnchor.constraint(equalToConstant: 132),
+            icon.widthAnchor.constraint(equalToConstant: 28),
+            icon.heightAnchor.constraint(equalToConstant: 32),
+            stack.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 18),
+            stack.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -18),
+            stack.topAnchor.constraint(equalTo: box.topAnchor, constant: 13),
+            stack.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -13),
         ])
 
-        panel.contentView = content
+        panel.contentView = box
         self.panel = panel
         self.label = text
+        self.box = box
         return panel
-    }
-}
-
-/// Draws a soft, centred radial darkening that fades fully to clear before the
-/// edges — gives the HUD presence on bright backgrounds without a hard-edged box.
-private final class ScrimView: NSView {
-    override func draw(_ dirtyRect: NSRect) {
-        let center = NSPoint(x: bounds.midX, y: bounds.midY)
-        let gradient = NSGradient(colors: [
-            NSColor.black.withAlphaComponent(0.42),
-            NSColor.black.withAlphaComponent(0.0),
-        ])!
-        gradient.draw(fromCenter: center, radius: 0,
-                      toCenter: center, radius: min(bounds.width, bounds.height) / 2,
-                      options: [])
     }
 }
