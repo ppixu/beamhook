@@ -6,8 +6,9 @@ import os
 /// are now hooked to (e.g. "Spotify hooked"). It never takes focus, so it can't
 /// interrupt whatever the user is doing.
 ///
-/// Chrome-free by design: just the Beamhook hook glyph over the label, no
-/// background panel. A soft shadow keeps both legible over any window behind it.
+/// Chrome-free by design: the Beamhook hook glyph over the label, with no boxy
+/// panel. A soft radial scrim + a dark halo on the white glyph/text keep both
+/// clearly legible over any window behind them (light or dark).
 @MainActor
 final class HookHUD {
     static let shared = HookHUD()
@@ -15,7 +16,7 @@ final class HookHUD {
 
     private static let log = Logger(subsystem: "com.github.ppixu.beamhook", category: "HUD")
 
-    private let panelSize = NSSize(width: 300, height: 230)
+    private let panelSize = NSSize(width: 400, height: 360)
     private var panel: NSPanel?
     private var label: NSTextField?
     private var hideWork: DispatchWorkItem?
@@ -80,16 +81,15 @@ final class HookHUD {
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
 
-        let content = NSView(frame: NSRect(origin: .zero, size: panelSize))
-        content.wantsLayer = true
+        // Soft radial glow behind the content (fades to clear — no boxy edges).
+        let content = ScrimView(frame: NSRect(origin: .zero, size: panelSize))
 
-        // Soft shadow so the white glyph + text read on any background (there's no
-        // panel behind them).
-        func softShadow() -> NSShadow {
+        // Dark halo so the white glyph + text separate from any background.
+        func halo() -> NSShadow {
             let s = NSShadow()
-            s.shadowColor = NSColor.black.withAlphaComponent(0.55)
-            s.shadowBlurRadius = 8
-            s.shadowOffset = NSSize(width: 0, height: -1)
+            s.shadowColor = NSColor.black.withAlphaComponent(0.9)
+            s.shadowBlurRadius = 14
+            s.shadowOffset = .zero
             return s
         }
 
@@ -97,17 +97,17 @@ final class HookHUD {
         icon.image = NSImage(named: "HookGlyph")
         icon.imageScaling = .scaleProportionallyUpOrDown
         icon.wantsLayer = true
-        icon.shadow = softShadow()
+        icon.shadow = halo()
         icon.translatesAutoresizingMaskIntoConstraints = false
 
         let text = NSTextField(labelWithString: "")
         text.alignment = .center
-        text.font = .systemFont(ofSize: 16, weight: .semibold)
+        text.font = .systemFont(ofSize: 24, weight: .semibold)
         text.textColor = .white
         text.lineBreakMode = .byTruncatingTail
         text.maximumNumberOfLines = 2
         text.wantsLayer = true
-        text.shadow = softShadow()
+        text.shadow = halo()
         text.translatesAutoresizingMaskIntoConstraints = false
 
         let stack = NSStackView(views: [icon, text])
@@ -123,14 +123,28 @@ final class HookHUD {
             stack.centerYAnchor.constraint(equalTo: content.centerYAnchor),
             stack.leadingAnchor.constraint(greaterThanOrEqualTo: content.leadingAnchor, constant: padding),
             stack.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -padding),
-            stack.topAnchor.constraint(greaterThanOrEqualTo: content.topAnchor, constant: padding),
-            icon.widthAnchor.constraint(equalToConstant: 88),
-            icon.heightAnchor.constraint(equalToConstant: 88),
+            icon.widthAnchor.constraint(equalToConstant: 132),
+            icon.heightAnchor.constraint(equalToConstant: 132),
         ])
 
         panel.contentView = content
         self.panel = panel
         self.label = text
         return panel
+    }
+}
+
+/// Draws a soft, centred radial darkening that fades fully to clear before the
+/// edges — gives the HUD presence on bright backgrounds without a hard-edged box.
+private final class ScrimView: NSView {
+    override func draw(_ dirtyRect: NSRect) {
+        let center = NSPoint(x: bounds.midX, y: bounds.midY)
+        let gradient = NSGradient(colors: [
+            NSColor.black.withAlphaComponent(0.42),
+            NSColor.black.withAlphaComponent(0.0),
+        ])!
+        gradient.draw(fromCenter: center, radius: 0,
+                      toCenter: center, radius: min(bounds.width, bounds.height) / 2,
+                      options: [])
     }
 }
