@@ -2,10 +2,10 @@ import AppKit
 import os
 
 /// A transient, click-through overlay confirming which app the media keys are
-/// hooked to (e.g. "Spotify hooked"). Styled like a macOS Control-Center panel —
-/// a frosted rounded box — and shown just below the menu bar near Beamhook's
-/// status item, echoing where the system shows volume/now-playing feedback. It
-/// never takes focus, so it can't interrupt whatever the user is doing.
+/// hooked to (e.g. "Spotify hooked"). Styled like the modern macOS volume HUD —
+/// a dark translucent rounded panel that drops down just below the menu bar near
+/// Beamhook's status item. It never takes focus, so it can't interrupt whatever
+/// the user is doing.
 @MainActor
 final class HookHUD {
     static let shared = HookHUD()
@@ -41,30 +41,34 @@ final class HookHUD {
         // committed when this fires during app launch, which left the HUD invisible.
         panel.alphaValue = 1
         panel.orderFrontRegardless()
-        Self.log.info("HUD shown: \(appName, privacy: .public) hooked; visible=\(panel.isVisible)")
+        Self.log.info("HUD shown: \(appName, privacy: .public) hooked; frame=\(NSStringFromRect(panel.frame), privacy: .public)")
 
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated { self?.dismiss(gen: gen) }
         }
         hideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: work)
     }
 
     private func position(_ panel: NSPanel) {
         let size = panel.frame.size
-        let gap: CGFloat = 8, margin: CGFloat = 10
+        let gap: CGFloat = 6, margin: CGFloat = 10
 
-        if let anchor = menuBarAnchor?() {
-            let screen = NSScreen.screens.first { $0.frame.intersects(anchor) } ?? NSScreen.main
+        // Only trust the anchor when it really sits in a screen's menu bar: at
+        // launch the status item's window can report a bogus near-origin frame
+        // before the status bar has laid it out, which once put the HUD off the
+        // bottom of the screen. A real status-item window is flush with the top
+        // edge of its screen.
+        if let anchor = menuBarAnchor?(),
+           let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }),
+           anchor.maxY >= screen.frame.maxY - 40 {
             var x = anchor.midX - size.width / 2
             let y = anchor.minY - gap - size.height   // just below the menu bar
-            if let f = screen?.frame {
-                x = min(max(x, f.minX + margin), f.maxX - size.width - margin)
-            }
+            x = min(max(x, screen.frame.minX + margin), screen.frame.maxX - size.width - margin)
             panel.setFrameOrigin(NSPoint(x: x, y: y))
         } else if let f = (NSScreen.main ?? NSScreen.screens.first)?.frame {
-            // Fallback: top-right, just under the menu bar.
-            panel.setFrameOrigin(NSPoint(x: f.maxX - size.width - 16, y: f.maxY - size.height - 32))
+            // Fallback: top-right, just under the menu bar (where the item lives).
+            panel.setFrameOrigin(NSPoint(x: f.maxX - size.width - 16, y: f.maxY - size.height - 32 - gap))
         }
     }
 
@@ -84,7 +88,7 @@ final class HookHUD {
     private func ensurePanel() -> NSPanel {
         if let panel { return panel }
 
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 220, height: 60),
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 220, height: 58),
                             styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: false)
         panel.isFloatingPanel = true
@@ -95,44 +99,46 @@ final class HookHUD {
         panel.ignoresMouseEvents = true
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+        // The system volume HUD is dark translucent regardless of the theme;
+        // force dark so ours reads the same in light mode.
+        panel.appearance = NSAppearance(named: .darkAqua)
 
-        // Frosted rounded box (Control-Center look).
         let box = NSVisualEffectView()
-        box.material = .popover
+        box.material = .hudWindow
         box.blendingMode = .behindWindow
         box.state = .active
         box.wantsLayer = true
-        box.layer?.cornerRadius = 16
+        box.layer?.cornerRadius = 20
         box.layer?.cornerCurve = .continuous
         box.layer?.masksToBounds = true
 
         let icon = NSImageView()
         icon.image = NSImage(named: "HookGlyph")   // template → tinted below
-        icon.contentTintColor = .labelColor
+        icon.contentTintColor = .white
         icon.imageScaling = .scaleProportionallyUpOrDown
         icon.translatesAutoresizingMaskIntoConstraints = false
         icon.setContentHuggingPriority(.required, for: .horizontal)
 
         let text = NSTextField(labelWithString: "")
         text.font = .systemFont(ofSize: 15, weight: .semibold)
-        text.textColor = .labelColor
+        text.textColor = .white
         text.lineBreakMode = .byTruncatingTail
         text.translatesAutoresizingMaskIntoConstraints = false
 
         let stack = NSStackView(views: [icon, text])
         stack.orientation = .horizontal
         stack.alignment = .centerY
-        stack.spacing = 12
+        stack.spacing = 11
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         box.addSubview(stack)
         NSLayoutConstraint.activate([
-            icon.widthAnchor.constraint(equalToConstant: 28),
-            icon.heightAnchor.constraint(equalToConstant: 32),
-            stack.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 18),
-            stack.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -18),
-            stack.topAnchor.constraint(equalTo: box.topAnchor, constant: 13),
-            stack.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -13),
+            icon.widthAnchor.constraint(equalToConstant: 26),
+            icon.heightAnchor.constraint(equalToConstant: 30),
+            stack.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -22),
+            stack.topAnchor.constraint(equalTo: box.topAnchor, constant: 14),
+            stack.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -14),
         ])
 
         panel.contentView = box
