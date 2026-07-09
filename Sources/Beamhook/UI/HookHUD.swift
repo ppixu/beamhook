@@ -16,6 +16,9 @@ final class HookHUD {
     /// Screen frame of the menu-bar status item, so we can anchor under it.
     /// Set by the AppDelegate once the status item exists.
     var menuBarAnchor: (() -> NSRect?)?
+    /// Invoked the moment the panel is put on screen — the AppDelegate hooks the
+    /// status-item "fishing bob" animation here so both happen together.
+    var onPresent: (() -> Void)?
 
     private var panel: NSPanel?
     private var label: NSTextField?
@@ -23,8 +26,26 @@ final class HookHUD {
     private var hideWork: DispatchWorkItem?
     private var generation = 0
 
-    /// Flash "<appName> hooked" just below the menu bar.
+    /// Flash "<appName> hooked" just below the menu bar, under the status item.
     func show(appName: String) {
+        generation += 1
+        present(appName: appName, gen: generation, attempt: 0)
+    }
+
+    private func present(appName: String, gen: Int, attempt: Int) {
+        guard gen == generation else { return }   // superseded by a newer show
+
+        // At launch the status item's window reports a bogus near-origin frame
+        // until the status bar lays it out. Wait for the real icon position (up
+        // to ~1.2s) so the panel lands under the Beamhook icon, not at a
+        // generic fallback spot.
+        if validAnchor() == nil && attempt < 12 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                MainActor.assumeIsolated { self?.present(appName: appName, gen: gen, attempt: attempt + 1) }
+            }
+            return
+        }
+
         let panel = ensurePanel()
         label?.stringValue = "\(appName) hooked"
 
@@ -33,14 +54,13 @@ final class HookHUD {
         if let fitting = box?.fittingSize { panel.setContentSize(fitting) }
         position(panel)
 
-        generation += 1
-        let gen = generation
         hideWork?.cancel()
 
         // Show immediately (no fade-in): an implicit alpha animation isn't reliably
         // committed when this fires during app launch, which left the HUD invisible.
         panel.alphaValue = 1
         panel.orderFrontRegardless()
+        onPresent?()
         Self.log.info("HUD shown: \(appName, privacy: .public) hooked; frame=\(NSStringFromRect(panel.frame), privacy: .public)")
 
         let work = DispatchWorkItem { [weak self] in
@@ -50,18 +70,20 @@ final class HookHUD {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: work)
     }
 
+    /// The status-item frame, but only once it really sits in a screen's menu
+    /// bar (flush with the top edge) — see `present` for why it can be bogus.
+    private func validAnchor() -> (NSRect, NSScreen)? {
+        guard let anchor = menuBarAnchor?(),
+              let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }),
+              anchor.maxY >= screen.frame.maxY - 40 else { return nil }
+        return (anchor, screen)
+    }
+
     private func position(_ panel: NSPanel) {
         let size = panel.frame.size
         let gap: CGFloat = 6, margin: CGFloat = 10
 
-        // Only trust the anchor when it really sits in a screen's menu bar: at
-        // launch the status item's window can report a bogus near-origin frame
-        // before the status bar has laid it out, which once put the HUD off the
-        // bottom of the screen. A real status-item window is flush with the top
-        // edge of its screen.
-        if let anchor = menuBarAnchor?(),
-           let screen = NSScreen.screens.first(where: { $0.frame.intersects(anchor) }),
-           anchor.maxY >= screen.frame.maxY - 40 {
+        if let (anchor, screen) = validAnchor() {
             var x = anchor.midX - size.width / 2
             let y = anchor.minY - gap - size.height   // just below the menu bar
             x = min(max(x, screen.frame.minX + margin), screen.frame.maxX - size.width - margin)

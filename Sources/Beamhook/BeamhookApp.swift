@@ -43,8 +43,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusItem = item
 
-        // Let the hook HUD anchor itself just below this status item.
+        // Let the hook HUD anchor itself just below this status item, and give
+        // the icon a little fishing bob whenever the HUD appears.
         HookHUD.shared.menuBarAnchor = { [weak self] in self?.statusItem?.button?.window?.frame }
+        HookHUD.shared.onPresent = { [weak self] in self?.bobStatusIcon() }
 
         // Let the Add-an-app window ask the popover to close when it opens.
         NotificationCenter.default.addObserver(
@@ -59,6 +61,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             NSApp.activate(ignoringOtherApps: true)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
+    }
+
+    // MARK: - Status-icon "fishing bob"
+
+    private var isBobbing = false
+
+    /// Dip the menu-bar hook a few points and let it spring back up, like a
+    /// bobber getting a bite. The button's frame is animated inside the status
+    /// item's own window; `home` is restored at the end no matter what.
+    private func bobStatusIcon() {
+        guard !isBobbing, let button = statusItem?.button, let superview = button.superview else { return }
+        isBobbing = true
+        let down: CGFloat = superview.isFlipped ? 1 : -1   // toward the screen bottom
+        let home = button.frame.origin
+
+        func move(_ dy: CGFloat, _ duration: TimeInterval, _ timing: CAMediaTimingFunctionName,
+                  then: (() -> Void)? = nil) {
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = duration
+                ctx.timingFunction = CAMediaTimingFunction(name: timing)
+                button.animator().setFrameOrigin(NSPoint(x: home.x, y: home.y + dy * down))
+            }, completionHandler: { MainActor.assumeIsolated { then?() } })
+        }
+        move(3.5, 0.16, .easeIn) {           // dip…
+            move(-1.5, 0.22, .easeOut) {     // …spring a touch past home…
+                move(0, 0.16, .easeInEaseOut) { [weak self] in self?.isBobbing = false }   // …settle
+            }
         }
     }
 }
