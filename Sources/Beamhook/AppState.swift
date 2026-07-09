@@ -128,7 +128,7 @@ final class AppState: ObservableObject {
                     let running = def.map { self.isRunning(bundleID: $0.bundleID) } ?? false
                     Self.log.info("startup hook: target=\(def?.displayName ?? "nil", privacy: .public) running=\(running)")
                     if let def, running {
-                        HookHUD.shared.show(appName: def.displayName, bundleID: def.bundleID)
+                        HookHUD.shared.show(appName: def.displayName)
                     }
                 }
             }
@@ -190,7 +190,7 @@ final class AppState: ObservableObject {
         updateVolumeHijack()
         // Confirm the new hook with a centre-screen HUD (user-initiated, so always).
         if let def = currentTargetDefinition() {
-            HookHUD.shared.show(appName: def.displayName, bundleID: def.bundleID)
+            HookHUD.shared.show(appName: def.displayName)
         }
     }
 

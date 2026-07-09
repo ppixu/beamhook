@@ -5,6 +5,9 @@ import os
 /// shown in the centre of the active screen to confirm which app the media keys
 /// are now hooked to (e.g. "Spotify hooked"). It never takes focus, so it can't
 /// interrupt whatever the user is doing.
+///
+/// Chrome-free by design: just the Beamhook hook glyph over the label, no
+/// background panel. A soft shadow keeps both legible over any window behind it.
 @MainActor
 final class HookHUD {
     static let shared = HookHUD()
@@ -12,20 +15,15 @@ final class HookHUD {
 
     private static let log = Logger(subsystem: "com.github.ppixu.beamhook", category: "HUD")
 
-    private let panelSize = NSSize(width: 210, height: 210)
+    private let panelSize = NSSize(width: 300, height: 230)
     private var panel: NSPanel?
-    private var iconView: NSImageView?
     private var label: NSTextField?
     private var hideWork: DispatchWorkItem?
     private var generation = 0
 
     /// Flash "<appName> hooked" in the centre of the screen.
-    func show(appName: String, bundleID: String?) {
+    func show(appName: String) {
         let panel = ensurePanel()
-
-        let icon = Self.icon(forBundleID: bundleID)
-        iconView?.image = icon
-        iconView?.isHidden = (icon == nil)
         label?.stringValue = "\(appName) hooked"
 
         // Centre on the screen holding the cursor (fall back to the main screen).
@@ -77,64 +75,62 @@ final class HookHUD {
         panel.level = .statusBar
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.ignoresMouseEvents = true
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-        // HUDs are always dark, regardless of the system appearance.
-        panel.appearance = NSAppearance(named: .darkAqua)
 
-        let blur = NSVisualEffectView(frame: NSRect(origin: .zero, size: panelSize))
-        blur.material = .hudWindow
-        blur.blendingMode = .behindWindow
-        blur.state = .active
-        blur.wantsLayer = true
-        blur.layer?.cornerRadius = 20
-        blur.layer?.masksToBounds = true
-        blur.autoresizingMask = [.width, .height]
+        let content = NSView(frame: NSRect(origin: .zero, size: panelSize))
+        content.wantsLayer = true
+
+        // Soft shadow so the white glyph + text read on any background (there's no
+        // panel behind them).
+        func softShadow() -> NSShadow {
+            let s = NSShadow()
+            s.shadowColor = NSColor.black.withAlphaComponent(0.55)
+            s.shadowBlurRadius = 8
+            s.shadowOffset = NSSize(width: 0, height: -1)
+            return s
+        }
 
         let icon = NSImageView()
+        icon.image = NSImage(named: "HookGlyph")
         icon.imageScaling = .scaleProportionallyUpOrDown
+        icon.wantsLayer = true
+        icon.shadow = softShadow()
         icon.translatesAutoresizingMaskIntoConstraints = false
 
         let text = NSTextField(labelWithString: "")
         text.alignment = .center
         text.font = .systemFont(ofSize: 16, weight: .semibold)
-        text.textColor = .labelColor
+        text.textColor = .white
         text.lineBreakMode = .byTruncatingTail
         text.maximumNumberOfLines = 2
+        text.wantsLayer = true
+        text.shadow = softShadow()
         text.translatesAutoresizingMaskIntoConstraints = false
 
-        blur.addSubview(icon)
-        blur.addSubview(text)
+        let stack = NSStackView(views: [icon, text])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 18
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        content.addSubview(stack)
+        let padding: CGFloat = 28
         NSLayoutConstraint.activate([
-            icon.centerXAnchor.constraint(equalTo: blur.centerXAnchor),
-            icon.topAnchor.constraint(equalTo: blur.topAnchor, constant: 36),
-            icon.widthAnchor.constraint(equalToConstant: 96),
-            icon.heightAnchor.constraint(equalToConstant: 96),
-            text.leadingAnchor.constraint(equalTo: blur.leadingAnchor, constant: 16),
-            text.trailingAnchor.constraint(equalTo: blur.trailingAnchor, constant: -16),
-            text.topAnchor.constraint(equalTo: icon.bottomAnchor, constant: 18),
+            stack.centerXAnchor.constraint(equalTo: content.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: content.centerYAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: content.leadingAnchor, constant: padding),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -padding),
+            stack.topAnchor.constraint(greaterThanOrEqualTo: content.topAnchor, constant: padding),
+            icon.widthAnchor.constraint(equalToConstant: 88),
+            icon.heightAnchor.constraint(equalToConstant: 88),
         ])
 
-        panel.contentView = blur
+        panel.contentView = content
         self.panel = panel
-        self.iconView = icon
         self.label = text
         return panel
-    }
-
-    /// Resolve an app icon for a bundle id — the running instance's icon first,
-    /// else a Launch Services lookup of the installed app.
-    private static func icon(forBundleID bundleID: String?) -> NSImage? {
-        guard let bundleID else { return nil }
-        if let running = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first,
-           let icon = running.icon {
-            return icon
-        }
-        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
-            return NSWorkspace.shared.icon(forFile: url.path)
-        }
-        return nil
     }
 }
