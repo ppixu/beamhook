@@ -60,6 +60,7 @@ final class HookHUD {
         // committed when this fires during app launch, which left the HUD invisible.
         panel.alphaValue = 1
         panel.orderFrontRegardless()
+        panel.invalidateShadow()   // recompute for the masked shape at this size
         onPresent?()
         Self.log.info("HUD shown: \(appName, privacy: .public) hooked; frame=\(NSStringFromRect(panel.frame), privacy: .public)")
 
@@ -129,10 +130,12 @@ final class HookHUD {
         box.material = .hudWindow
         box.blendingMode = .behindWindow
         box.state = .active
-        box.wantsLayer = true
-        box.layer?.cornerRadius = 20
-        box.layer?.cornerCurve = .continuous
-        box.layer?.masksToBounds = true
+        // Round via maskImage, NOT layer.cornerRadius: with behind-window
+        // blending the vibrancy backdrop (and the window shadow) is composited
+        // by the window server for the window's full rect, so a layer mask
+        // leaves a light un-rounded rectangle poking out at the corners. The
+        // mask image is what tells the window server the real shape.
+        box.maskImage = Self.roundedMask(radius: 20)
 
         let icon = NSImageView()
         icon.image = NSImage(named: "HookGlyph")   // template → tinted below
@@ -168,5 +171,19 @@ final class HookHUD {
         self.label = text
         self.box = box
         return panel
+    }
+
+    /// A stretchable rounded-rect alpha mask (the corners are fixed via
+    /// capInsets, the middle stretches to any panel size).
+    private static func roundedMask(radius: CGFloat) -> NSImage {
+        let edge = radius * 2 + 1
+        let image = NSImage(size: NSSize(width: edge, height: edge), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        image.resizingMode = .stretch
+        return image
     }
 }
