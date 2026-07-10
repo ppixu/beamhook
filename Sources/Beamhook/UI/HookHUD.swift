@@ -23,6 +23,8 @@ final class HookHUD {
     private var panel: NSPanel?
     private var label: NSTextField?
     private var box: NSView?
+    /// The padded stack inside the chrome; its fitting size drives the panel size.
+    private var content: NSView?
     private var hideWork: DispatchWorkItem?
     private var generation = 0
 
@@ -50,8 +52,8 @@ final class HookHUD {
         label?.stringValue = "\(appName) hooked"
 
         // Size the window to the (variable-width) content, then anchor it.
-        box?.layoutSubtreeIfNeeded()
-        if let fitting = box?.fittingSize { panel.setContentSize(fitting) }
+        content?.layoutSubtreeIfNeeded()
+        if let fitting = content?.fittingSize { panel.setContentSize(fitting) }
         position(panel)
 
         hideWork?.cancel()
@@ -126,17 +128,6 @@ final class HookHUD {
         // force dark so ours reads the same in light mode.
         panel.appearance = NSAppearance(named: .darkAqua)
 
-        let box = NSVisualEffectView()
-        box.material = .hudWindow
-        box.blendingMode = .behindWindow
-        box.state = .active
-        // Round via maskImage, NOT layer.cornerRadius: with behind-window
-        // blending the vibrancy backdrop (and the window shadow) is composited
-        // by the window server for the window's full rect, so a layer mask
-        // leaves a light un-rounded rectangle poking out at the corners. The
-        // mask image is what tells the window server the real shape.
-        box.maskImage = Self.roundedMask(radius: 20)
-
         let icon = NSImageView()
         icon.image = NSImage(named: "HookGlyph")   // template → tinted below
         icon.contentTintColor = .white
@@ -156,20 +147,51 @@ final class HookHUD {
         stack.spacing = 11
         stack.translatesAutoresizingMaskIntoConstraints = false
 
-        box.addSubview(stack)
+        // The padded content, chrome-agnostic (its fitting size sizes the panel).
+        let content = NSView()
+        content.addSubview(stack)
         NSLayoutConstraint.activate([
             icon.widthAnchor.constraint(equalToConstant: 26),
             icon.heightAnchor.constraint(equalToConstant: 30),
-            stack.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 20),
-            stack.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -22),
-            stack.topAnchor.constraint(equalTo: box.topAnchor, constant: 14),
-            stack.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -14),
+            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -22),
+            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 14),
+            stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -14),
         ])
 
-        panel.contentView = box
+        // Chrome: Liquid Glass on macOS 26+ — the same material as the system
+        // volume HUD, properly see-through. Older systems get the frosted
+        // (more opaque) vibrancy material instead.
+        let chrome: NSView
+        if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView()
+            glass.cornerRadius = 24
+            glass.contentView = content
+            chrome = glass
+            // Glass draws its own edge treatment; a window shadow would put a
+            // rectangular halo right back behind the rounded shape.
+            panel.hasShadow = false
+        } else {
+            let frosted = NSVisualEffectView()
+            frosted.material = .hudWindow
+            frosted.blendingMode = .behindWindow
+            frosted.state = .active
+            // Round via maskImage, NOT layer.cornerRadius: with behind-window
+            // blending the vibrancy backdrop (and the window shadow) is
+            // composited by the window server for the window's full rect, so a
+            // layer mask leaves a light un-rounded rectangle at the corners.
+            frosted.maskImage = Self.roundedMask(radius: 20)
+            content.frame = frosted.bounds
+            content.autoresizingMask = [.width, .height]
+            frosted.addSubview(content)
+            chrome = frosted
+        }
+
+        panel.contentView = chrome
         self.panel = panel
         self.label = text
-        self.box = box
+        self.box = chrome
+        self.content = content
         return panel
     }
 
