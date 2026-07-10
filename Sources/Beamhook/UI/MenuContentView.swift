@@ -167,7 +167,9 @@ private struct AppVolumeRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
+                // The hooked app's title is fully opaque; the rest sit back a bit.
                 Text(playing.displayName).font(.subheadline)
+                    .opacity(isTarget ? 1 : 0.55)
                 Spacer()
                 Button(isTarget ? "Hooked" : "Hook") { hook() }
                     .buttonStyle(.bordered)
@@ -204,17 +206,6 @@ private struct AppVolumeRow: View {
                 Text("system volume only").font(.caption2).foregroundStyle(.secondary)
             }
         }
-        // Dim rounded highlight behind the hooked row. The padding/negative-
-        // padding pair keeps every row's layout width identical — the highlight
-        // just bleeds evenly around the active one.
-        .padding(6)
-        .background {
-            if isTarget {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(0.07))
-            }
-        }
-        .padding(-6)
         .onAppear {
             if let cached = state.volumeByBundle[playing.bundleID] {
                 volume = Double(cached); scriptable = true

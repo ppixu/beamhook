@@ -149,6 +149,20 @@ final class HookHUD {
 
         // The padded content, chrome-agnostic (its fitting size sizes the panel).
         let content = NSView()
+        // Constant smoked-glass darkening UNDER the text. Tinting the glass
+        // itself proved unreliable (adaptive glass still washed out over light
+        // backgrounds); a plain dark layer composited on top of the blur is
+        // deterministic on any background, and it makes the panel's first
+        // frame match its settled look. Rounded to the chrome's radius so no
+        // square corner can ever poke out.
+        let smoke = NSView()
+        smoke.wantsLayer = true
+        smoke.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.35).cgColor
+        smoke.layer?.cornerRadius = 24
+        smoke.layer?.cornerCurve = .continuous
+        content.addSubview(smoke)
+        smoke.frame = content.bounds
+        smoke.autoresizingMask = [.width, .height]
         content.addSubview(stack)
         NSLayoutConstraint.activate([
             icon.widthAnchor.constraint(equalToConstant: 26),
@@ -166,12 +180,6 @@ final class HookHUD {
         if #available(macOS 26.0, *) {
             let glass = NSGlassEffectView()
             glass.cornerRadius = 24
-            // Untinted glass adapts to whatever is behind it — over light
-            // content it turns nearly white and the white text washes out
-            // (and its first frame renders dark, a visible flash). A dark
-            // tint pins it to the system volume HUD's smoky look on any
-            // background and makes the first frame match the settled one.
-            glass.tintColor = .black.withAlphaComponent(0.4)
             glass.contentView = content
             chrome = glass
             // Glass draws its own edge treatment; a window shadow would put a
@@ -186,7 +194,7 @@ final class HookHUD {
             // blending the vibrancy backdrop (and the window shadow) is
             // composited by the window server for the window's full rect, so a
             // layer mask leaves a light un-rounded rectangle at the corners.
-            frosted.maskImage = Self.roundedMask(radius: 20)
+            frosted.maskImage = Self.roundedMask(radius: 24)
             content.frame = frosted.bounds
             content.autoresizingMask = [.width, .height]
             frosted.addSubview(content)
