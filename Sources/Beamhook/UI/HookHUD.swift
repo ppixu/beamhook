@@ -58,19 +58,29 @@ final class HookHUD {
 
         hideWork?.cancel()
 
-        // Show immediately (no fade-in): an implicit alpha animation isn't reliably
-        // committed when this fires during app launch, which left the HUD invisible.
-        panel.alphaValue = 1
+        // Order front invisible, reveal a beat later: the glass composites a
+        // few dark frames before its backdrop sample exists (a visible black
+        // flash), so let it settle off-screen first. The reveal is a DIRECT
+        // alpha set — not an animation — because implicit animations aren't
+        // reliably committed during app launch (that once left the HUD
+        // invisible for good).
+        panel.alphaValue = 0
         panel.orderFrontRegardless()
         panel.invalidateShadow()   // recompute for the masked shape at this size
         onPresent?()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, gen == self.generation else { return }
+                self.panel?.alphaValue = 1
+            }
+        }
         Self.log.info("HUD shown: \(appName, privacy: .public) hooked; frame=\(NSStringFromRect(panel.frame), privacy: .public)")
 
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated { self?.dismiss(gen: gen) }
         }
         hideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: work)
     }
 
     /// The status-item frame, but only once it really sits in a screen's menu
@@ -157,11 +167,13 @@ final class HookHUD {
         // square corner can ever poke out.
         let smoke = NSView()
         smoke.wantsLayer = true
-        smoke.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.35).cgColor
-        smoke.layer?.cornerRadius = 24
+        smoke.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.30).cgColor
+        smoke.layer?.cornerRadius = 22
         smoke.layer?.cornerCurve = .continuous
         content.addSubview(smoke)
-        smoke.frame = content.bounds
+        // Inset a hair so the glass's bright rim stays uncovered — painting
+        // over it flattened the whole panel into a plain dark rectangle.
+        smoke.frame = content.bounds.insetBy(dx: 2, dy: 2)
         smoke.autoresizingMask = [.width, .height]
         content.addSubview(stack)
         NSLayoutConstraint.activate([
