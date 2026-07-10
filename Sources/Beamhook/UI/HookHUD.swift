@@ -82,7 +82,7 @@ final class HookHUD {
             MainActor.assumeIsolated { self?.dismiss(gen: gen) }
         }
         hideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: work)
     }
 
     /// The status-item frame, but only once it really sits in a screen's menu
