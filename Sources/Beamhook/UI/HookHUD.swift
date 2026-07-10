@@ -28,6 +28,18 @@ final class HookHUD {
     private var hideWork: DispatchWorkItem?
     private var generation = 0
 
+    /// Order the panel in (invisibly) so the glass effect initializes its
+    /// backdrop before the first real show — its first frames otherwise render
+    /// dark, which used to read as a black flash that then "settled" to gray.
+    /// The panel stays ordered in for the app's lifetime; visibility is only
+    /// ever alpha. Call once at launch.
+    func prewarm() {
+        let panel = ensurePanel()
+        panel.alphaValue = 0.001   // 0 could let the compositor skip the window
+        position(panel)
+        panel.orderFrontRegardless()
+    }
+
     /// Flash "<appName> hooked" just below the menu bar, under the status item.
     func show(appName: String) {
         generation += 1
@@ -58,29 +70,19 @@ final class HookHUD {
 
         hideWork?.cancel()
 
-        // Order front invisible, reveal a beat later: the glass composites a
-        // few dark frames before its backdrop sample exists (a visible black
-        // flash), so let it settle off-screen first. The reveal is a DIRECT
-        // alpha set — not an animation — because implicit animations aren't
-        // reliably committed during app launch (that once left the HUD
-        // invisible for good).
-        panel.alphaValue = 0
+        // Show immediately (no fade-in): an implicit alpha animation isn't reliably
+        // committed when this fires during app launch, which left the HUD invisible.
+        panel.alphaValue = 1
         panel.orderFrontRegardless()
         panel.invalidateShadow()   // recompute for the masked shape at this size
         onPresent?()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self, gen == self.generation else { return }
-                self.panel?.alphaValue = 1
-            }
-        }
         Self.log.info("HUD shown: \(appName, privacy: .public) hooked; frame=\(NSStringFromRect(panel.frame), privacy: .public)")
 
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated { self?.dismiss(gen: gen) }
         }
         hideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: work)
     }
 
     /// The status-item frame, but only once it really sits in a screen's menu
@@ -109,15 +111,13 @@ final class HookHUD {
 
     private func dismiss(gen: Int) {
         guard gen == generation, let panel else { return }
-        NSAnimationContext.runAnimationGroup({ ctx in
+        // Fade to (near-)invisible but never order out: keeping the window in
+        // keeps the glass backdrop warm, so the next show has no first-frame
+        // flash while the effect re-initializes.
+        NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.35
-            panel.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self, gen == self.generation else { return }
-                self.panel?.orderOut(nil)
-            }
-        })
+            panel.animator().alphaValue = 0.001
+        }
     }
 
     private func ensurePanel() -> NSPanel {
@@ -159,22 +159,6 @@ final class HookHUD {
 
         // The padded content, chrome-agnostic (its fitting size sizes the panel).
         let content = NSView()
-        // Constant smoked-glass darkening UNDER the text. Tinting the glass
-        // itself proved unreliable (adaptive glass still washed out over light
-        // backgrounds); a plain dark layer composited on top of the blur is
-        // deterministic on any background, and it makes the panel's first
-        // frame match its settled look. Rounded to the chrome's radius so no
-        // square corner can ever poke out.
-        let smoke = NSView()
-        smoke.wantsLayer = true
-        smoke.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.30).cgColor
-        smoke.layer?.cornerRadius = 22
-        smoke.layer?.cornerCurve = .continuous
-        content.addSubview(smoke)
-        // Inset a hair so the glass's bright rim stays uncovered — painting
-        // over it flattened the whole panel into a plain dark rectangle.
-        smoke.frame = content.bounds.insetBy(dx: 2, dy: 2)
-        smoke.autoresizingMask = [.width, .height]
         content.addSubview(stack)
         NSLayoutConstraint.activate([
             icon.widthAnchor.constraint(equalToConstant: 26),
@@ -192,6 +176,10 @@ final class HookHUD {
         if #available(macOS 26.0, *) {
             let glass = NSGlassEffectView()
             glass.cornerRadius = 24
+            // Smoky-gray tint toward the system volume HUD's look. Done via
+            // tintColor (not an overlay on top) so the glass keeps its rim
+            // highlight and lensing instead of reading as a flat gray face.
+            glass.tintColor = NSColor(white: 0.2, alpha: 0.55)
             glass.contentView = content
             chrome = glass
             // Glass draws its own edge treatment; a window shadow would put a

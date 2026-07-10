@@ -47,6 +47,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the icon a little fishing bob whenever the HUD appears.
         HookHUD.shared.menuBarAnchor = { [weak self] in self?.statusItem?.button?.window?.frame }
         HookHUD.shared.onPresent = { [weak self] in self?.bobStatusIcon() }
+        // Initialize the glass backdrop while invisible, so the first real
+        // show doesn't flash the effect's dark warm-up frames.
+        HookHUD.shared.prewarm()
 
         // Let the Add-an-app window ask the popover to close when it opens.
         NotificationCenter.default.addObserver(
