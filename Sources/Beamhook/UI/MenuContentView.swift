@@ -180,26 +180,41 @@ private struct AppVolumeRow: View {
                 Slider(value: $volume, in: 0...100) { editing in
                     if !editing { state.setVolume(Int(volume), for: playing.bundleID) }
                 }
-                Toggle("Volume keys", isOn: Binding(
-                    get: { state.volumeKeysEnabled(bundleID: playing.bundleID) },
-                    set: { state.setVolumeKeysEnabled($0, bundleID: playing.bundleID) }))
-                    .toggleStyle(.checkbox)
-                    .controlSize(.small)
-                    .font(.caption)
-                    .help("Route the hardware volume keys to this app while it's the hooked target")
-                // Non-silent nudge: if the current output has no adjustable volume the
-                // hardware keys do nothing, so suggest routing them here — but only if
-                // the user turns it on.
-                if isTarget && !state.outputVolumeControllable
-                    && !state.volumeKeysEnabled(bundleID: playing.bundleID) {
-                    Text("This output has no volume control — turn this on to use the volume keys here.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                // The volume-keys opt-in only matters for the hooked app, so
+                // the other rows stay compact: name + slider.
+                if isTarget {
+                    Toggle("Volume keys", isOn: Binding(
+                        get: { state.volumeKeysEnabled(bundleID: playing.bundleID) },
+                        set: { state.setVolumeKeysEnabled($0, bundleID: playing.bundleID) }))
+                        .toggleStyle(.checkbox)
+                        .controlSize(.small)
+                        .font(.caption)
+                        .help("Route the hardware volume keys to this app while it's the hooked target")
+                    // Non-silent nudge: if the current output has no adjustable volume
+                    // the hardware keys do nothing, so suggest routing them here — but
+                    // only if the user turns it on.
+                    if !state.outputVolumeControllable
+                        && !state.volumeKeysEnabled(bundleID: playing.bundleID) {
+                        Text("This output has no volume control — turn this on to use the volume keys here.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-            } else {
+            } else if isTarget {
                 Text("system volume only").font(.caption2).foregroundStyle(.secondary)
             }
         }
+        // Dim rounded highlight behind the hooked row. The padding/negative-
+        // padding pair keeps every row's layout width identical — the highlight
+        // just bleeds evenly around the active one.
+        .padding(6)
+        .background {
+            if isTarget {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.primary.opacity(0.07))
+            }
+        }
+        .padding(-6)
         .onAppear {
             if let cached = state.volumeByBundle[playing.bundleID] {
                 volume = Double(cached); scriptable = true
