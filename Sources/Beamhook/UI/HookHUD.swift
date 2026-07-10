@@ -166,6 +166,12 @@ final class HookHUD {
         if #available(macOS 26.0, *) {
             let glass = NSGlassEffectView()
             glass.cornerRadius = 24
+            // Untinted glass adapts to whatever is behind it — over light
+            // content it turns nearly white and the white text washes out
+            // (and its first frame renders dark, a visible flash). A dark
+            // tint pins it to the system volume HUD's smoky look on any
+            // background and makes the first frame match the settled one.
+            glass.tintColor = .black.withAlphaComponent(0.4)
             glass.contentView = content
             chrome = glass
             // Glass draws its own edge treatment; a window shadow would put a
