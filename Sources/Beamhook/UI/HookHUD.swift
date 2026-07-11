@@ -70,11 +70,12 @@ final class HookHUD {
 
         hideWork?.cancel()
 
-        // Show immediately (no fade-in): an implicit alpha animation isn't reliably
-        // committed when this fires during app launch, which left the HUD invisible.
+        // Present immediately. Unlike NSGlassEffectView, the HUD material does
+        // not need an asynchronous backdrop-settling period, so launch-time
+        // notifications cannot be lost while waiting for a delayed reveal.
         panel.alphaValue = 1
         panel.orderFrontRegardless()
-        panel.invalidateShadow()   // recompute for the masked shape at this size
+        panel.invalidateShadow()
         onPresent?()
         Self.log.info("HUD shown: \(appName, privacy: .public) hooked; frame=\(NSStringFromRect(panel.frame), privacy: .public)")
 
@@ -169,37 +170,20 @@ final class HookHUD {
             stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -14),
         ])
 
-        // Chrome: Liquid Glass on macOS 26+ — the same material as the system
-        // volume HUD, properly see-through. Older systems get the frosted
-        // (more opaque) vibrancy material instead.
-        let chrome: NSView
-        if #available(macOS 26.0, *) {
-            let glass = NSGlassEffectView()
-            glass.cornerRadius = 24
-            // Smoky-gray tint toward the system volume HUD's look. Done via
-            // tintColor (not an overlay on top) so the glass keeps its rim
-            // highlight and lensing instead of reading as a flat gray face.
-            glass.tintColor = NSColor(white: 0.2, alpha: 0.55)
-            glass.contentView = content
-            chrome = glass
-            // Glass draws its own edge treatment; a window shadow would put a
-            // rectangular halo right back behind the rounded shape.
-            panel.hasShadow = false
-        } else {
-            let frosted = NSVisualEffectView()
-            frosted.material = .hudWindow
-            frosted.blendingMode = .behindWindow
-            frosted.state = .active
-            // Round via maskImage, NOT layer.cornerRadius: with behind-window
-            // blending the vibrancy backdrop (and the window shadow) is
-            // composited by the window server for the window's full rect, so a
-            // layer mask leaves a light un-rounded rectangle at the corners.
-            frosted.maskImage = Self.roundedMask(radius: 24)
-            content.frame = frosted.bounds
-            content.autoresizingMask = [.width, .height]
-            frosted.addSubview(content)
-            chrome = frosted
-        }
+        // The clear Liquid Glass compositor flashes black while initializing in
+        // a transient borderless panel. `.hudWindow` provides the stable dark,
+        // translucent system-HUD treatment and is ready on its first frame.
+        let chrome = NSVisualEffectView()
+        chrome.material = .hudWindow
+        chrome.blendingMode = .behindWindow
+        chrome.state = .active
+        // Round via maskImage, NOT layer.cornerRadius: with behind-window
+        // blending the backdrop (and shadow) is composited by the window server
+        // for the full window rect, so a layer mask leaks pale corners.
+        chrome.maskImage = Self.roundedMask(radius: 24)
+        content.frame = chrome.bounds
+        content.autoresizingMask = [.width, .height]
+        chrome.addSubview(content)
 
         panel.contentView = chrome
         self.panel = panel
