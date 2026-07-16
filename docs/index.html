@@ -23,7 +23,7 @@
   @media (prefers-color-scheme:dark){
     :root{ --paper:#0a0a0a; --ink:#f1f1f1; --soft:#9a9a9a; --faint:#5f5f5f; --line:#232323; }
     .mark img.logo,.tray-icon{filter:invert(1)}
-    .hover-hint{filter:none;opacity:.85}
+    .hover-hint{filter:none;opacity:.5}
     .menubar{color:rgba(255,255,255,.92);background:rgba(40,40,40,.72);
       box-shadow:0 6px 20px rgba(0,0,0,.28)}
     .tray:hover,.tray:focus-visible{background:rgba(255,255,255,.12)}
@@ -57,8 +57,8 @@
    * Invert in light mode so it reads as dark; leave white in dark mode.
    */
   .hover-hint{position:fixed;left:auto;width:min(168px,38vw);height:auto;
-    right:calc(var(--tray-center-from-right) - 15px);top:18px;
-    pointer-events:none;z-index:35;opacity:.9;filter:invert(1);
+    right:calc(var(--tray-center-from-right) - 2px);top:18px;
+    pointer-events:none;z-index:35;opacity:.5;filter:invert(1);
     transition:opacity .22s ease}
   .menubar:has(.tray:hover) .hover-hint,
   .menubar:has(.tray:focus-within) .hover-hint{opacity:0}
@@ -193,7 +193,7 @@
   @media (max-width:560px){
     .page{padding:36px 22px 44px;align-items:flex-start}
     :root{--tray-right:14px}
-    .hover-hint{width:min(128px,34vw);right:calc(var(--tray-center-from-right) - 10px);top:16px}
+    .hover-hint{width:min(128px,34vw);right:calc(var(--tray-center-from-right) - 2px);top:16px}
   }
   @keyframes fade{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 </style>
