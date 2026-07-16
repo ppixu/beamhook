@@ -29,27 +29,24 @@
   }
   .card{max-width:470px;width:100%;text-align:center;animation:fade .7s cubic-bezier(.2,.7,.2,1) both}
   .mark{position:relative;width:96px;margin:0 auto 26px;outline:none;z-index:2}
-  .mark img.logo{width:100%;height:auto;display:block;transform-origin:50% 12%;
-    transition:transform .5s cubic-bezier(.34,1.56,.64,1),filter .3s ease;
+  .mark img.logo{width:100%;height:auto;display:block;
+    transition:transform .35s cubic-bezier(.34,1.45,.64,1),filter .3s ease;
     cursor:pointer}
   .mark:hover img.logo,.mark:focus-visible img.logo{
-    transform:scale(1.14) rotate(-16deg);
-    filter:drop-shadow(0 8px 16px rgba(0,0,0,.16))}
+    transform:scale(1.08);
+    filter:drop-shadow(0 6px 12px rgba(0,0,0,.14))}
   @media (prefers-color-scheme:dark){
     .mark:hover img.logo,.mark:focus-visible img.logo{
-      filter:invert(1) drop-shadow(0 8px 16px rgba(0,0,0,.5))}
+      filter:invert(1) drop-shadow(0 6px 12px rgba(0,0,0,.45))}
   }
   .popup{position:absolute;left:50%;top:calc(100% + 10px);width:min(210px,72vw);
     margin:0;padding:0;pointer-events:none;z-index:5;
-    opacity:0;transform:translate(-50%,-6px) scale(.88) rotate(-3deg);
-    transition:opacity .28s cubic-bezier(.2,.7,.2,1),transform .45s cubic-bezier(.34,1.45,.64,1);
-    filter:drop-shadow(0 22px 36px rgba(0,0,0,.2))}
-  .popup::before{content:"";position:absolute;left:50%;bottom:100%;width:12px;height:12px;
-    margin-left:-6px;background:var(--paper);border-left:1px solid var(--line);border-top:1px solid var(--line);
-    transform:rotate(45deg) translateY(6px)}
-  .popup img{display:block;width:100%;height:auto;border-radius:12px;border:1px solid var(--line);background:var(--paper)}
+    opacity:0;transform:translate(-50%,-6px) scale(.94);
+    transition:opacity .28s cubic-bezier(.2,.7,.2,1),transform .4s cubic-bezier(.34,1.45,.64,1);
+    filter:drop-shadow(0 18px 32px rgba(0,0,0,.18))}
+  .popup img{display:block;width:100%;height:auto}
   .mark:hover .popup,.mark:focus-within .popup{
-    opacity:1;transform:translate(-50%,10px) scale(1) rotate(0)}
+    opacity:1;transform:translate(-50%,10px) scale(1)}
   h1{font-size:2.35rem;font-weight:800;letter-spacing:-.03em;margin:0 0 12px;line-height:1.05}
   .tag{font-size:1.16rem;font-weight:500;margin:0 0 16px;line-height:1.35;text-wrap:balance}
   .desc{color:var(--soft);font-size:1.02rem;line-height:1.55;margin:0 auto 30px;max-width:42ch}
