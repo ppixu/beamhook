@@ -57,7 +57,7 @@
    * asset, so right/top are offset to land that tip on the tray center.
    */
   .hover-hint{position:fixed;left:auto;width:min(148px,34vw);height:auto;
-    right:calc(var(--tray-center-from-right) - 12px);top:38px;
+    right:calc(var(--tray-center-from-right) - 2px);top:18px;
     pointer-events:none;z-index:35;opacity:.9;transition:opacity .22s ease}
   .menubar:has(.tray:hover) .hover-hint,
   .menubar:has(.tray:focus-within) .hover-hint{opacity:0}
@@ -192,7 +192,7 @@
   @media (max-width:560px){
     .page{padding:36px 22px 44px;align-items:flex-start}
     :root{--tray-right:14px}
-    .hover-hint{width:min(110px,30vw);right:calc(var(--tray-center-from-right) - 6px);top:36px}
+    .hover-hint{width:min(110px,30vw);right:calc(var(--tray-center-from-right) + 4px);top:16px}
   }
   @keyframes fade{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 </style>
