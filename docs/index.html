@@ -22,11 +22,6 @@
   }
   @media (prefers-color-scheme:dark){
     :root{ --paper:#0a0a0a; --ink:#f1f1f1; --soft:#9a9a9a; --faint:#5f5f5f; --line:#232323; }
-    .mark img.logo,.tray-icon{filter:invert(1)}
-    .hover-hint{filter:none;opacity:.5}
-    .menubar{color:rgba(255,255,255,.92);background:rgba(40,40,40,.72);
-      box-shadow:0 6px 20px rgba(0,0,0,.28)}
-    .tray:hover,.tray:focus-visible{background:rgba(255,255,255,.12)}
   }
   *{box-sizing:border-box}
   body{margin:0;min-height:100vh;display:flex;flex-direction:column;
@@ -131,7 +126,7 @@
     padding: 4px 10px 4px 18px;
     font-size: 13px;
     font-weight: 400;
-    color: inherit;
+    color: var(--ink);
     text-decoration: none;
     border-radius: 4px;
     cursor: default;
@@ -150,7 +145,7 @@
     padding: 4px 10px 4px 18px;
     font-size: 13px;
     font-weight: 600;
-    color: inherit;
+    color: var(--ink);
     opacity: 0.9;
   }
 
@@ -307,6 +302,26 @@
     .hover-hint{width:min(96px,25.5vw);right:calc(var(--tray-center-from-right) - 2px);top:36px}
   }
   @keyframes fade{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+  /* Dark mode overrides (defined at the bottom to ensure correct specificity order) */
+  @media (prefers-color-scheme: dark) {
+    .mark img.logo, .tray-icon {
+      filter: invert(1);
+    }
+    .hover-hint {
+      filter: none;
+      opacity: .5;
+    }
+    /* Muted translucent dark menu bar for premium Sonoma-style dark mode */
+    .menubar {
+      color: rgba(255, 255, 255, 0.92);
+      background: rgba(24, 24, 26, 0.88);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+    }
+    .tray:hover, .tray:focus-visible {
+      background: rgba(255, 255, 255, 0.12);
+    }
+  }
 </style>
 
 <header class="menubar">
