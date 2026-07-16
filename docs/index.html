@@ -57,7 +57,7 @@
    * Invert in light mode so it reads as dark; leave white in dark mode.
    */
   .hover-hint{position:fixed;left:auto;width:min(126px,28.5vw);height:auto;
-    right:calc(var(--tray-center-from-right) + 8px);top:28px;
+    right:calc(var(--tray-center-from-right) - 12px);top:28px;
     pointer-events:none;z-index:35;opacity:.5;filter:invert(1);
     transition:opacity .22s ease}
   .menubar:has(.tray:hover) .hover-hint,
@@ -193,7 +193,7 @@
   @media (max-width:560px){
     .page{padding:36px 22px 44px;align-items:flex-start}
     :root{--tray-right:14px}
-    .hover-hint{width:min(96px,25.5vw);right:calc(var(--tray-center-from-right) + 8px);top:26px}
+    .hover-hint{width:min(96px,25.5vw);right:calc(var(--tray-center-from-right) - 12px);top:26px}
   }
   @keyframes fade{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 </style>
