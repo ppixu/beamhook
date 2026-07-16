@@ -23,7 +23,7 @@
   @media (prefers-color-scheme:dark){
     :root{ --paper:#0a0a0a; --ink:#f1f1f1; --soft:#9a9a9a; --faint:#5f5f5f; --line:#232323; }
     .mark img.logo,.tray-icon{filter:invert(1)}
-    .hover-hint{filter:invert(1);opacity:.8}
+    .hover-hint{filter:none;opacity:.85}
     .menubar{color:rgba(255,255,255,.92);background:rgba(40,40,40,.72);
       box-shadow:0 6px 20px rgba(0,0,0,.28)}
     .tray:hover,.tray:focus-visible{background:rgba(255,255,255,.12)}
@@ -53,12 +53,13 @@
   .tray:hover .tray-icon,.tray:focus-visible .tray-icon{transform:scale(1.08)}
 
   /*
-   * Hint on the right. Tip of the drawn arrow sits ~85% across / ~12% down the
-   * asset, so right/top are offset to land that tip on the tray center.
+   * Hint on the right (white ink on transparent). Tip sits ~91% across / ~1% down.
+   * Invert in light mode so it reads as dark; leave white in dark mode.
    */
-  .hover-hint{position:fixed;left:auto;width:min(148px,34vw);height:auto;
-    right:calc(var(--tray-center-from-right) - 2px);top:18px;
-    pointer-events:none;z-index:35;opacity:.9;transition:opacity .22s ease}
+  .hover-hint{position:fixed;left:auto;width:min(168px,38vw);height:auto;
+    right:calc(var(--tray-center-from-right) - 15px);top:18px;
+    pointer-events:none;z-index:35;opacity:.9;filter:invert(1);
+    transition:opacity .22s ease}
   .menubar:has(.tray:hover) .hover-hint,
   .menubar:has(.tray:focus-within) .hover-hint{opacity:0}
 
@@ -192,7 +193,7 @@
   @media (max-width:560px){
     .page{padding:36px 22px 44px;align-items:flex-start}
     :root{--tray-right:14px}
-    .hover-hint{width:min(110px,30vw);right:calc(var(--tray-center-from-right) + 4px);top:16px}
+    .hover-hint{width:min(128px,34vw);right:calc(var(--tray-center-from-right) - 10px);top:16px}
   }
   @keyframes fade{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 </style>
@@ -202,7 +203,7 @@
   <div class="tray" tabindex="0" title="Beamhook">
     <img class="tray-icon" src="icon.png" width="14" height="14" alt="Beamhook">
   </div>
-  <img class="hover-hint" src="hover-hint.png" width="148" height="132" alt="" aria-hidden="true">
+  <img class="hover-hint" src="hover-hint.png" width="168" height="118" alt="" aria-hidden="true">
 </header>
 
 <div class="popup" aria-hidden="true">
