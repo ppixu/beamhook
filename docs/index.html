@@ -56,7 +56,7 @@
    * Hint on the right (white ink on transparent). Tip sits ~91% across / ~1% down.
    * Invert in light mode so it reads as dark; leave white in dark mode.
    */
-  .hover-hint{position:fixed;left:auto;width:min(168px,38vw);height:auto;
+  .hover-hint{position:fixed;left:auto;width:min(126px,28.5vw);height:auto;
     right:calc(var(--tray-center-from-right) - 2px);top:18px;
     pointer-events:none;z-index:35;opacity:.5;filter:invert(1);
     transition:opacity .22s ease}
@@ -193,7 +193,7 @@
   @media (max-width:560px){
     .page{padding:36px 22px 44px;align-items:flex-start}
     :root{--tray-right:14px}
-    .hover-hint{width:min(128px,34vw);right:calc(var(--tray-center-from-right) - 2px);top:16px}
+    .hover-hint{width:min(96px,25.5vw);right:calc(var(--tray-center-from-right) - 2px);top:16px}
   }
   @keyframes fade{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 </style>
@@ -203,7 +203,7 @@
   <div class="tray" tabindex="0" title="Beamhook">
     <img class="tray-icon" src="icon.png" width="14" height="14" alt="Beamhook">
   </div>
-  <img class="hover-hint" src="hover-hint.png" width="168" height="118" alt="" aria-hidden="true">
+  <img class="hover-hint" src="hover-hint.png" width="126" height="89" alt="" aria-hidden="true">
 </header>
 
 <div class="popup" aria-hidden="true">
