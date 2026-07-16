@@ -47,10 +47,9 @@
     transition:transform .28s cubic-bezier(.34,1.45,.64,1)}
   .tray:hover .tray-icon,.tray:focus-visible .tray-icon{transform:scale(1.08)}
 
-  /* Hand-drawn “hover me” cue — arrow tip aims at the centered tray icon */
-  .hover-hint{position:absolute;left:50%;top:calc(100% + 6px);width:min(148px,38vw);height:auto;
-    transform:translate(calc(-100% + 10px),0);pointer-events:none;z-index:35;
-    opacity:.9;transition:opacity .22s ease}
+  /* Hand-drawn “hover me” cue — parked on the right so it doesn’t cover the hero logo */
+  .hover-hint{position:fixed;right:clamp(16px,5vw,48px);top:44px;left:auto;width:min(148px,34vw);
+    height:auto;pointer-events:none;z-index:35;opacity:.9;transition:opacity .22s ease}
   .menubar:has(.tray:hover) .hover-hint,
   .menubar:has(.tray:focus-within) .hover-hint{opacity:0}
 
@@ -180,7 +179,7 @@
   .meta{margin-top:30px;font-family:var(--mono);font-size:.76rem;color:var(--faint);letter-spacing:.02em}
   @media (max-width:560px){
     .page{padding:36px 22px 44px;align-items:flex-start}
-    .hover-hint{width:min(120px,34vw)}
+    .hover-hint{width:min(110px,30vw);right:12px;top:40px}
   }
   @keyframes fade{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 </style>

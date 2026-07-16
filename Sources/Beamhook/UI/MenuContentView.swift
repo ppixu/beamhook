@@ -36,15 +36,11 @@ struct MenuContentView: View {
                     }
                 }
             } label: {
-                HStack {
-                    Text(targetName).lineLimit(1)
-                    Spacer()
-                    Image(systemName: "chevron.up.chevron.down")
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 12)
-                .frame(maxWidth: .infinity, minHeight: 32)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
+                Text(targetName)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
             }
             .menuStyle(.borderlessButton)
             .frame(maxWidth: .infinity)
@@ -92,8 +88,15 @@ struct MenuContentView: View {
             SettingsSection()
 
             Divider()
-            HStack {
-                Spacer()
+            HStack(spacing: 6) {
+                Image("MenuBarIcon")
+                    .resizable()
+                    .renderingMode(.template)
+                    .frame(width: 14, height: 14)
+                    .accessibilityHidden(true)
+                Text("Beamhook")
+                    .font(.subheadline.weight(.semibold))
+                Spacer(minLength: 8)
                 Button("Quit") { NSApplication.shared.terminate(nil) }
             }
         }
