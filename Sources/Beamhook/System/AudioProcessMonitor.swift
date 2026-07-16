@@ -33,9 +33,12 @@ final class AudioProcessMonitor: ObservableObject {
         for obj in Self.processObjectIDs() where Self.isRunningOutput(obj) {
             guard let pid = Self.pid(obj),
                   let running = NSRunningApplication(processIdentifier: pid),
-                  let bid = running.bundleIdentifier else { continue }
+                  let rawBundleID = running.bundleIdentifier else { continue }
+            let identity = Self.browserIdentity(for: running, rawBundleID: rawBundleID)
+            let bid = identity?.bundleID ?? rawBundleID
+            let name = identity?.displayName ?? Self.displayName(for: running, bundleID: rawBundleID)
             if !apps.contains(where: { $0.bundleID == bid }) {
-                apps.append(PlayingApp(id: bid, displayName: Self.displayName(for: running, bundleID: bid), bundleID: bid))
+                apps.append(PlayingApp(id: bid, displayName: name, bundleID: bid))
             }
         }
         if apps != playingApps { playingApps = apps }
@@ -52,6 +55,26 @@ final class AudioProcessMonitor: ObservableObject {
             return String(raw.dropLast(suffix.count))
         }
         return raw
+    }
+
+    /// Core Audio often attributes browser playback to a renderer/GPU helper.
+    /// Resolve those helpers to the browser's built-in target so the row can be
+    /// hooked instead of offering a useless custom definition for the helper.
+    private static func browserIdentity(
+        for app: NSRunningApplication,
+        rawBundleID: String
+    ) -> (displayName: String, bundleID: String)? {
+        let name = displayName(for: app, bundleID: rawBundleID)
+        if rawBundleID.hasPrefix("com.apple.WebKit"), name == "Safari" {
+            return ("Safari", "com.apple.Safari")
+        }
+        if rawBundleID == "com.google.Chrome" || rawBundleID.hasPrefix("com.google.Chrome.helper") {
+            return ("Chrome", "com.google.Chrome")
+        }
+        if rawBundleID == "com.brave.Browser" || rawBundleID.hasPrefix("com.brave.Browser.helper") {
+            return ("Brave", "com.brave.Browser")
+        }
+        return nil
     }
 
     // MARK: - Core Audio helpers

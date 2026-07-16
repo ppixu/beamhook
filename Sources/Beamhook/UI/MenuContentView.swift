@@ -2,6 +2,11 @@ import SwiftUI
 import Combine
 import BeamhookKit
 
+private struct MenuRefreshContext: Hashable {
+    let targetID: String?
+    let isVisible: Bool
+}
+
 struct MenuContentView: View {
     @EnvironmentObject var state: AppState
     @State private var playing: Bool?
@@ -14,21 +19,68 @@ struct MenuContentView: View {
             }
 
             Text("Hook media keys to:").font(.caption).foregroundStyle(.secondary)
-            Picker("Target", selection: Binding(
-                get: { state.selectedTargetID ?? state.availableApps.first?.id ?? "" },
-                set: { state.setTarget($0) })) {
+            Menu {
                 ForEach(state.availableApps) { app in
-                    Text(app.displayName).tag(app.id)
+                    Button {
+                        playing = nil
+                        state.setTarget(app.id)
+                    } label: {
+                        Group {
+                            if app.id == state.selectedTargetID {
+                                Label(app.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(app.displayName)
+                            }
+                        }
+                        .foregroundStyle(state.isRunning(bundleID: app.bundleID) ? .primary : .secondary)
+                    }
                 }
+            } label: {
+                HStack {
+                    Text(targetName).lineLimit(1)
+                    Spacer()
+                    Image(systemName: "chevron.up.chevron.down")
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, minHeight: 32)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
+            .menuStyle(.borderlessButton)
             .frame(maxWidth: .infinity)
-            // labelsHidden still reserves the label column on macOS, leaving a
-            // leading gap; pull the control flush with the rest of the content.
-            .padding(.leading, -8)
+            .accessibilityLabel("Hook media keys to \(targetName)")
 
             playPauseButton
+
+            if state.selectedTargetIsBrowser {
+                if state.browserMediaInjectionAvailable == true {
+                    if state.browserMediaCandidates.isEmpty {
+                        Text("No playable browser tabs found.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    } else {
+                        Picker("Browser player", selection: Binding(
+                            get: { state.selectedBrowserMediaID ?? state.browserMediaCandidates.first?.id ?? "" },
+                            set: { state.selectBrowserMedia($0) })) {
+                            ForEach(state.browserMediaCandidates) { candidate in
+                                Text((candidate.isPlaying ? "▶ " : "") + candidate.label)
+                                    .tag(candidate.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .controlSize(.small)
+                    }
+                } else if state.browserTargetRunning == false {
+                    Text("\(targetName) is not running. macOS will handle play/pause normally.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else if state.browserMediaInjectionAvailable == false {
+                    Text("macOS is choosing the browser player. Enable JavaScript from Apple Events to pick a specific tab in Beamhook.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
 
             // Playing-apps section renders its own leading divider + rows, and
             // nothing at all when nothing is playing.
@@ -47,10 +99,21 @@ struct MenuContentView: View {
         }
         .padding(12)
         .frame(width: 200)
-        .task {
+        .task(id: state.isMenuVisible) {
+            guard state.isMenuVisible else { return }
             while !Task.isCancelled {
                 playing = await state.isTargetPlaying()
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
+            }
+        }
+        .task(id: MenuRefreshContext(
+            targetID: state.selectedTargetID,
+            isVisible: state.isMenuVisible
+        )) {
+            guard state.isMenuVisible else { return }
+            while !Task.isCancelled {
+                await state.refreshBrowserMedia()
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
             }
         }
     }
@@ -113,8 +176,9 @@ private struct PlayingAppsListAvailable: View {
     ///   2. known volume-scriptable apps (Spotify, Apple Music, VLC, …) that are
     ///      running — so their volume slider stays available while the app is open,
     ///      not only while it's actively making sound.
-    /// Non-scriptable apps ("system volume only", e.g. Safari) appear only while
-    /// they're actually emitting audio.
+    /// Non-scriptable apps ("system volume only") appear only while they're
+    /// actually emitting audio. Supported browsers resolve to their YouTube
+    /// definitions in AudioProcessMonitor, including Safari's WebKit helper.
     private var rows: [PlayingApp] {
         var seen = Set<String>()
         var out: [PlayingApp] = []
@@ -134,8 +198,8 @@ private struct PlayingAppsListAvailable: View {
     }
 
     var body: some View {
-        // Always present (so the monitor starts), but shows content only when
-        // there is something to control.
+        // The popover content stays mounted while hidden, so explicitly bind the
+        // monitor to its visible lifetime instead of relying on view appearance.
         VStack(alignment: .leading, spacing: 8) {
             let list = rows
             if !list.isEmpty {
@@ -145,7 +209,13 @@ private struct PlayingAppsListAvailable: View {
                 }
             }
         }
-        .onAppear { monitor.start() }
+        .task(id: state.isMenuVisible) {
+            if state.isMenuVisible {
+                monitor.start()
+            } else {
+                monitor.stop()
+            }
+        }
         .onDisappear { monitor.stop() }
     }
 }
@@ -178,45 +248,31 @@ private struct AppVolumeRow: View {
                     .help(isTarget ? "The media keys already control this app"
                                    : "Send the media keys to this app")
             }
-            if scriptable {
+            if scriptable && isTarget {
                 Slider(value: $volume, in: 0...100) { editing in
                     if !editing { state.setVolume(Int(volume), for: playing.bundleID) }
                 }
-                // The volume-keys opt-in only matters for the hooked app, so
-                // the other rows stay compact: name + slider.
-                if isTarget {
-                    Toggle("Volume keys", isOn: Binding(
-                        get: { state.volumeKeysEnabled(bundleID: playing.bundleID) },
-                        set: { state.setVolumeKeysEnabled($0, bundleID: playing.bundleID) }))
-                        .toggleStyle(.checkbox)
-                        .controlSize(.small)
-                        .font(.caption)
-                        .help("Route the hardware volume keys to this app while it's the hooked target")
-                    // Non-silent nudge: if the current output has no adjustable volume
-                    // the hardware keys do nothing, so suggest routing them here — but
-                    // only if the user turns it on.
-                    if !state.outputVolumeControllable
-                        && !state.volumeKeysEnabled(bundleID: playing.bundleID) {
-                        Text("This output has no volume control — turn this on to use the volume keys here.")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                Toggle("Volume keys", isOn: Binding(
+                    get: { state.volumeKeysEnabled(bundleID: playing.bundleID) },
+                    set: { state.setVolumeKeysEnabled($0, bundleID: playing.bundleID) }))
+                    .toggleStyle(.checkbox)
+                    .controlSize(.small)
+                    .font(.caption)
+                    .help("Route the hardware volume keys to this app while it's the hooked target")
             } else if isTarget {
                 Text("system volume only").font(.caption2).foregroundStyle(.secondary)
             }
         }
-        .onAppear {
+        .task(id: state.isMenuVisible) {
+            guard state.isMenuVisible else { return }
             if let cached = state.volumeByBundle[playing.bundleID] {
                 volume = Double(cached); scriptable = true
             } else {
-                Task {
-                    if let v = await state.volume(for: playing.bundleID) {
-                        volume = Double(v); scriptable = true
-                        state.volumeByBundle[playing.bundleID] = v
-                    } else {
-                        scriptable = false
-                    }
+                if let v = await state.volume(for: playing.bundleID) {
+                    volume = Double(v); scriptable = true
+                    state.volumeByBundle[playing.bundleID] = v
+                } else {
+                    scriptable = false
                 }
             }
         }

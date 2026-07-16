@@ -1,7 +1,10 @@
 import Foundation
 
 public enum BuiltInApps {
-    public static let all: [AppDefinition] = [spotify, music, appleTV, vlc, vox, quickTime, downcast]
+    public static let all: [AppDefinition] = [
+        spotify, music, appleTV, safariYouTube, chromeYouTube, braveYouTube,
+        vlc, vox, quickTime, downcast,
+    ]
 
     public static let spotify = AppDefinition(
         id: "spotify", displayName: "Spotify", bundleID: "com.spotify.client", isBuiltIn: true,
@@ -77,4 +80,91 @@ public enum BuiltInApps {
         volumeGetScript: nil,
         volumeSetScript: nil,
         playStateScript: "tell application \"Downcast\" to return (is playing of now playing info) as text")
+
+    // Browser scripting must be enabled by the user. Safari exposes this under
+    // Develop > Allow JavaScript from Apple Events; Chromium browsers expose it
+    // under View > Developer > Allow JavaScript from Apple Events.
+    public static let safariYouTube = browserDefinition(
+        id: "safari-youtube", displayName: "Safari", bundleID: "com.apple.Safari",
+        script: safariScript)
+
+    public static let chromeYouTube = browserDefinition(
+        id: "chrome-youtube", displayName: "Chrome", bundleID: "com.google.Chrome",
+        script: { chromiumScript(application: "Google Chrome", javascript: $0) })
+
+    public static let braveYouTube = browserDefinition(
+        id: "brave-youtube", displayName: "Brave", bundleID: "com.brave.Browser",
+        script: { chromiumScript(application: "Brave Browser", javascript: $0) })
+
+    private static let playPauseJS = """
+        (() => { const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; if (!m) return false; const youtube = document.querySelector('.ytp-play-button'); if (youtube) youtube.click(); else if (m.paused) void m.play(); else m.pause(); return true; })()
+        """
+    private static let nextJS = """
+        (() => { const b = document.querySelector('.ytp-next-button'); if (!b) return false; b.click(); return true; })()
+        """
+    private static let previousJS = """
+        (() => { const b = document.querySelector('.ytp-prev-button'); if (!b) return false; b.click(); return true; })()
+        """
+    private static let volumeGetJS = """
+        (() => { const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; return m ? Math.round(m.volume * 100) : null; })()
+        """
+    private static let volumeSetJS = """
+        (() => { const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; if (!m) return false; m.volume = Math.max(0, Math.min(1, {volume} / 100)); return true; })()
+        """
+    private static let playStateJS = """
+        (() => { const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; return m ? (m.paused ? 'paused' : 'playing') : null; })()
+        """
+
+    private static func browserDefinition(
+        id: String,
+        displayName: String,
+        bundleID: String,
+        script: (String) -> String
+    ) -> AppDefinition {
+        AppDefinition(
+            id: id, displayName: displayName, bundleID: bundleID, isBuiltIn: true,
+            playPauseScript: script(playPauseJS),
+            nextScript: script(nextJS),
+            previousScript: script(previousJS),
+            volumeScaleKind: .integer(max: 100),
+            volumeGetScript: script(volumeGetJS),
+            volumeSetScript: script(volumeSetJS),
+            playStateScript: script(playStateJS))
+    }
+
+    private static func safariScript(javascript: String) -> String {
+        """
+        tell application "Safari"
+            if not (exists front window) then return
+            set targetTab to missing value
+            repeat with browserWindow in windows
+                repeat with candidateTab in tabs of browserWindow
+                    try
+                        if (do JavaScript "sessionStorage.getItem('beamhook-selected') === '1'" in candidateTab) is true then set targetTab to candidateTab
+                    end try
+                end repeat
+            end repeat
+            if targetTab is missing value then set targetTab to current tab of front window
+            return do JavaScript "\(javascript)" in targetTab
+        end tell
+        """
+    }
+
+    private static func chromiumScript(application: String, javascript: String) -> String {
+        """
+        tell application "\(application)"
+            if not (exists front window) then return
+            set targetTab to missing value
+            repeat with browserWindow in windows
+                repeat with candidateTab in tabs of browserWindow
+                    try
+                        if (execute candidateTab javascript "sessionStorage.getItem('beamhook-selected') === '1'") is true then set targetTab to candidateTab
+                    end try
+                end repeat
+            end repeat
+            if targetTab is missing value then set targetTab to active tab of front window
+            return execute targetTab javascript "\(javascript)"
+        end tell
+        """
+    }
 }

@@ -15,6 +15,9 @@ final class MediaKeyTap {
     typealias Handler = (MediaKey) -> Void
 
     private let handler: Handler
+    /// Browser targets leave transport keys to macOS until tab injection is
+    /// available; all other targets keep Beamhook's exclusive routing.
+    var transportKeysHijacked = true
     /// When true, hardware volume up/down keys are swallowed and forwarded to the
     /// target app instead of the system. Set from the main thread; read on the tap
     /// thread — a plain Bool is safe here (single-word, tolerates a one-tick stale read).
@@ -88,6 +91,9 @@ final class MediaKeyTap {
         let key = decoded.key
 
         if key.isHandledTransport {
+            if !transportKeysHijacked {
+                return Unmanaged.passUnretained(event)
+            }
             // Act on key-down only; swallow both down and up to stop other apps /
             // Music auto-launch.
             if decoded.isDown && !decoded.isRepeat {
@@ -106,6 +112,23 @@ final class MediaKeyTap {
 
         // Everything else (volume keys when not hijacked, mute, ff/rewind) passes through.
         return Unmanaged.passUnretained(event)
+    }
+
+    /// Send a normal system play/pause key pair. Used by the menu button when a
+    /// browser target is in native pass-through mode.
+    static func postNativePlayPause() {
+        let playKeyCode = 16 // NX_KEYTYPE_PLAY
+        for isDown in [true, false] {
+            let keyFlags = isDown ? 0xA00 : 0xB00
+            let data1 = (playKeyCode << 16) | keyFlags
+            let event = NSEvent.otherEvent(
+                with: .systemDefined, location: .zero, modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: 0, context: nil,
+                subtype: 8,
+                data1: data1, data2: -1)
+            event?.cgEvent?.post(tap: CGEventTapLocation.cghidEventTap)
+        }
     }
 
     var isEnabled: Bool {

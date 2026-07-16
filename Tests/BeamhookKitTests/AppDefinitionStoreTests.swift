@@ -15,7 +15,28 @@ final class AppDefinitionStoreTests: XCTestCase {
         XCTAssertTrue(ids.contains("music"))
         XCTAssertTrue(ids.contains("vlc"))
         XCTAssertTrue(ids.contains("vox"))
+        XCTAssertTrue(ids.contains("safari-youtube"))
+        XCTAssertTrue(ids.contains("chrome-youtube"))
+        XCTAssertTrue(ids.contains("brave-youtube"))
         XCTAssertTrue(BuiltInApps.all.allSatisfy { $0.isBuiltIn })
+    }
+
+    func testYouTubeBrowserDefinitions() {
+        let browsers = [
+            BuiltInApps.safariYouTube,
+            BuiltInApps.chromeYouTube,
+            BuiltInApps.braveYouTube,
+        ]
+        XCTAssertEqual(browsers.map(\.bundleID), [
+            "com.apple.Safari", "com.google.Chrome", "com.brave.Browser",
+        ])
+        for browser in browsers {
+            XCTAssertTrue(browser.playPauseScript.contains(".ytp-play-button"))
+            if case .none = browser.volumeScaleKind {
+                XCTFail("YouTube browser should support volume")
+            }
+            XCTAssertTrue(browser.volumeSetScript?.contains("{volume}") == true)
+        }
     }
 
     func testRoundTripUserDefined() {

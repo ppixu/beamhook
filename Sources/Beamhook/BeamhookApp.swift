@@ -14,14 +14,12 @@ struct BeamhookApp: App {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let state = AppState()
     private var statusItem: NSStatusItem?
     private let popover = NSPopover()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        state.startInput()
-
         let hosting = NSHostingController(rootView: MenuContentView().environmentObject(state))
         hosting.sizingOptions = [.preferredContentSize]   // popover sizes to the content
         popover.contentViewController = hosting
@@ -30,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // when showing it so that dismissal is reliable for an agent app.
         popover.behavior = .transient
         popover.animates = true
+        popover.delegate = self
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
@@ -46,10 +45,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Let the hook HUD anchor itself just below this status item, and give
         // the icon a little fishing bob whenever the HUD appears.
         HookHUD.shared.menuBarAnchor = { [weak self] in self?.statusItem?.button?.window?.frame }
+        HookHUD.shared.menuPopoverFrame = { [weak self] in
+            guard let self, self.popover.isShown else { return nil }
+            return self.popover.contentViewController?.view.window?.frame
+        }
         HookHUD.shared.onPresent = { [weak self] in self?.bobStatusIcon() }
-        // Initialize the glass backdrop while invisible, so the first real
-        // show doesn't flash the effect's dark warm-up frames.
-        HookHUD.shared.prewarm()
+        // Fully initialize the glass compositor before input startup can emit
+        // its first hook notification. This keeps the launch HUD from being
+        // dropped or drawing an uninitialized black frame.
+        HookHUD.shared.prewarm { [weak self] in
+            self?.state.startInput()
+        }
 
         // Let the Add-an-app window ask the popover to close when it opens.
         NotificationCenter.default.addObserver(
@@ -65,6 +71,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.activate(ignoringOtherApps: true)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         }
+    }
+
+    /// `NSApp.activate` can complete before NSPopover has created its window,
+    /// especially on the first click after login. Promote the actual popover
+    /// window once it exists so its controls never inherit the inactive state.
+    func popoverDidShow(_ notification: Notification) {
+        state.setMenuVisible(true)
+        NSApp.activate(ignoringOtherApps: true)
+        popover.contentViewController?.view.window?.makeKey()
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        state.setMenuVisible(false)
     }
 
     // MARK: - Status-icon "fishing bob"

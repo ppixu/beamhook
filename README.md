@@ -22,8 +22,13 @@ Music can't hijack them. macOS 14+.
 - Pick one target app — nothing else can steal the keys.
 - Play/pause button that reflects what's actually playing.
 - Volume sliders for scriptable apps while they're open.
-- Built in: Spotify, Apple Music, Apple TV, VLC, VOX, QuickTime, Downcast —
+- Built in: Spotify, Apple Music, Apple TV, Safari, Chrome, Brave, VLC, VOX,
+  QuickTime, Downcast —
   or add any AppleScriptable app.
+
+The browser targets control the active YouTube tab. Enable **Allow JavaScript
+from Apple Events** in Safari's Develop menu or the Chromium browser's
+View → Developer menu before using them.
 
 ## Build it yourself — free
 

@@ -21,6 +21,7 @@ final class AppState: ObservableObject {
     /// poll, a row's initial volume read). Kept apart from `scripting` so a slow read
     /// against a wedged target can never sit in front of a user's key press.
     private let pollRunner = ScriptRunner()
+    private let browserMediaController = BrowserMediaController()
     /// Coalescing state for volume-key repeats (main-actor isolated → race-free):
     /// each key press bumps `pendingVolumeSteps`; a single drain task applies the
     /// net delta off-main, so a held key never stacks up blocked Apple-event sends.
@@ -30,6 +31,10 @@ final class AppState: ObservableObject {
     @Published var selectedTargetID: String?
     @Published var availableApps: [AppDefinition]
     @Published var hasAccessibility: Bool = false
+    /// Passive AppleScript reads are useful only while the user can see their
+    /// results. Keeping the real popover lifecycle here prevents a newly launched
+    /// target from causing an Automation permission prompt in the background.
+    @Published private(set) var isMenuVisible: Bool = false
     @Published var loginItemEnabled: Bool = LoginItem.isEnabled
     /// Per-app opt-in for volume-key control. Absent (nil) means OFF — the volume
     /// keys are never taken over unless the user explicitly turns them on for that
@@ -37,6 +42,10 @@ final class AppState: ObservableObject {
     @Published var volumeKeyOverride: [String: Bool] = [:]
     /// Latest known volume (0...100) per bundle id, so sliders update live.
     @Published var volumeByBundle: [String: Int] = [:]
+    @Published var browserMediaInjectionAvailable: Bool?
+    @Published var browserTargetRunning: Bool?
+    @Published var browserMediaCandidates: [BrowserMediaCandidate] = []
+    @Published var selectedBrowserMediaID: String?
     /// Whether the current output device's volume is adjustable. Informational only
     /// (drives a UI hint); it does NOT auto-enable the volume-key hijack.
     @Published private(set) var outputVolumeControllable: Bool = true
@@ -93,6 +102,7 @@ final class AppState: ObservableObject {
             .store(in: &cancellables)
 
         handlerBox.state = self
+        configureBrowserTransportForPendingScan()
     }
 
     /// Entry point for a media key from the tap (already on the main queue). Volume
@@ -114,6 +124,9 @@ final class AppState: ObservableObject {
         watchdog.start()
         outputMonitor.start()
         updateVolumeHijack()
+        if selectedTargetIsBrowser {
+            Task { await refreshBrowserMedia() }
+        }
 
         // On first activation, confirm the default hook (Spotify) — but only if
         // that app is actually running, so we don't flash it on a bare login.
@@ -155,6 +168,10 @@ final class AppState: ObservableObject {
         if hasAccessibility { activateInput() }
     }
 
+    func setMenuVisible(_ visible: Bool) {
+        isMenuVisible = visible
+    }
+
     /// Polls the Accessibility permission so the UI flips automatically once the
     /// user grants it in System Settings — no relaunch or manual "Re-check".
     private func startPermissionPolling() {
@@ -178,19 +195,103 @@ final class AppState: ObservableObject {
     // off the main thread so a slow/launching target can't freeze the popover. The
     // read runs on the poll runner, so a slow status read can't delay key commands.
     func isTargetPlaying() async -> Bool? {
+        if selectedTargetIsBrowser, browserMediaInjectionAvailable != true { return nil }
         guard let id = selectedTargetID, let app = registry.app(withID: id) else { return nil }
         return await pollRunner.run { app.isPlaying() }
     }
 
-    func togglePlayPauseTarget() { Task { await targetManager.route(.playPause) } }
+    func togglePlayPauseTarget() {
+        if BrowserKind.target(id: selectedTargetID) != nil,
+           browserMediaInjectionAvailable != true {
+            MediaKeyTap.postNativePlayPause()
+        } else {
+            Task { await targetManager.route(.playPause) }
+        }
+    }
 
     func setTarget(_ id: String) {
         selectedTargetID = id
         targetManager.selectedTargetID = id
+        configureBrowserTransportForPendingScan()
         updateVolumeHijack()
         // Confirm the new hook with a centre-screen HUD (user-initiated, so always).
         if let def = currentTargetDefinition() {
             HookHUD.shared.show(appName: def.displayName)
+        }
+    }
+
+    var selectedTargetIsBrowser: Bool { BrowserKind.target(id: selectedTargetID) != nil }
+
+    /// Probe browser injection and enumerate media tabs. Called periodically while
+    /// the menu is visible, so granting permission takes effect without relaunching.
+    func refreshBrowserMedia() async {
+        guard let browser = BrowserKind.target(id: selectedTargetID) else {
+            browserMediaInjectionAvailable = nil
+            browserTargetRunning = nil
+            browserMediaCandidates = []
+            selectedBrowserMediaID = nil
+            tap.transportKeysHijacked = true
+            return
+        }
+
+        guard isRunning(bundleID: browser.bundleID) else {
+            browserTargetRunning = false
+            browserMediaInjectionAvailable = false
+            browserMediaCandidates = []
+            selectedBrowserMediaID = nil
+            tap.transportKeysHijacked = false
+            return
+        }
+        browserTargetRunning = true
+
+        let scan = await pollRunner.run { [browserMediaController] in
+            browserMediaController.scan(browser)
+        }
+        guard BrowserKind.target(id: selectedTargetID) == browser else { return }
+
+        browserMediaInjectionAvailable = scan.injectionAvailable
+        browserMediaCandidates = scan.candidates
+        tap.transportKeysHijacked = scan.injectionAvailable
+
+        guard scan.injectionAvailable, !scan.candidates.isEmpty else {
+            selectedBrowserMediaID = nil
+            return
+        }
+
+        let storedID = UserDefaults.standard.string(forKey: "browserMediaSelection.\(browser.rawValue)")
+        let chosen = scan.candidates.first(where: { $0.isSelected })
+            ?? scan.candidates.first(where: { $0.id == storedID })
+            ?? scan.candidates.first(where: { $0.isPlaying })
+            ?? scan.candidates.first
+        selectedBrowserMediaID = chosen?.id
+        if let chosen, !chosen.isSelected {
+            _ = await scripting.run { [browserMediaController] in
+                browserMediaController.select(chosen)
+            }
+        }
+    }
+
+    func selectBrowserMedia(_ id: String) {
+        guard let candidate = browserMediaCandidates.first(where: { $0.id == id }) else { return }
+        selectedBrowserMediaID = id
+        UserDefaults.standard.set(id, forKey: "browserMediaSelection.\(candidate.browser.rawValue)")
+        Task {
+            _ = await scripting.run { [browserMediaController] in
+                browserMediaController.select(candidate)
+            }
+            await refreshBrowserMedia()
+        }
+    }
+
+    private func configureBrowserTransportForPendingScan() {
+        if selectedTargetIsBrowser {
+            browserMediaInjectionAvailable = nil
+            browserTargetRunning = nil
+            browserMediaCandidates = []
+            selectedBrowserMediaID = nil
+            tap.transportKeysHijacked = false
+        } else {
+            tap.transportKeysHijacked = true
         }
     }
 
@@ -239,6 +340,9 @@ final class AppState: ObservableObject {
             // across the await.
             if let result = await targetManager.adjustVolume(bySteps: steps) {
                 volumeByBundle[result.bundleID] = result.volume
+                let appName = availableApps.first { $0.bundleID == result.bundleID }?.displayName
+                    ?? result.bundleID
+                HookHUD.shared.showVolume(appName: appName, percent: result.volume)
             }
         }
     }

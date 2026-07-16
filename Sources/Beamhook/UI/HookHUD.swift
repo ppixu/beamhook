@@ -1,52 +1,97 @@
 import AppKit
 import os
 
-/// A transient, click-through overlay confirming which app the media keys are
-/// hooked to (e.g. "Spotify hooked"). Styled like the modern macOS volume HUD —
-/// a dark translucent rounded panel that drops down just below the menu bar near
-/// Beamhook's status item. It never takes focus, so it can't interrupt whatever
-/// the user is doing.
+/// A transient, click-through overlay for hook confirmations and app-specific
+/// volume changes. Styled like the modern macOS volume HUD, it drops down below
+/// the menu bar near Beamhook's status item without taking focus.
 @MainActor
 final class HookHUD {
     static let shared = HookHUD()
     private init() {}
+
+    private enum Presentation {
+        case hooked(appName: String)
+        case volume(appName: String, percent: Int)
+
+        var appName: String {
+            switch self {
+            case .hooked(let appName), .volume(let appName, _): appName
+            }
+        }
+
+        var hideDelay: TimeInterval {
+            switch self {
+            case .hooked: 2.0
+            case .volume: 1.5
+            }
+        }
+    }
 
     private static let log = Logger(subsystem: "com.github.ppixu.beamhook", category: "HUD")
 
     /// Screen frame of the menu-bar status item, so we can anchor under it.
     /// Set by the AppDelegate once the status item exists.
     var menuBarAnchor: (() -> NSRect?)?
-    /// Invoked the moment the panel is put on screen — the AppDelegate hooks the
-    /// status-item "fishing bob" animation here so both happen together.
+    /// Frame of Beamhook's open menu popover. When present, the HUD sits beside
+    /// it rather than covering the controls the user is interacting with.
+    var menuPopoverFrame: (() -> NSRect?)?
+    /// Invoked when a hook confirmation appears — the AppDelegate uses it to run
+    /// the status-item "fishing bob" animation at the same time.
     var onPresent: (() -> Void)?
 
     private var panel: NSPanel?
     private var label: NSTextField?
+    private var hookIcon: NSImageView?
+    private var volumeRow: NSView?
+    private var volumeBar: VolumeBarView?
     private var box: NSView?
     /// The padded stack inside the chrome; its fitting size drives the panel size.
     private var content: NSView?
     private var hideWork: DispatchWorkItem?
     private var generation = 0
 
-    /// Order the panel in (invisibly) so the glass effect initializes its
-    /// backdrop before the first real show — its first frames otherwise render
-    /// dark, which used to read as a black flash that then "settled" to gray.
-    /// The panel stays ordered in for the app's lifetime; visibility is only
-    /// ever alpha. Call once at launch.
-    func prewarm() {
+    /// Initialize Liquid Glass at full opacity outside every screen. Rendering
+    /// it with near-zero window alpha lets the compositor skip the expensive
+    /// backdrop pass, which merely postpones initialization until the first show.
+    func prewarm(completion: @escaping @MainActor () -> Void) {
         let panel = ensurePanel()
-        panel.alphaValue = 0.001   // 0 could let the compositor skip the window
-        position(panel)
-        panel.orderFrontRegardless()
+        if #available(macOS 26.0, *), box is NSGlassEffectView {
+            panel.alphaValue = 1
+            parkOffscreen(panel)
+            panel.orderFrontRegardless()
+            panel.displayIfNeeded()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self, weak panel] in
+                MainActor.assumeIsolated {
+                    guard let self, let panel else { return }
+                    panel.alphaValue = 0.001
+                    self.position(panel)
+                    completion()
+                }
+            }
+        } else {
+            panel.alphaValue = 0.001
+            position(panel)
+            panel.orderFrontRegardless()
+            completion()
+        }
     }
 
     /// Flash "<appName> hooked" just below the menu bar, under the status item.
     func show(appName: String) {
-        generation += 1
-        present(appName: appName, gen: generation, attempt: 0)
+        show(.hooked(appName: appName))
     }
 
-    private func present(appName: String, gen: Int, attempt: Int) {
+    /// Show an app-specific volume HUD after a hooked volume-key command succeeds.
+    func showVolume(appName: String, percent: Int) {
+        show(.volume(appName: appName, percent: min(100, max(0, percent))))
+    }
+
+    private func show(_ presentation: Presentation) {
+        generation += 1
+        present(presentation, gen: generation, attempt: 0)
+    }
+
+    private func present(_ presentation: Presentation, gen: Int, attempt: Int) {
         guard gen == generation else { return }   // superseded by a newer show
 
         // At launch the status item's window reports a bogus near-origin frame
@@ -55,13 +100,25 @@ final class HookHUD {
         // generic fallback spot.
         if validAnchor() == nil && attempt < 12 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                MainActor.assumeIsolated { self?.present(appName: appName, gen: gen, attempt: attempt + 1) }
+                MainActor.assumeIsolated {
+                    self?.present(presentation, gen: gen, attempt: attempt + 1)
+                }
             }
             return
         }
 
         let panel = ensurePanel()
-        label?.stringValue = "\(appName) hooked"
+        switch presentation {
+        case .hooked(let appName):
+            label?.stringValue = "\(appName) hooked"
+            hookIcon?.isHidden = false
+            volumeRow?.isHidden = true
+        case .volume(let appName, let percent):
+            label?.stringValue = appName
+            hookIcon?.isHidden = true
+            volumeRow?.isHidden = false
+            volumeBar?.percent = percent
+        }
 
         // Size the window to the (variable-width) content, then anchor it.
         content?.layoutSubtreeIfNeeded()
@@ -76,14 +133,14 @@ final class HookHUD {
         panel.alphaValue = 1
         panel.orderFrontRegardless()
         panel.invalidateShadow()
-        onPresent?()
-        Self.log.info("HUD shown: \(appName, privacy: .public) hooked; frame=\(NSStringFromRect(panel.frame), privacy: .public)")
+        if case .hooked = presentation { onPresent?() }
+        Self.log.info("HUD shown for \(presentation.appName, privacy: .public); frame=\(NSStringFromRect(panel.frame), privacy: .public)")
 
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated { self?.dismiss(gen: gen) }
         }
         hideWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + presentation.hideDelay, execute: work)
     }
 
     /// The status-item frame, but only once it really sits in a screen's menu
@@ -99,6 +156,19 @@ final class HookHUD {
         let size = panel.frame.size
         let gap: CGFloat = 6, margin: CGFloat = 10
 
+        if let popover = menuPopoverFrame?(),
+           let screen = NSScreen.screens.first(where: { $0.frame.intersects(popover) }) {
+            let left = popover.minX - gap - size.width
+            let right = popover.maxX + gap
+            let x = left >= screen.frame.minX + margin
+                ? left
+                : min(right, screen.frame.maxX - size.width - margin)
+            let y = min(popover.maxY - size.height,
+                        screen.frame.maxY - size.height - margin)
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+            return
+        }
+
         if let (anchor, screen) = validAnchor() {
             var x = anchor.midX - size.width / 2
             let y = anchor.minY - gap - size.height   // just below the menu bar
@@ -108,6 +178,11 @@ final class HookHUD {
             // Fallback: top-right, just under the menu bar (where the item lives).
             panel.setFrameOrigin(NSPoint(x: f.maxX - size.width - 16, y: f.maxY - size.height - 32 - gap))
         }
+    }
+
+    private func parkOffscreen(_ panel: NSPanel) {
+        let rightEdge = NSScreen.screens.map(\.frame.maxX).max() ?? 0
+        panel.setFrameOrigin(NSPoint(x: rightEdge + panel.frame.width + 100, y: 0))
     }
 
     private func dismiss(gen: Int) {
@@ -135,59 +210,100 @@ final class HookHUD {
         panel.ignoresMouseEvents = true
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-        // The system volume HUD is dark translucent regardless of the theme;
-        // force dark so ours reads the same in light mode.
-        panel.appearance = NSAppearance(named: .darkAqua)
-
         let icon = NSImageView()
         icon.image = NSImage(named: "HookGlyph")   // template → tinted below
-        icon.contentTintColor = .white
+        icon.contentTintColor = .labelColor
         icon.imageScaling = .scaleProportionallyUpOrDown
         icon.translatesAutoresizingMaskIntoConstraints = false
         icon.setContentHuggingPriority(.required, for: .horizontal)
 
         let text = NSTextField(labelWithString: "")
         text.font = .systemFont(ofSize: 15, weight: .semibold)
-        text.textColor = .white
+        text.textColor = .labelColor
         text.lineBreakMode = .byTruncatingTail
         text.translatesAutoresizingMaskIntoConstraints = false
 
-        let stack = NSStackView(views: [icon, text])
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.spacing = 11
+        let header = NSStackView(views: [icon, text])
+        header.orientation = .horizontal
+        header.alignment = .centerY
+        header.spacing = 11
+        header.translatesAutoresizingMaskIntoConstraints = false
+
+        let quietSpeaker = NSImageView()
+        quietSpeaker.image = NSImage(systemSymbolName: "speaker.fill", accessibilityDescription: "Low volume")
+        quietSpeaker.symbolConfiguration = .init(pointSize: 13, weight: .medium)
+        quietSpeaker.contentTintColor = .labelColor
+        quietSpeaker.imageScaling = .scaleProportionallyUpOrDown
+
+        let loudSpeaker = NSImageView()
+        loudSpeaker.image = NSImage(systemSymbolName: "speaker.wave.3.fill", accessibilityDescription: "High volume")
+        loudSpeaker.symbolConfiguration = .init(pointSize: 15, weight: .medium)
+        loudSpeaker.contentTintColor = .labelColor
+        loudSpeaker.imageScaling = .scaleProportionallyUpOrDown
+
+        let bar = VolumeBarView()
+        let volumeStack = NSStackView(views: [quietSpeaker, bar, loudSpeaker])
+        volumeStack.orientation = .horizontal
+        volumeStack.alignment = .centerY
+        volumeStack.spacing = 8
+        volumeStack.isHidden = true
+
+        let stack = NSStackView(views: [header, volumeStack])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 9
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         // The padded content, chrome-agnostic (its fitting size sizes the panel).
         let content = NSView()
         content.addSubview(stack)
+        let iconScale: CGFloat = 1.15
         NSLayoutConstraint.activate([
-            icon.widthAnchor.constraint(equalToConstant: 26),
-            icon.heightAnchor.constraint(equalToConstant: 30),
+            icon.widthAnchor.constraint(equalToConstant: 26 * iconScale),
+            icon.heightAnchor.constraint(equalToConstant: 30 * iconScale),
+            quietSpeaker.widthAnchor.constraint(equalToConstant: 18),
+            quietSpeaker.heightAnchor.constraint(equalToConstant: 18),
+            bar.widthAnchor.constraint(equalToConstant: 172),
+            bar.heightAnchor.constraint(equalToConstant: 7),
+            loudSpeaker.widthAnchor.constraint(equalToConstant: 22),
+            loudSpeaker.heightAnchor.constraint(equalToConstant: 20),
             stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -22),
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 14),
             stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -14),
         ])
 
-        // The clear Liquid Glass compositor flashes black while initializing in
-        // a transient borderless panel. `.hudWindow` provides the stable dark,
-        // translucent system-HUD treatment and is ready on its first frame.
-        let chrome = NSVisualEffectView()
-        chrome.material = .hudWindow
-        chrome.blendingMode = .behindWindow
-        chrome.state = .active
-        // Round via maskImage, NOT layer.cornerRadius: with behind-window
-        // blending the backdrop (and shadow) is composited by the window server
-        // for the full window rect, so a layer mask leaks pale corners.
-        chrome.maskImage = Self.roundedMask(radius: 24)
-        content.frame = chrome.bounds
-        content.autoresizingMask = [.width, .height]
-        chrome.addSubview(content)
+        let chrome: NSView
+        if #available(macOS 26.0, *) {
+            // Regular is the adaptive variant Apple recommends over arbitrary
+            // content. Leaving it untinted lets macOS choose its tint, contrast,
+            // rim, and transparency from the backdrop and user settings.
+            let glass = NSGlassEffectView()
+            glass.style = .regular
+            glass.cornerRadius = 24
+            glass.contentView = content
+            chrome = glass
+            // Liquid Glass supplies its own adaptive shadow and rim. A second
+            // NSWindow shadow produces the heavy outline seen in earlier builds.
+            panel.hasShadow = false
+        } else {
+            let frosted = NSVisualEffectView()
+            frosted.material = .hudWindow
+            frosted.blendingMode = .behindWindow
+            frosted.state = .active
+            frosted.maskImage = Self.roundedMask(radius: 24)
+            content.frame = frosted.bounds
+            content.autoresizingMask = [.width, .height]
+            frosted.addSubview(content)
+            chrome = frosted
+        }
 
         panel.contentView = chrome
         self.panel = panel
         self.label = text
+        self.hookIcon = icon
+        self.volumeRow = volumeStack
+        self.volumeBar = bar
         self.box = chrome
         self.content = content
         return panel
@@ -205,5 +321,49 @@ final class HookHUD {
         image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
         image.resizingMode = .stretch
         return image
+    }
+}
+
+/// A compact, appearance-adaptive fill bar matching the monochrome system HUD.
+private final class VolumeBarView: NSView {
+    var percent = 0 {
+        didSet {
+            percent = min(100, max(0, percent))
+            needsDisplay = true
+            setAccessibilityValue("\(percent) percent")
+        }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.progressIndicator)
+        setAccessibilityLabel("Volume")
+        setAccessibilityValue("0 percent")
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        let track = bounds
+        let trackRadius = track.height / 2
+        NSColor.labelColor.withAlphaComponent(0.16).setFill()
+        NSBezierPath(roundedRect: track, xRadius: trackRadius, yRadius: trackRadius).fill()
+
+        let fillWidth = track.width * CGFloat(percent) / 100
+        guard fillWidth > 0 else { return }
+        let fill = NSRect(x: track.minX, y: track.minY, width: fillWidth, height: track.height)
+        let fillRadius = min(fill.height / 2, fill.width / 2)
+        NSColor.labelColor.withAlphaComponent(0.88).setFill()
+        NSBezierPath(roundedRect: fill, xRadius: fillRadius, yRadius: fillRadius).fill()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 }
