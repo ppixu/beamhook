@@ -9,7 +9,11 @@
 
 <p align="center">Your media keys, hooked to the app you meant.</p>
 
-<p align="center"><a href="https://ppixu.github.io/beamhook/">Website</a></p>
+<p align="center">
+  <a href="https://ppixu.github.io/beamhook/"><b>Website</b></a>
+  &nbsp;•&nbsp;
+  <a href="https://ppixu.gumroad.com/l/beamhook"><b>Buy on Gumroad (€2)</b></a>
+</p>
 
 ---
 
@@ -43,9 +47,9 @@ Then grant **Accessibility** when prompted, pick your app, and press play.
 
 ## Or download it — €2
 
-Rather not build? A signed & notarized, ready-to-run build is **€2** on
-[Gumroad](https://ppixu.gumroad.com/l/beamhook) — the same app, and it supports
-development.
+Rather not build? A signed & notarized, ready-to-run build is **€2** on Gumroad — the same app, and it supports development.
+
+[![Buy on Gumroad](https://img.shields.io/badge/Buy%20on-Gumroad-ff90e8?style=for-the-badge&logo=gumroad)](https://ppixu.gumroad.com/l/beamhook)
 
 ## License
 
