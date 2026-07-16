@@ -16,6 +16,7 @@
     color-scheme:light dark;
     --paper:#ffffff; --ink:#0b0b0b; --soft:#5f5f5f; --faint:#9a9a9a; --line:#e7e7e7;
     --tray-right:clamp(18px,5vw,48px);
+    --tray-center-from-right:calc(var(--tray-right) + 11px);
     --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",system-ui,sans-serif;
     --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
   }
@@ -51,10 +52,13 @@
     transition:transform .28s cubic-bezier(.34,1.45,.64,1)}
   .tray:hover .tray-icon,.tray:focus-visible .tray-icon{transform:scale(1.08)}
 
-  /* Hint on the right; arrow tip aims at the tray icon above */
-  .hover-hint{position:fixed;right:calc(var(--tray-right) - 6px);top:34px;left:auto;
-    width:min(148px,34vw);height:auto;pointer-events:none;z-index:35;
-    opacity:.9;transition:opacity .22s ease}
+  /*
+   * Hint on the right. Tip of the drawn arrow sits ~85% across / ~12% down the
+   * asset, so right/top are offset to land that tip on the tray center.
+   */
+  .hover-hint{position:fixed;left:auto;width:min(148px,34vw);height:auto;
+    right:calc(var(--tray-center-from-right) - 12px);top:38px;
+    pointer-events:none;z-index:35;opacity:.9;transition:opacity .22s ease}
   .menubar:has(.tray:hover) .hover-hint,
   .menubar:has(.tray:focus-within) .hover-hint{opacity:0}
 
@@ -68,8 +72,9 @@
    * Nested inside the bar, backdrop-filter only samples the bar’s backdrop root
    * and never blurs the page. Keep opacity/filter off ancestors of this node.
    */
-  .popup{position:fixed;left:auto;right:max(8px,calc(var(--tray-right) - 99px));top:34px;
-    width:min(220px,78vw);margin:0;padding:0;pointer-events:none;z-index:50;text-align:left;
+  /* Hang left from the tray — a 220px panel can’t center under a near-edge icon */
+  .popup{position:fixed;left:auto;right:8px;top:34px;
+    width:min(220px,calc(100vw - 16px));margin:0;padding:0;pointer-events:none;z-index:50;text-align:left;
     visibility:hidden;transition:top .4s cubic-bezier(.34,1.45,.64,1),visibility 0s linear .28s}
   .popup-panel{position:relative;border-radius:22px;overflow:hidden;
     opacity:0;transition:opacity .28s cubic-bezier(.2,.7,.2,1);
@@ -92,7 +97,9 @@
   .popup-panel::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:0;
     box-shadow:inset 6px 8px 18px -10px rgba(255,255,255,.75),inset -4px -6px 14px -8px rgba(0,0,0,.06)}
   .popup-panel > *{position:relative;z-index:1}
-  .popup-caret{position:absolute;left:auto;right:14px;top:-6px;width:14px;height:14px;
+  /* Caret tip = tray center: (tray-center-from-right) - (popup right 8px) - half caret */
+  .popup-caret{position:absolute;left:auto;top:-6px;width:14px;height:14px;
+    right:calc(var(--tray-center-from-right) - 8px - 7px);
     transform:rotate(45deg);border-radius:3px 0 0 0;z-index:0;opacity:0;
     transition:opacity .28s cubic-bezier(.2,.7,.2,1);
     background:rgba(255,255,255,.5);
@@ -113,7 +120,7 @@
   .glass-label{font-size:10.5px;color:rgba(60,60,67,.72);margin:0}
   .glass-select{display:flex;align-items:center;gap:6px;min-height:28px;padding:0 9px;
     border-radius:7px;background:rgba(120,120,128,.14);font-weight:600;font-size:12.5px;color:#1c1c1e}
-  .glass-select .chev{margin-left:auto;opacity:.45;font-size:9px}
+  .glass-select .chev{margin-left:auto;width:9px;height:6px;opacity:.45;flex:none;display:block}
   .glass-play{display:flex;align-items:center;justify-content:center;min-height:30px;
     border-radius:7px;background:rgba(120,120,128,.16);color:#1c1c1e}
   .glass-play svg{width:11px;height:11px;fill:currentColor}
@@ -185,8 +192,7 @@
   @media (max-width:560px){
     .page{padding:36px 22px 44px;align-items:flex-start}
     :root{--tray-right:14px}
-    .hover-hint{width:min(110px,30vw);top:32px}
-    .popup{right:max(6px,calc(var(--tray-right) - 40px));width:min(220px,calc(100vw - 16px))}
+    .hover-hint{width:min(110px,30vw);right:calc(var(--tray-center-from-right) - 6px);top:36px}
   }
   @keyframes fade{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 </style>
@@ -204,7 +210,9 @@
   <div class="popup-panel">
     <div class="glass-body">
       <p class="glass-label">Hook media keys to:</p>
-      <div class="glass-select"><span>Spotify</span><span class="chev">⇅</span></div>
+      <div class="glass-select"><span>Spotify</span>
+        <svg class="chev" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1.2 5 4.8 9 1.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
       <div class="glass-play">
         <svg viewBox="0 0 12 12"><rect x="2" y="1" width="2.8" height="10" rx=".6"/><rect x="7.2" y="1" width="2.8" height="10" rx=".6"/></svg>
       </div>
