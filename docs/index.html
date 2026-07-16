@@ -63,6 +63,117 @@
   .menubar:has(.tray:hover) .hover-hint,
   .menubar:has(.tray:focus-within) .hover-hint{opacity:0}
 
+  /* Menu bar items */
+  .menu-item {
+    position: relative;
+    padding: 0 10px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: default;
+    border-radius: 4px;
+    margin: 2px 0;
+    transition: background 0.1s ease;
+  }
+  .menu-item.active-app {
+    font-weight: 700;
+    margin-left: 8px;
+  }
+  .menu-item:hover, .menu-item:focus-within {
+    background: rgba(0,0,0,.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    .menu-item:hover, .menu-item:focus-within {
+      background: rgba(255,255,255,.12);
+    }
+  }
+
+  /* Dropdown Menu styling - macOS Style */
+  .dropdown-menu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 2px);
+    min-width: 200px;
+    padding: 4px;
+    background: rgba(246, 246, 246, 0.88);
+    -webkit-backdrop-filter: blur(25px) saturate(180%);
+    backdrop-filter: blur(25px) saturate(180%);
+    border: 0.5px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition: opacity 0.18s cubic-bezier(0.2, 0.7, 0.2, 1), transform 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    .dropdown-menu {
+      background: rgba(30, 30, 30, 0.85);
+      border: 0.5px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.4);
+    }
+  }
+
+  .menu-item:hover .dropdown-menu,
+  .menu-item:focus-within .dropdown-menu {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .dropdown-menu a, .dropdown-menu .menu-action {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 10px 4px 18px;
+    font-size: 13px;
+    font-weight: 400;
+    color: inherit;
+    text-decoration: none;
+    border-radius: 4px;
+    cursor: default;
+    user-select: none;
+    transition: background 0.05s, color 0.05s;
+  }
+  .dropdown-menu a:hover, .dropdown-menu .menu-action:hover {
+    background: #007aff;
+    color: #fff !important;
+  }
+  .dropdown-menu a:hover .shortcut, .dropdown-menu .menu-action:hover .shortcut {
+    color: rgba(255, 255, 255, 0.7) !important;
+  }
+
+  .dropdown-menu .menu-title {
+    padding: 4px 10px 4px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    color: inherit;
+    opacity: 0.9;
+  }
+
+  .shortcut {
+    font-family: var(--sans);
+    font-size: 11px;
+    color: var(--faint);
+    margin-left: 20px;
+    font-weight: 400;
+  }
+
+  .menu-hr {
+    border: none;
+    height: 0.5px;
+    background: rgba(60, 60, 67, 0.15);
+    margin: 4px 6px;
+  }
+  @media (prefers-color-scheme: dark) {
+    .menu-hr {
+      background: rgba(235, 235, 245, 0.15);
+    }
+  }
+
   .page{flex:1;display:flex;align-items:center;justify-content:center;padding:48px 32px 56px}
   .card{max-width:470px;width:100%;text-align:center;animation:fade .7s cubic-bezier(.2,.7,.2,1) both}
   .mark{width:96px;margin:0 auto 26px}
@@ -200,6 +311,17 @@
 
 <header class="menubar">
   <svg class="menubar-apple" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M12.3 8.4c0-1.7 1.4-2.5 1.5-2.6-1-1.3-2.4-1.4-2.9-1.4-1.2-.1-2.3.7-2.9.7-.6 0-1.5-.7-2.5-.7-1.3 0-2.5.7-3.1 1.9-1.4 2.3-.3 5.8 1 7.7.6.9 1.3 1.9 2.3 1.9.9 0 1.3-.6 2.4-.6s1.4.6 2.4.6c1 0 1.6-.9 2.2-1.8.7-1 1-2 1-2-.1 0-1.9-.7-1.9-2.7zM10.8 2.9c.5-.6.9-1.5.8-2.4-.8 0-1.7.5-2.3 1.2-.5.6-.9 1.5-.8 2.3.9.1 1.7-.4 2.3-1.1z"/></svg>
+  <div class="menu-item active-app" tabindex="0">
+    Beamhook
+    <div class="dropdown-menu">
+      <div class="menu-title">Beamhook</div>
+      <hr class="menu-hr">
+      <a href="https://ppixu.gumroad.com/l/beamhook" target="_blank" rel="noopener">Buy on Gumroad...<span class="shortcut">⌘B</span></a>
+      <a href="https://github.com/ppixu/beamhook" target="_blank" rel="noopener">View on GitHub...<span class="shortcut">⌘G</span></a>
+      <hr class="menu-hr">
+      <div class="menu-action" onclick="quitBeamhook()">Quit Beamhook<span class="shortcut">⌘Q</span></div>
+    </div>
+  </div>
   <div class="tray" tabindex="0" title="Beamhook">
     <img class="tray-icon" src="icon.png" width="14" height="14" alt="Beamhook">
   </div>
@@ -229,7 +351,7 @@
       <hr class="glass-hr">
       <div class="glass-row"><span class="name">Launch at login</span><span class="glass-toggle"></span></div>
       <hr class="glass-hr">
-      <div class="glass-quit">Quit</div>
+      <div class="glass-quit" onclick="quitBeamhook()" style="cursor: default;">Quit</div>
     </div>
   </div>
 </div>
@@ -267,5 +389,26 @@
 </div>
 </div>
 
+<script>
+  function quitBeamhook() {
+    const popup = document.querySelector('.popup');
+    if (popup) {
+      popup.style.display = 'none';
+    }
+    const tray = document.querySelector('.tray');
+    if (tray) {
+      tray.style.display = 'none';
+    }
+    const hint = document.querySelector('.hover-hint');
+    if (hint) {
+      hint.style.display = 'none';
+    }
+    const appName = document.querySelector('.menu-item.active-app');
+    if (appName) {
+      appName.textContent = 'Finder';
+      appName.style.pointerEvents = 'none';
+    }
+  }
+</script>
 </body>
 </html>
