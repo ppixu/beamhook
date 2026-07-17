@@ -41,7 +41,7 @@
   .menubar-apple{width:14px;height:14px;display:block;opacity:.9;flex:none}
   .tray{position:absolute;left:auto;right:var(--tray-right);top:calc(50% - 11px);
     display:flex;align-items:center;justify-content:center;
-    width:22px;height:22px;border-radius:5px;outline:none;cursor:default}
+    width:22px;height:22px;border-radius:5px;outline:none;cursor:pointer}
   .tray:hover,.tray:focus-visible{background:rgba(0,0,0,.08)}
   .tray-icon{width:14px;height:14px;display:block;
     transition:transform .28s cubic-bezier(.34,1.45,.64,1)}
@@ -181,7 +181,7 @@
    */
   /* Hang left from the tray — a 220px panel can’t center under a near-edge icon */
   .popup{position:fixed;left:auto;right:8px;top:34px;
-    width:min(220px,calc(100vw - 16px));margin:0;padding:0;pointer-events:none;z-index:50;text-align:left;
+    width:min(220px,calc(100vw - 16px));margin:0;padding:0;pointer-events:auto;z-index:50;text-align:left;
     visibility:hidden;transition:top .4s cubic-bezier(.34,1.45,.64,1),visibility 0s linear .28s}
   .popup-panel{position:relative;border-radius:22px;overflow:hidden;
     opacity:0;transition:opacity .28s cubic-bezier(.2,.7,.2,1);
@@ -215,21 +215,32 @@
     border-left:1px solid rgba(255,255,255,.7);
     border-top:1px solid rgba(255,255,255,.7);
     box-shadow:inset 1px 1px 0 rgba(255,255,255,.85),0 0 12px rgba(0,0,0,.04)}
-  .menubar:has(.tray:hover) ~ .popup,
-  .menubar:has(.tray:focus-within) ~ .popup{
+  .menubar:has(.tray:focus-visible) ~ .popup,
+  .popup:focus-within,.popup.is-open{
     visibility:visible;top:42px;transition:top .4s cubic-bezier(.34,1.45,.64,1),visibility 0s}
-  .menubar:has(.tray:hover) ~ .popup .popup-panel,
-  .menubar:has(.tray:focus-within) ~ .popup .popup-panel,
-  .menubar:has(.tray:hover) ~ .popup .popup-caret,
-  .menubar:has(.tray:focus-within) ~ .popup .popup-caret{opacity:1}
+  .menubar:has(.tray:focus-visible) ~ .popup .popup-panel,
+  .menubar:has(.tray:focus-visible) ~ .popup .popup-caret,
+  .popup:focus-within .popup-panel,.popup.is-open .popup-panel,
+  .popup:focus-within .popup-caret,.popup.is-open .popup-caret{opacity:1}
+  @media (hover:hover) and (pointer:fine){
+    .menubar:has(.tray:hover) ~ .popup,.popup:hover{
+      visibility:visible;top:42px;transition:top .4s cubic-bezier(.34,1.45,.64,1),visibility 0s}
+    .menubar:has(.tray:hover) ~ .popup .popup-panel,
+    .menubar:has(.tray:hover) ~ .popup .popup-caret,
+    .popup:hover .popup-panel,.popup:hover .popup-caret{opacity:1}
+  }
+  .popup.is-dragged .popup-caret{display:none}
 
   .glass-body{padding:11px 12px 10px;display:flex;flex-direction:column;gap:8px}
-  .glass-label{font-size:10.5px;color:rgba(60,60,67,.72);margin:0}
+  .glass-label{font-size:10.5px;color:rgba(60,60,67,.72);margin:0;cursor:grab;touch-action:none;user-select:none}
+  .popup.is-dragging .glass-label{cursor:grabbing}
+  .glass-select,.glass-play,.glass-pill,.glass-check,.glass-add,.glass-toggle,.glass-quit{
+    border:0;font:inherit;text-align:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
   .glass-select{display:flex;align-items:center;gap:6px;min-height:28px;padding:0 9px;
-    border-radius:7px;background:rgba(120,120,128,.14);font-weight:600;font-size:12.5px;color:#1c1c1e}
+    width:100%;border-radius:7px;background:rgba(120,120,128,.14);font-weight:600;font-size:12.5px;color:#1c1c1e}
   .glass-select .chev{margin-left:auto;width:9px;height:6px;opacity:.45;flex:none;display:block}
   .glass-play{display:flex;align-items:center;justify-content:center;min-height:30px;
-    border-radius:7px;background:rgba(120,120,128,.16);color:#1c1c1e}
+    width:100%;border-radius:7px;background:rgba(120,120,128,.16);color:#1c1c1e}
   .glass-play svg{width:11px;height:11px;fill:currentColor}
   .glass-hr{height:1px;margin:1px -2px;background:rgba(60,60,67,.14);border:0}
   .glass-row{display:flex;align-items:center;gap:8px;min-height:22px}
@@ -237,20 +248,31 @@
   .glass-row .name.dim{opacity:.55}
   .glass-pill{font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(120,120,128,.16);
     color:rgba(60,60,67,.85);white-space:nowrap}
-  .glass-slider{height:4px;border-radius:99px;background:rgba(120,120,128,.22);position:relative;margin:2px 0 1px}
-  .glass-slider > i{position:absolute;left:0;top:0;bottom:0;width:62%;border-radius:inherit;background:#007aff}
+  .glass-slider{height:16px;border-radius:99px;position:relative;margin:-4px 0 -3px;cursor:pointer;touch-action:none;
+    background:linear-gradient(rgba(120,120,128,.22),rgba(120,120,128,.22)) center/100% 4px no-repeat}
+  .glass-slider > i{position:absolute;left:0;top:6px;height:4px;width:62%;border-radius:inherit;background:#007aff}
   .glass-slider > i::after{content:"";position:absolute;right:-7px;top:50%;width:14px;height:14px;margin-top:-7px;
     border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25)}
   .glass-check{display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(60,60,67,.85)}
   .glass-check .box{width:13px;height:13px;border-radius:3px;background:#007aff;display:grid;place-items:center;flex:none}
   .glass-check .box svg{width:9px;height:9px;fill:#fff}
+  .glass-check[aria-checked="false"] .box{background:transparent;border:1px solid rgba(120,120,128,.65)}
+  .glass-check[aria-checked="false"] .box svg{visibility:hidden}
   .glass-add{display:inline-flex;align-items:center;gap:4px;align-self:flex-start;font-size:11px;
     padding:3px 8px;border-radius:6px;background:rgba(120,120,128,.16);color:rgba(60,60,67,.9)}
   .glass-toggle{width:32px;height:19px;border-radius:99px;background:#34c759;position:relative;flex:none}
   .glass-toggle::after{content:"";position:absolute;top:1.5px;right:1.5px;width:16px;height:16px;
     border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .glass-toggle[aria-checked="false"]{background:rgba(120,120,128,.35)}
+  .glass-toggle[aria-checked="false"]::after{right:14.5px}
   .glass-quit{align-self:flex-end;font-size:11px;padding:3px 10px;border-radius:6px;
     background:rgba(120,120,128,.16);color:#1c1c1e}
+  .glass-select:hover,.glass-play:hover,.glass-pill:hover,.glass-check:hover,.glass-add:hover,.glass-toggle:hover,.glass-quit:hover{
+    filter:brightness(.94)}
+  .glass-select:active,.glass-play:active,.glass-pill:active,.glass-add:active,.glass-quit:active{transform:scale(.98)}
+  .glass-select:focus-visible,.glass-play:focus-visible,.glass-pill:focus-visible,.glass-slider:focus-visible,
+  .glass-check:focus-visible,.glass-add:focus-visible,.glass-toggle:focus-visible,.glass-quit:focus-visible{
+    outline:2px solid #007aff;outline-offset:2px}
 
   @media (prefers-color-scheme:dark){
     .popup-panel{background:rgba(40,40,42,.48);color:#f5f5f7;border-color:rgba(255,255,255,.18);
@@ -272,7 +294,7 @@
     .glass-hr{background:rgba(235,235,245,.16)}
     .glass-row .name{color:#f5f5f7}
     .glass-check{color:rgba(235,235,245,.75)}
-    .glass-slider{background:rgba(120,120,128,.35)}
+    .glass-slider{background:linear-gradient(rgba(120,120,128,.35),rgba(120,120,128,.35)) center/100% 4px no-repeat}
   }
   h1{font-size:2.35rem;font-weight:800;letter-spacing:-.03em;margin:0 0 12px;line-height:1.05}
   .tag{font-size:1.16rem;font-weight:500;margin:0 0 28px;line-height:1.35;text-wrap:balance}
@@ -338,36 +360,36 @@
       <div class="menu-action" onclick="quitBeamhook()">Quit Beamhook<span class="shortcut">⌘Q</span></div>
     </div>
   </div>
-  <div class="tray" tabindex="0" title="Beamhook">
+  <div class="tray" tabindex="0" role="button" title="Beamhook" aria-label="Open Beamhook controls" aria-haspopup="dialog" aria-controls="beamhook-popup" aria-expanded="false">
     <img class="tray-icon" src="icon.png" width="14" height="14" alt="Beamhook">
   </div>
   <img class="hover-hint" src="hover-hint.png" width="126" height="89" alt="" aria-hidden="true">
 </header>
 
-<div class="popup" aria-hidden="true">
+<div class="popup" id="beamhook-popup" role="dialog" aria-label="Beamhook controls" aria-hidden="true">
   <div class="popup-caret"></div>
   <div class="popup-panel">
     <div class="glass-body">
       <p class="glass-label">Hook media keys to:</p>
-      <div class="glass-select"><span>Spotify</span>
+      <button class="glass-select" type="button" aria-label="Choose media app"><span>Spotify</span>
         <svg class="chev" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1.2 5 4.8 9 1.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </div>
-      <div class="glass-play">
+      </button>
+      <button class="glass-play" type="button" aria-label="Pause Spotify" aria-pressed="true">
         <svg viewBox="0 0 12 12"><rect x="2" y="1" width="2.8" height="10" rx=".6"/><rect x="7.2" y="1" width="2.8" height="10" rx=".6"/></svg>
-      </div>
+      </button>
       <hr class="glass-hr">
-      <div class="glass-row"><span class="name">Spotify</span><span class="glass-pill">Hooked</span></div>
-      <div class="glass-slider"><i></i></div>
-      <div class="glass-check">
+      <div class="glass-row" data-app="Spotify"><span class="name">Spotify</span><button class="glass-pill" type="button" aria-pressed="true">Hooked</button></div>
+      <div class="glass-slider" tabindex="0" role="slider" aria-label="Spotify volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62"><i></i></div>
+      <button class="glass-check" type="button" role="checkbox" aria-checked="true">
         <span class="box"><svg viewBox="0 0 12 12"><path d="M2.2 6.2 4.8 8.7 9.8 3.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
         Volume keys
-      </div>
-      <div class="glass-row"><span class="name dim">Safari</span><span class="glass-pill">Hook</span></div>
-      <div class="glass-add">＋ Add an app…</div>
+      </button>
+      <div class="glass-row" data-app="Safari"><span class="name dim">Safari</span><button class="glass-pill" type="button" aria-pressed="false">Hook</button></div>
+      <button class="glass-add" type="button">＋ Add an app…</button>
       <hr class="glass-hr">
-      <div class="glass-row"><span class="name">Launch at login</span><span class="glass-toggle"></span></div>
+      <div class="glass-row"><span class="name">Launch at login</span><button class="glass-toggle" type="button" role="switch" aria-label="Launch at login" aria-checked="true"></button></div>
       <hr class="glass-hr">
-      <div class="glass-quit" onclick="quitBeamhook()" style="cursor: default;">Quit</div>
+      <button class="glass-quit" type="button" onclick="quitBeamhook()">Quit</button>
     </div>
   </div>
 </div>
@@ -408,12 +430,159 @@
 </div>
 
 <script>
+  const popup = document.querySelector('.popup');
+  const tray = document.querySelector('.tray');
+
+  function setPopupOpen(open) {
+    popup.classList.toggle('is-open', open);
+    popup.setAttribute('aria-hidden', String(!open));
+    tray.setAttribute('aria-expanded', String(open));
+  }
+
+  tray.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setPopupOpen(!popup.classList.contains('is-open'));
+  });
+  tray.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    tray.click();
+  });
+
+  document.addEventListener('pointerdown', (event) => {
+    if (popup.contains(event.target) || tray.contains(event.target)) return;
+    setPopupOpen(false);
+    if (popup.contains(document.activeElement)) document.activeElement.blur();
+    tray.blur();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && popup.classList.contains('is-open')) {
+      setPopupOpen(false);
+      tray.focus();
+    }
+  });
+
+  const select = popup.querySelector('.glass-select');
+  const play = popup.querySelector('.glass-play');
+  let selectedApp = 'Spotify';
+  let isPlaying = true;
+
+  select.addEventListener('click', () => {
+    selectedApp = selectedApp === 'Spotify' ? 'Safari' : 'Spotify';
+    select.querySelector('span').textContent = selectedApp;
+    play.setAttribute('aria-label', `${isPlaying ? 'Pause' : 'Play'} ${selectedApp}`);
+  });
+
+  function renderPlayButton() {
+    play.innerHTML = isPlaying
+      ? '<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="1" width="2.8" height="10" rx=".6"/><rect x="7.2" y="1" width="2.8" height="10" rx=".6"/></svg>'
+      : '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.4 10 6 3 10.6Z"/></svg>';
+    play.setAttribute('aria-pressed', String(isPlaying));
+    play.setAttribute('aria-label', `${isPlaying ? 'Pause' : 'Play'} ${selectedApp}`);
+  }
+
+  play.addEventListener('click', () => {
+    isPlaying = !isPlaying;
+    renderPlayButton();
+  });
+
+  popup.querySelectorAll('.glass-row[data-app]').forEach((row) => {
+    row.querySelector('.glass-pill').addEventListener('click', () => {
+      popup.querySelectorAll('.glass-row[data-app]').forEach((candidate) => {
+        const active = candidate === row;
+        const button = candidate.querySelector('.glass-pill');
+        button.textContent = active ? 'Hooked' : 'Hook';
+        button.setAttribute('aria-pressed', String(active));
+        candidate.querySelector('.name').classList.toggle('dim', !active);
+      });
+    });
+  });
+
+  const slider = popup.querySelector('.glass-slider');
+  const sliderFill = slider.querySelector('i');
+  let sliderPointerId = null;
+  function setSliderValue(clientX) {
+    const bounds = slider.getBoundingClientRect();
+    const value = Math.round(Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width)) * 100);
+    sliderFill.style.width = `${value}%`;
+    slider.setAttribute('aria-valuenow', String(value));
+  }
+  slider.addEventListener('pointerdown', (event) => {
+    sliderPointerId = event.pointerId;
+    if (slider.setPointerCapture) slider.setPointerCapture(event.pointerId);
+    setSliderValue(event.clientX);
+  });
+  window.addEventListener('pointermove', (event) => {
+    if (event.pointerId === sliderPointerId) setSliderValue(event.clientX);
+  });
+  window.addEventListener('pointerup', (event) => {
+    if (event.pointerId === sliderPointerId) sliderPointerId = null;
+  });
+  window.addEventListener('pointercancel', (event) => {
+    if (event.pointerId === sliderPointerId) sliderPointerId = null;
+  });
+  slider.addEventListener('keydown', (event) => {
+    if (!['ArrowLeft', 'ArrowDown', 'ArrowRight', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const current = Number(slider.getAttribute('aria-valuenow'));
+    const value = event.key === 'Home' ? 0 : event.key === 'End' ? 100 : Math.max(0, Math.min(100, current + (['ArrowRight', 'ArrowUp'].includes(event.key) ? 5 : -5)));
+    sliderFill.style.width = `${value}%`;
+    slider.setAttribute('aria-valuenow', String(value));
+  });
+
+  const volumeKeys = popup.querySelector('.glass-check');
+  volumeKeys.addEventListener('click', () => {
+    volumeKeys.setAttribute('aria-checked', String(volumeKeys.getAttribute('aria-checked') !== 'true'));
+  });
+
+  const launchToggle = popup.querySelector('.glass-toggle');
+  launchToggle.addEventListener('click', () => {
+    launchToggle.setAttribute('aria-checked', String(launchToggle.getAttribute('aria-checked') !== 'true'));
+  });
+
+  const addButton = popup.querySelector('.glass-add');
+  addButton.addEventListener('click', () => {
+    const added = addButton.getAttribute('aria-pressed') === 'true';
+    addButton.setAttribute('aria-pressed', String(!added));
+    addButton.textContent = added ? '＋ Add an app…' : '✓ Music added';
+  });
+
+  const dragHandle = popup.querySelector('.glass-label');
+  let dragOffset = null;
+  let dragPointerId = null;
+  dragHandle.addEventListener('pointerdown', (event) => {
+    const bounds = popup.getBoundingClientRect();
+    dragOffset = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+    dragPointerId = event.pointerId;
+    popup.style.left = `${bounds.left}px`;
+    popup.style.top = `${bounds.top}px`;
+    popup.style.right = 'auto';
+    popup.classList.add('is-dragging', 'is-dragged');
+    if (dragHandle.setPointerCapture) dragHandle.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+  window.addEventListener('pointermove', (event) => {
+    if (!dragOffset || event.pointerId !== dragPointerId) return;
+    const maxLeft = Math.max(4, window.innerWidth - popup.offsetWidth - 4);
+    const maxTop = Math.max(4, window.innerHeight - popup.offsetHeight - 4);
+    popup.style.left = `${Math.max(4, Math.min(maxLeft, event.clientX - dragOffset.x))}px`;
+    popup.style.top = `${Math.max(4, Math.min(maxTop, event.clientY - dragOffset.y))}px`;
+  });
+  function stopDragging(event) {
+    if (event && event.pointerId !== dragPointerId) return;
+    dragOffset = null;
+    dragPointerId = null;
+    popup.classList.remove('is-dragging');
+  }
+  window.addEventListener('pointerup', stopDragging);
+  window.addEventListener('pointercancel', stopDragging);
+  dragHandle.addEventListener('lostpointercapture', stopDragging);
+
   function quitBeamhook() {
-    const popup = document.querySelector('.popup');
     if (popup) {
       popup.style.display = 'none';
     }
-    const tray = document.querySelector('.tray');
     if (tray) {
       tray.style.display = 'none';
     }
