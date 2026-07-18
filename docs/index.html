@@ -47,6 +47,16 @@
     transition:transform .28s cubic-bezier(.34,1.45,.64,1)}
   .tray:hover .tray-icon,.tray:focus-visible .tray-icon{transform:scale(1.08)}
 
+  /* "Whoops" restore button — appears where the tray icon used to be after Quit */
+  .whoops{position:absolute;right:var(--tray-right);top:calc(50% - 10px);height:20px;
+    display:flex;align-items:center;
+    font-family:var(--sans);font-size:12px;font-weight:500;color:inherit;
+    background:rgba(0,0,0,.07);border:none;border-radius:5px;padding:0 9px;
+    cursor:pointer;white-space:nowrap;
+    animation:fade .35s cubic-bezier(.2,.7,.2,1) both}
+  .whoops:hover,.whoops:focus-visible{background:rgba(0,0,0,.13)}
+  .whoops[hidden]{display:none}
+
   /*
    * Hint on the right (white ink on transparent). Tip sits ~91% across / ~1% down.
    * Invert in light mode so it reads as dark; leave white in dark mode.
@@ -171,8 +181,11 @@
 
   .page{flex:1;display:flex;align-items:center;justify-content:center;padding:48px 32px 56px}
   .card{max-width:470px;width:100%;text-align:center;animation:fade .7s cubic-bezier(.2,.7,.2,1) both}
-  .mark{width:96px;margin:0 auto 26px}
-  .mark img.logo{width:100%;height:auto;display:block}
+  .mark{width:min(430px,100%);margin:0 auto 26px}
+  .mark svg{width:100%;height:auto;display:block}
+  .mark .keys path{fill:var(--line);stroke:var(--line);stroke-width:14;stroke-linejoin:round}
+  .mark .keys rect{fill:var(--line)}
+  .mark .hook{fill:var(--ink)}
 
   /*
    * Liquid Glass popover — sibling of the menubar (not a child).
@@ -215,18 +228,18 @@
     border-left:1px solid rgba(255,255,255,.7);
     border-top:1px solid rgba(255,255,255,.7);
     box-shadow:inset 1px 1px 0 rgba(255,255,255,.85),0 0 12px rgba(0,0,0,.04)}
-  .menubar:has(.tray:focus-visible) ~ .popup,
+  .menubar:has(.tray:focus-visible) ~ .popup:not(.is-dismissed),
   .popup:focus-within,.popup.is-open{
     visibility:visible;top:42px;transition:top .4s cubic-bezier(.34,1.45,.64,1),visibility 0s}
-  .menubar:has(.tray:focus-visible) ~ .popup .popup-panel,
-  .menubar:has(.tray:focus-visible) ~ .popup .popup-caret,
+  .menubar:has(.tray:focus-visible) ~ .popup:not(.is-dismissed) .popup-panel,
+  .menubar:has(.tray:focus-visible) ~ .popup:not(.is-dismissed) .popup-caret,
   .popup:focus-within .popup-panel,.popup.is-open .popup-panel,
   .popup:focus-within .popup-caret,.popup.is-open .popup-caret{opacity:1}
   @media (hover:hover) and (pointer:fine){
-    .menubar:has(.tray:hover) ~ .popup,.popup:hover{
+    .menubar:has(.tray:hover) ~ .popup:not(.is-dismissed),.popup:hover{
       visibility:visible;top:42px;transition:top .4s cubic-bezier(.34,1.45,.64,1),visibility 0s}
-    .menubar:has(.tray:hover) ~ .popup .popup-panel,
-    .menubar:has(.tray:hover) ~ .popup .popup-caret,
+    .menubar:has(.tray:hover) ~ .popup:not(.is-dismissed) .popup-panel,
+    .menubar:has(.tray:hover) ~ .popup:not(.is-dismissed) .popup-caret,
     .popup:hover .popup-panel,.popup:hover .popup-caret{opacity:1}
   }
   .popup.is-dragged .popup-caret{display:none}
@@ -234,11 +247,24 @@
   .glass-body{padding:11px 12px 10px;display:flex;flex-direction:column;gap:8px}
   .glass-label{font-size:10.5px;color:rgba(60,60,67,.72);margin:0;cursor:grab;touch-action:none;user-select:none}
   .popup.is-dragging .glass-label{cursor:grabbing}
-  .glass-select,.glass-play,.glass-pill,.glass-check,.glass-add,.glass-toggle,.glass-quit{
-    border:0;font:inherit;text-align:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .glass-select,.glass-target-menu button,.glass-play,.glass-pill,.glass-check,.glass-add,.glass-toggle,.glass-quit{
+    appearance:none;-webkit-appearance:none;border:0;font:inherit;text-align:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .glass-target-picker{position:relative}
   .glass-select{display:flex;align-items:center;gap:6px;min-height:28px;padding:0 9px;
-    width:100%;border-radius:7px;background:rgba(120,120,128,.14);font-weight:600;font-size:12.5px;color:#1c1c1e}
+    width:100%;border-radius:7px;background:rgba(120,120,128,.14);font-weight:600;font-size:12.5px;color:#1c1c1e;
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.3)}
   .glass-select .chev{margin-left:auto;width:9px;height:6px;opacity:.45;flex:none;display:block}
+  .glass-select[aria-expanded="true"] .chev{transform:rotate(180deg)}
+  .glass-target-menu{position:absolute;z-index:10;left:-4px;right:-4px;top:calc(100% + 4px);padding:4px;
+    max-height:196px;overflow-y:auto;overscroll-behavior:contain;
+    border:.5px solid rgba(0,0,0,.15);border-radius:8px;background:rgba(246,246,246,.94);
+    box-shadow:0 10px 30px rgba(0,0,0,.2);-webkit-backdrop-filter:blur(25px) saturate(180%);backdrop-filter:blur(25px) saturate(180%)}
+  .glass-target-menu[hidden]{display:none}
+  .glass-target-menu button{display:flex;align-items:center;width:100%;min-height:25px;padding:3px 8px 3px 5px;
+    border-radius:4px;background:transparent;color:#1c1c1e;font-size:12px;white-space:nowrap}
+  .glass-target-menu button:hover,.glass-target-menu button:focus-visible{background:#007aff;color:#fff;outline:0}
+  .glass-target-menu .menu-check{width:14px;margin-right:3px;visibility:hidden;font-weight:700}
+  .glass-target-menu button[aria-checked="true"] .menu-check{visibility:visible}
   .glass-play{display:flex;align-items:center;justify-content:center;min-height:30px;
     width:100%;border-radius:7px;background:rgba(120,120,128,.16);color:#1c1c1e}
   .glass-play svg{width:11px;height:11px;fill:currentColor}
@@ -246,14 +272,21 @@
   .glass-row{display:flex;align-items:center;gap:8px;min-height:22px}
   .glass-row .name{font-size:12.5px;font-weight:500;flex:1;min-width:0}
   .glass-row .name.dim{opacity:.55}
+  .glass-apps{display:flex;flex-direction:column;gap:8px;max-height:166px;overflow-y:auto;overscroll-behavior:contain;
+    scrollbar-width:thin;padding-right:1px}
+  .glass-app{display:flex;flex-direction:column;gap:4px}
+  .glass-volume-controls{display:flex;flex-direction:column;gap:4px}
+  .glass-system-volume{font-size:9.5px;color:rgba(60,60,67,.62)}
   .glass-pill{font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(120,120,128,.16);
     color:rgba(60,60,67,.85);white-space:nowrap}
+  .glass-pill:disabled{cursor:default;filter:none;opacity:.9}
   .glass-slider{height:16px;border-radius:99px;position:relative;margin:-4px 0 -3px;cursor:pointer;touch-action:none;
     background:linear-gradient(rgba(120,120,128,.22),rgba(120,120,128,.22)) center/100% 4px no-repeat}
   .glass-slider > i{position:absolute;left:0;top:6px;height:4px;width:62%;border-radius:inherit;background:#007aff}
   .glass-slider > i::after{content:"";position:absolute;right:-7px;top:50%;width:14px;height:14px;margin-top:-7px;
     border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25)}
-  .glass-check{display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(60,60,67,.85)}
+  .glass-check{display:flex;align-items:center;gap:6px;width:max-content;padding:0;background:transparent;
+    font-size:11px;color:rgba(60,60,67,.85)}
   .glass-check .box{width:13px;height:13px;border-radius:3px;background:#007aff;display:grid;place-items:center;flex:none}
   .glass-check .box svg{width:9px;height:9px;fill:#fff}
   .glass-check[aria-checked="false"] .box{background:transparent;border:1px solid rgba(120,120,128,.65)}
@@ -267,6 +300,9 @@
   .glass-toggle[aria-checked="false"]::after{right:14.5px}
   .glass-quit{align-self:flex-end;font-size:11px;padding:3px 10px;border-radius:6px;
     background:rgba(120,120,128,.16);color:#1c1c1e}
+  .glass-brand-row{display:flex;align-items:center;gap:6px;min-height:22px}
+  .glass-brand{display:flex;align-items:center;gap:6px;min-width:0;flex:1;font-size:11.5px;font-weight:650}
+  .glass-brand-icon{width:13px;height:13px;object-fit:contain;flex:none}
   .glass-select:hover,.glass-play:hover,.glass-pill:hover,.glass-check:hover,.glass-add:hover,.glass-toggle:hover,.glass-quit:hover{
     filter:brightness(.94)}
   .glass-select:active,.glass-play:active,.glass-pill:active,.glass-add:active,.glass-quit:active{transform:scale(.98)}
@@ -291,10 +327,14 @@
     .glass-label{color:rgba(235,235,245,.55)}
     .glass-select,.glass-play,.glass-pill,.glass-add,.glass-quit{background:rgba(120,120,128,.32);color:#f5f5f7}
     .glass-select .chev,.glass-pill{color:rgba(235,235,245,.7)}
+    .glass-target-menu{background:rgba(42,42,44,.96);border-color:rgba(255,255,255,.14)}
+    .glass-target-menu button{color:#f5f5f7}
     .glass-hr{background:rgba(235,235,245,.16)}
     .glass-row .name{color:#f5f5f7}
+    .glass-system-volume{color:rgba(235,235,245,.55)}
     .glass-check{color:rgba(235,235,245,.75)}
     .glass-slider{background:linear-gradient(rgba(120,120,128,.35),rgba(120,120,128,.35)) center/100% 4px no-repeat}
+    .glass-brand-icon{filter:invert(1)}
   }
   h1{font-size:2.35rem;font-weight:800;letter-spacing:-.03em;margin:0 0 12px;line-height:1.05}
   .tag{font-size:1.16rem;font-weight:500;margin:0 0 28px;line-height:1.35;text-wrap:balance}
@@ -313,7 +353,7 @@
     transition:transform .08s ease,box-shadow .08s ease;box-shadow:2px 2px 0 #111}
   .buy:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 #111}
   .buy:active{transform:translate(1px,1px);box-shadow:1px 1px 0 #111}
-  .buy-wrap{text-align:center;margin-top:16px}
+  .buy-wrap{text-align:center;margin:26px 0 10px}
 
   .links{display:flex;flex-wrap:wrap;gap:24px;row-gap:10px;justify-content:center;font-size:.96rem}
   .links a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line);padding-bottom:2px;transition:border-color .15s}
@@ -326,11 +366,21 @@
   }
   @keyframes fade{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 
+  /* 2026 3D dot-terrain backdrop — fixed canvas painted behind all content */
+  #bg-fx{position:fixed;inset:0;z-index:-1;width:100%;height:100%;pointer-events:none}
+
   /* Dark mode overrides (defined at the bottom to ensure correct specificity order) */
   @media (prefers-color-scheme: dark) {
-    .mark img.logo, .tray-icon {
+    .tray-icon {
       filter: invert(1);
     }
+    /* Gumroad CTA: flip the black edge + hard shadow to white on dark */
+    .buy {
+      border-color: #fff;
+      box-shadow: 2px 2px 0 #fff;
+    }
+    .buy:hover { box-shadow: 3px 3px 0 #fff; }
+    .buy:active { box-shadow: 1px 1px 0 #fff; }
     .hover-hint {
       filter: none;
       opacity: .5;
@@ -344,8 +394,16 @@
     .tray:hover, .tray:focus-visible {
       background: rgba(255, 255, 255, 0.12);
     }
+    .whoops {
+      background: rgba(255, 255, 255, 0.12);
+    }
+    .whoops:hover, .whoops:focus-visible {
+      background: rgba(255, 255, 255, 0.2);
+    }
   }
 </style>
+
+<canvas id="bg-fx" aria-hidden="true"></canvas>
 
 <header class="menubar">
   <svg class="menubar-apple" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M12.3 8.4c0-1.7 1.4-2.5 1.5-2.6-1-1.3-2.4-1.4-2.9-1.4-1.2-.1-2.3.7-2.9.7-.6 0-1.5-.7-2.5-.7-1.3 0-2.5.7-3.1 1.9-1.4 2.3-.3 5.8 1 7.7.6.9 1.3 1.9 2.3 1.9.9 0 1.3-.6 2.4-.6s1.4.6 2.4.6c1 0 1.6-.9 2.2-1.8.7-1 1-2 1-2-.1 0-1.9-.7-1.9-2.7zM10.8 2.9c.5-.6.9-1.5.8-2.4-.8 0-1.7.5-2.3 1.2-.5.6-.9 1.5-.8 2.3.9.1 1.7-.4 2.3-1.1z"/></svg>
@@ -364,6 +422,7 @@
     <img class="tray-icon" src="icon.png" width="14" height="14" alt="Beamhook">
   </div>
   <img class="hover-hint" src="hover-hint.png" width="126" height="89" alt="" aria-hidden="true">
+  <button class="whoops" type="button" hidden onclick="relaunchBeamhook()" title="Restart Beamhook">Whoops — bring it back</button>
 </header>
 
 <div class="popup" id="beamhook-popup" role="dialog" aria-label="Beamhook controls" aria-hidden="true">
@@ -371,32 +430,70 @@
   <div class="popup-panel">
     <div class="glass-body">
       <p class="glass-label">Hook media keys to:</p>
-      <button class="glass-select" type="button" aria-label="Choose media app"><span>Spotify</span>
-        <svg class="chev" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1.2 5 4.8 9 1.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
+      <div class="glass-target-picker">
+        <button class="glass-select" type="button" aria-label="Hook media keys to Spotify" aria-haspopup="menu" aria-controls="target-app-menu" aria-expanded="false"><span>Spotify</span>
+          <svg class="chev" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1.2 5 4.8 9 1.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="glass-target-menu" id="target-app-menu" role="menu" aria-label="Available apps" hidden>
+          <button type="button" role="menuitemradio" data-app="Spotify" aria-checked="true"><span class="menu-check">✓</span>Spotify</button>
+          <button type="button" role="menuitemradio" data-app="Apple Music" aria-checked="false"><span class="menu-check">✓</span>Apple Music</button>
+          <button type="button" role="menuitemradio" data-app="Apple TV" aria-checked="false"><span class="menu-check">✓</span>Apple TV</button>
+          <button type="button" role="menuitemradio" data-app="Safari" aria-checked="false"><span class="menu-check">✓</span>Safari</button>
+          <button type="button" role="menuitemradio" data-app="Chrome" aria-checked="false"><span class="menu-check">✓</span>Chrome</button>
+          <button type="button" role="menuitemradio" data-app="Brave" aria-checked="false"><span class="menu-check">✓</span>Brave</button>
+          <button type="button" role="menuitemradio" data-app="VLC" aria-checked="false"><span class="menu-check">✓</span>VLC</button>
+          <button type="button" role="menuitemradio" data-app="VOX" aria-checked="false"><span class="menu-check">✓</span>VOX</button>
+          <button type="button" role="menuitemradio" data-app="QuickTime Player" aria-checked="false"><span class="menu-check">✓</span>QuickTime Player</button>
+          <button type="button" role="menuitemradio" data-app="Downcast" aria-checked="false"><span class="menu-check">✓</span>Downcast</button>
+        </div>
+      </div>
       <button class="glass-play" type="button" aria-label="Pause Spotify" aria-pressed="true">
         <svg viewBox="0 0 12 12"><rect x="2" y="1" width="2.8" height="10" rx=".6"/><rect x="7.2" y="1" width="2.8" height="10" rx=".6"/></svg>
       </button>
       <hr class="glass-hr">
-      <div class="glass-row" data-app="Spotify"><span class="name">Spotify</span><button class="glass-pill" type="button" aria-pressed="true">Hooked</button></div>
-      <div class="glass-slider" tabindex="0" role="slider" aria-label="Spotify volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62"><i></i></div>
-      <button class="glass-check" type="button" role="checkbox" aria-checked="true">
-        <span class="box"><svg viewBox="0 0 12 12"><path d="M2.2 6.2 4.8 8.7 9.8 3.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        Volume keys
-      </button>
-      <div class="glass-row" data-app="Safari"><span class="name dim">Safari</span><button class="glass-pill" type="button" aria-pressed="false">Hook</button></div>
-      <button class="glass-add" type="button">＋ Add an app…</button>
+      <div class="glass-apps" aria-label="Playing apps">
+        <div class="glass-app" data-app="Spotify">
+          <div class="glass-row"><span class="name">Spotify</span><button class="glass-pill" type="button" aria-pressed="true" disabled>Hooked</button></div>
+          <div class="glass-volume-controls">
+            <div class="glass-slider" tabindex="0" role="slider" aria-label="Spotify volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62"><i></i></div>
+            <button class="glass-check" type="button" role="checkbox" aria-label="Route volume keys to Spotify" aria-checked="true">
+              <span class="box"><svg viewBox="0 0 12 12"><path d="M2.2 6.2 4.8 8.7 9.8 3.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              Volume keys
+            </button>
+          </div>
+        </div>
+        <div class="glass-app" data-app="Safari">
+          <div class="glass-row"><span class="name dim">Safari</span><button class="glass-pill" type="button" aria-pressed="false">Hook</button></div>
+        </div>
+      </div>
+      <button class="glass-add" type="button">＋ Add apps using AppleScript</button>
       <hr class="glass-hr">
       <div class="glass-row"><span class="name">Launch at login</span><button class="glass-toggle" type="button" role="switch" aria-label="Launch at login" aria-checked="true"></button></div>
       <hr class="glass-hr">
-      <button class="glass-quit" type="button" onclick="quitBeamhook()">Quit</button>
+      <div class="glass-brand-row">
+        <span class="glass-brand"><img class="glass-brand-icon" src="icon.png" width="13" height="13" alt="">Beamhook</span>
+        <button class="glass-quit" type="button" onclick="quitBeamhook()">Quit</button>
+      </div>
     </div>
   </div>
 </div>
 
 <div class="page">
 <div class="card">
-  <div class="mark"><img class="logo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAAFACAYAAADNkKWqAAAc7ElEQVR4nO3debAsZ3nf8e+cc+4qYUloASGxmEUQhEEQDBgMYvOCIWU7mEVxMGA52MGGwibBKUwKKYmDSYgxBYlNghcRp8AQESBBAoEEJDIIEAgMlpCCAghkkNiF7qJ7z5I/nn6q+47ucpaet3u6v5+qU3PO3GXmzHT/5nmXfl+QJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSpEImXT8BdWo97//azJ+F1BEDcBwm1ddC9fNq9bVeC41/u9b4t4aj5poBOEwZdhNghSMH1TZgCdhe3S4Q4bYCHKy+DhzlcZaoA9Ew1NwxAIejGXrLU392EnBv4FHAGcDdgLOBewKL1Vf++wy0/LoV+AJwM/At4Grghur7ZujlYxuGmhsG4PxrVnrpRODHgJ8GHg48Gjge2HmE/2Nt6nYyddt0ENgLfJ4Iw48AVwG3NP7OYnW7gtRjBuD8mg6+uwCPB54JPBW4V+PvZrN2ufq+WS0ey1rjC6LZm1Vj+g7wUeC9wAeAb1b35+MYhOolA3D+NAcyAM4CXgD8IvCg6r41ou9uhUMHP9p4v5vV4mr1f2+jDsRbiCD8c+Djjcc1CNU7BuD8mA6RRwEvIYLvuOq+/UQoZZ9eKc2R4R3UgXs58Cbg3dXP0+EtdcoAnA+L1MH3cOAVRFN3G/VobXOqSpfWiOe6SIQhwP8B/gC4pPp5EQdL1AMGYL81K6YzgN8DXkgMZtxB3QTt6/uYob2run03cCHw2ernZrBLxfX1xNGh4fB84F8T01ayb2/xCP+uj7IvcifRTP93wGuq7w1BdcYA7KcMhTOBNwK/QFR7GRjz+r6tEKPI24DPAC8GPkE9/9AmsYrqQ5+Ras2BjmcAHyPCbx9R+S0xv+EHdd/fXuARwBXAy6j7Az0eVZQHXH80r8L4PeA9RJN3LxEcQ3mvJkSQ76tuXw/8V2IkO0ewpSLmuZoYkrwGdwfwFuAfE4McQ6+KcsR4NzFn8DnA17BfUIUYgN3L8DsReCdxFUdWfWN5f5aJELwR+CVilNgQ1MyN5QTrqwy/04gpIj8B7CEGCcYmQ/CbxOTuq4gm8vTCDlJrDMDuZPidAryPuLJjrOGXVog5g98Gng58EitBzZAB2I183Y8jwu8JGH5phZgveAvwFOBaDEHNyJA72Ptq0vj6SyL89mL4pUVivuPdgYur2xU8VjUDHlTl5Vy4NwI/T4TfUqfPqH8WidflQcA7qK8ptsWiVhmAZS0SnfrnE1dB5Fw43dkSEYKPB95Afd2z1Bo/UcvJQY+/D1zZ+NmT+uhyYORXiTUG7Q9UawzAMrLPbxexNNQ51Nf16uhyMvhe4DHAF6k/PKQtsfooI0/YC4n1/PZh+K1XbvJ0AvAn1NdD++GtLfMgmr0Mv8cS+2Ys4wm8GdkUfikxgGRTWFvmSThbzQ3JryR2Z7P625xcKOE2ogvhZuptOKVNsQk8W1n9vQDDb6sWiKX/TwYuIPoG/QDXlngAzU6+tncBPkdsU3kAP3S2IkNvjehS+Aw2hbUFnoyzk+v7/TpwH2LU19d7a3JAZAfwyuo+V5HWplkBzkaz+vsbYmn73LmtL3IJ+ububJOp7zeygXoXHgd8Gvcc1ib16YQckqz+zgPuTSxu2ofXOhcgXSauPd5JLEF1XPU1/f0uYDsRkiv0p9paJp7XS3AvEW1BXz/Z51m+ptuJNe0eRj8CMHeS2179/B1iAdKPESOqB4lm+g5irt3JxMDNg4HTq3+zTF3JdnnsrBG/yx5iXuWXcXK0NsHrUNuXzbHHU1/x0WX4ZSjsIgLsMuBtwAeJ4DuWE4BzgecCTyNWrj5Ityu0TIgBpROAXwb+DQagNsEKsH05KvlW4Hl0O/UlJw9DLC31WuBTU3/nSEvvT/cPAjyAWMThRUQTucuVbHIPlS8AjyQCsdmHKR2TAdiuPAFPJQY/TqW+8qO0XGL+68TWkxdX9y9QV6nrCYscCMlAhAicNxBTUfbRXZN4lQjgJxETzZ0Sow3pul9qaPL1PJdYyDOrktIy/D5ILCBwMfXWmqvVn6+3UsqBk1y5Zgm4Gngy8MdEhdnVQMRa9Xz+YQePrQEwANuVYfd0uguFDL+3V8/jZiIkMsS2IsNzkRjYeTHwKmI0uYvfN1/vc4lRbfsAtSEGYHtyku7xRNWVI5Ul5R677yb2Fs6wantntRXi910Efp+4NG0n5QNogaiyHwI8kOHvo6yWebC0J6uR+xInY+m+v1UihD5JjIyuVo8/qz6x7BNcIpb5+jOiOVy6D26FmNrz2Opn+7W1bgZge/K1fAKzDZ7DyWrzh8ALidHZEtNCMgQXgN8EPk+MzJb+3QGeWN0agFo3A7B9D61uS/aHrRJ9YL9PbCOZfX6lHntCzHd8GeWboflY9yFeg2yeS8dkALYj+/8WgbMa95WQ8+GuB95EN9fF5lUmVwDvomwVmMtknQOcgctkaQMMwHadRFz6VvIqiay43kg0fbueDPw6yi/7tUr0P55a8DE1AAZgO7LiOJF68YAS1ohq65vAX9HtCsnZ9PwU8AnKVoEZ+A+obq0AtS4GYDvyhLs39Zy4EidhDkBcAXyb7qu/vGLkHdXPpZ5Lhn72v3pca108UNqRYXc28Zq2Pe/uSDJgLqO+ZK1L+Xz+mpgovUTZQL7r1POQjqrrE2YoMgBLnoBrxKjnXmL6SfNa3a7k730t8CWiO6BkGO2ceh7SURmA7cgTLq/8KNH8zQC8hdgsvPk8upIDMncA32vcN2v5ev9Iddv1B4HmhAHYru3H/iutO0hUgdB9ADatZ63BtuXSX06F0boYgO3qYm28vi3/lMHzjQ4eewcGnzbAAGxHVl5dvJ59C8C0r+BjZei557I2xABsR56ABzt47G0dPOZ63PXYf6U1+QF0B/3qBlDPGYDt6iIAmxsd9UEG0P07eOysOrueD6k5YQC2KwOw1MjnClFpnVnd14f3M0dgT6puS42IA9xe3fbhddAc8EBpV47Gljjpc2e0uxLXH0P372c+/n2Jq2JKr8yyp7p1IETr0vUJMxRZgdxA2eWg8nF/Yurnrkyqr0cQ+wqX3hOl5AeQBsAAbEcGz5eIjvhFyoRRvn/PoPxCpIeT+4I8s/DjZuBd13ge0jEZgO3IE+47lF0Kf4FYiPSBwFOq+7qaCpILIdwT+CnKLgmWj31t9bNXgmhdDMB2fZ/Yh7dkCGWT+6WNn7uQIfRrRPP3Dsp9EOSo7zcLPZ4GwgBsR4bQPuDTlN0TZJGoAn8a+Fmi+ildBeYq1Pck9gY5WPA55HYANwB/V91nE1jrYgC2J1/LGzt8Dq8DjqP8tbBZ/b2WqP5KdgPkniTXE5tC5XORjskAbE/2O11e3ZaswrIv8Gzg31NvV1nCEhF45wPnEVVwyd89g/aa6tZjWuvmwdK+LwLfovxioNkU/qfE7mwHq+cwy0osw+9c4A2U3wsE6t/vQ9Wt1Z/WzQBsTy5PfyvwMSKQSo9GTojBh9cT+wMvV8+p7fd5Qh1+jwLeSSxGms3RUnJHvBuBLzTuk9bFAGxXvp4f6ejxM3wOAH8G/DNicCKbxG2EUzZvl4n5h5cApxAVZ+njKfs6PwX8gHLzLzUQBmC7svp4H9EX1sX6gDkl5A6iP/Ai4G5EYK0RIbHR931S/bsc3V4AXg28h9gJb/8m/s82vQuv/tAmGIDtymbwl4iNgZbo5uqMDIP9wK8AHwdeQDRTsyJcnPpaoN5YaWHqz9aqf7cGPA24EriAqPpKTnlpWiNWwfk74MP0Y08UzRkDsH1ZgeU+vV0+j5ybeB/gz4n9el9CvVBB82uVOkRWp/7sVOA5xAj3JcBjqJee6uoYWiGC933ElqA2f7VhNhval6/pycDfAKdRdl7c4WSw5Z4Z3wWuIvoqryH6z26h3sryFGKVmfsDTwUeTYQmRFUJ3X94rhHP9Vyi2l6k+2uhNWcMwNnIk/F1wMuJVUq66A+cllXedu7cbL2VQwNweqXprPj6sOz8ChHm/xt4YnWf1Z82zACcjbwa4QHAZ4jAKT1F5Gim+8sWiMDL5vsyh1ZT2T/YF6tEf+aziSk4Vn/alK6bMUOVYXcD8A4iXPp0guaobn5NiMGMA9SrWk//eV/k3L/PEqPQExz80CYZgLM1Ia6P3UN/Ny9Kk8ZX302A11BfeWLzV5tiAM5OTom5npiU3LcqcB6tENXfx4m5f7kKjbQp8/BpP8+yOjkN+Bz1Sil+8GzOKtGf+iRiAMS+P22JJ+JsZRV4C3HlROkFEoZkmRj4eCuGn1piBTh72a+2RqxY8mT6My1mXuS1zLcSGy59q3G/tGlWgLO31rh9MTHp2EpwY3LS88uIatqRX7XCACwjr729nlihJecF6tiWiUnPb8Y5f2qZTeBy8trcFWJU+IXYFD6WvOLjGuKStz3UW29KW2YAlpX9gccBVwCPxBA8ktzs6DvAE4jqeQErZ7XIJnBZWbn8kNg8/CaiwrFJd6gcPV8jlvO6nm5W2NbAGYDlZX/gTcCziEGR7RiCKT8kthP7m3yA7tZV1MAZgN3Itew+SYTgARwYgbp/byfwO8BbqPcekVpnAHYnQ/BDRHN4H+OuBDP8dwKvIDZ2Mvw0Uw6CdC9P8icTK8eczPgGRlaIAY8l4KXAGzH8VIAB2A95sp8D/HfgfszHCjJtWAZ2A7cDLwLehuGnQgzA/sgJvmcC/42Y+tGX5ednITda2g18GXge9UZShp+KGOKJNa+yT/DrwM8QzcCdRL/g0AJhhfjw3U2M8j6eel+Pof2u6jEDsF9yz939RF/YPyIu/N9NvXPbPMvl9ndV378K+DngZrzETR2wCdxPzcvm7kVscP7s6s/20r9l6o8lm7s7qKf//DbwserPvcJDnZink2iMmlXReUTF9GAiLPbT/yDM4NtWfd1K7JT3R8TeIznB2Wt71Yk+nzwK2U2xSjSFX1p9nU4dhAv0qzsjN1fP4NsPXETs4/HV6u9Y9alzBuD8aFaDpxNrC55ffQ8RMmt0t4Vlc6vN3IB9D7GE1euJTeLBqk89YgDOl9zOMkdKTyMGSp5PzCFMB8o+LSCCLavQLxPB9xfAddV9uZiBwafeMADnU3OQhOr7pxDXFf8McA/qqSaztlY9zveJqSxvBy4lVrzJ5wY2d9VDBuB8m64IAR4EXAUcX90/6/d4lZiv+EKi4kuLHNoslnqnTx3n2ricVwfRBF0klte6g/IfbrcRx9P26rGHMG9RAzemC+6HLgcWluimsl8iAs8BDs0NK8Dh6Sp8DD3NHQNQ0mgZgJJGywCUNFoGoKTRMgAljZYBKGm0DEBJo2UAShotA1DSaBmAkkbLAJQ0WgagpNEyACWNlgEoabQMQEmjZQBKGi0DUNJoGYCSRssAlDRaBqCk0TIAJY2WAShptAxASaNlAEoaLQNQ0mgZgJJGywCUNFoGoKTRMgAljZYBKGm0DEBJo2UAShotA1DSaBmAkkbLAJQ0WgagpNEyACWNlgEoabQMQEmjZQBKGi0DUNJoGYCSRssAlDRaBqA0PzxfW+YLKs2HCbBafe952xJfSKn/FoE14Czg5dV9k+6eznAYgFK/LQIrwGnAJcCPE5Wg524LfBGl/srwOx34IHA/4LudPqOBWer6CUg6rAy/ewAfAB5CVH6esy2yApT6J8PvDOrwuw3P19b5gkr90gy/S4nw24uV30wYgFJ/NJu9lwA/huE3U76wUj80Bzzej+FXhBWg1L0Mv7sTfX6GXyEGoNSt6akuhl9BBqDUnWaf32U44FGcASh143BTXQy/wgxAqTynuvSEASiV5VSXHjEApXKaAx6XAg/F8OuUL7xUhlNdesgKUJq9ZuV3GYZfb/gGSLM1PdXlbAy/3rAClGanOdr7fgy/3jEApdloVn6XYrO3lwxAqX2G35wwAKV2OdVljvimSO1xqsucsQKU2uGqLnPIAJS2zlVd5pQBKG2Nq7rMMQNQ2jxXdZlzBqC0Oa7qMgAGoLRxTnUZCN8waWOc6jIgVoDS+jnVZWAMQGl9nOoyQAagdGzTq7oYfgNhAEpHNz3VxWbvgBiA0pE51WXgfCOlw2sOeLwfw2+QrAClO3Oqy0gYgNKhnOoyIgagVHOqy8gYgFJwqssIGYCSU11GywDU2DnVZcQMQI2Zq7qMnG+0xmoBp7qMnhWgxmgCrBLhdxmG32j5hmtsJtXtycBHgbOAPcC2zp6ROmMFqLFZI0Lwh8DF1X0L1f0aGQNQY7QGHABeCVwA7CKaxIbgyNgE1hhlFbgIXFjddwGwjygKJof/ZxoaK0CN1RoxCrxEhOCFWAmOjgGoMcsQXCQqwGYIagQMQI3dGhF4GYL/igjBFawEB88AlA6tBF+NzeHRMAClWrMSvABDcPAMQKnWbA5fiCE4eAagdKgMQUeHR8AAlO6sOUXmAgzBwTIApcNziswIeCWIdGTTU2QgRom9YmQgrACloztaJWhzeM5ZAUrr06wE16rbOzp8PmqBASitz/QUGYBXAcvYkppbvnHS+mUILhAheDWwEwdG5pYVoLQx2e83IVaS1hyzApQ2Zw3Pn7nnGyhptAxASaNlAEoaLQNQ0mgZgJJGywCUNFoGoKTRMgAljZYBKGm0DEBJo2UAShotA1DSaBmAkkbLAJQ0WgagpNEyACWNlgE4PF3tVpbHkltFam4YgMOzTIRgqSDK/TBOLfR4UmsMwOHZT4RgqQDMavMuhR5Pao0BODx3EAEIZZrCGbQnFHzMruXveEoHj32gg8ccLANwOPKkPAisFHzcDMCHV7dD3yIyf997AHejbHcDwL6p56EtMACHZxX4WsHHy2PobGAXEcRDPjkXid/vCcBpRMVd4vfND7j9BR5rNAzAYVmsbr9Y3ZaoxiZEs+xk4GHVfUM+rnKU/ZkdPf7e6nbIHzLFDPlAHaM8KW4u/LjLwE7gJ6vnMNSTc4EIv3sDTyV+71Ln0BIRvl+ofh56V0MRBuAwfbfw4+Vx9DQiIEr2QZY0IX6/84ATicq3VPN3gWhuX9e4T1tkAA5LVgVXE31FS5QbCV4Gfhx4YHXf0I6tCfH6ngC8qPq+5O+4CHwPuLX62QBswdAO0rHLk+JGYrRwqdDjZj/gXYBnMcyBkGz+/grwo0Q1Vur8ybC9Crit8Vy0RQbgMP0A+BJlT5QF4kT9ZWI0uPT0kFnKpu8pwCuIJn7Jcyffw+z/WzzSX9TGGIDDskacHMtEtQDlOsuzj+pBwHOp+62GYJF4HX8XOJNyfX/Nxwf4QHXrAEhLhnKAqpYn5ucp3xTNfrLfBY7v4PFnYYH4QHkk8FuUbfpCvIbbgP+HI8CtMwCHJ0+Oy4mrQrYVfOysAh8IvKx6LvPcXMspPbuBNwM7KN+0z+b2R4j+v0Xs/2uNATg8eXJ8DfgcccKUnJayQDQR/wXwUKJ6mtcQzNfuPwCPIEbWS/8uGbb/o/DjjoIBODxrxOjvQeCj1B34pUyI0DgOeCsxMlx6ykgblojw/m3gN4hR9dLht0pUnV8Brmzcp5bM20Gp9cnA+5/VbekTd5G4ZOthwJ827p+X4y3D73zgDynf75fyg+NS4PvY/G3dvByQ2pisEj5NXDmwnfKVwxIRgs8C/jP1NbR9PuYm1KPoLwLeQoRf/llpi0Ql/9YOHnsU+nwwavNyOswe4H3Uo7OlLRFNx18D/oL6etZSE7Q3IqurFWIU+810G34rRPP3U8AnqLsW1CIDcLiyqfQ2ooroaiBikQjB5xNhfCb1wEgfjr8JEcjZb/kW4A/oNvya/oT+V85zyxd1uLL/6LPAXxPN4K4qiOwT/CmiM/8fVM8lq8EujsNs7q4RgfzY6rmdT/eLjubgxw3AxY371DIDcNiy6fundF/JZHP4XsB7gYuA+1Nv4rTA7KvCDL1mc/cU4LXAFcA51KO9Xb5eWfH9J+KDw8GPGen6pNBs5fu7G7gGuB8xR6/LD76sZHYSI5sXAf8F+NvG35kQzzEDfI3NBcD0/9Osos4EnkdMcbkX8bqs0P2cxVWiWr+JmEd5e3W/ATgDBuDw5WTelwOvo5v5bIezQlylskRMML4CeCdxxcNXjvBvMtDy+8NZ48h7I+8EHkdcq/wM4O7V3+tigvORrBCLSfwmUQGWnsg+Kgbg8OV7fCLRH3gGZbfNPJpshm6jvmTv20Tf14eA64nrX28kmoIbqYImwI8ADwH+HrFa9U8SVTBESOb8vj68FlBXf9cR1x4fYPPVr9ahL2+8ZquvVWBqVm07ObSJfjuxEOh+4P8SiwJ8j/gdcge87D/cBZwE3JdYlWYXsXNb83ro/dR9bH07/leJ3/8XgXdj9TdzfTsANBv5Ph9HrBb9ALrvCzySrHiyv247W5s3eIC64m02ofsmm77/ixglN/wKMADHI0+o5wBvp39V4JGsNW6nm4PN7ydT3zc3Z+r7cZ7Lhh0gthW4nu4mr49K3w8MtSsX9ryM2NVsXkJw6JaJkfqXE9ceW/0VYgCOS55YDyYur9rOMBYtnWfZ9P0IMVH8aKPYallf+0M0GznP7VrgNXR7dYjqK2G+D/w6UQk66luQn/zjkwMBC8CHiXlxNoW7kdXf84C/xKZvcVaA45MVxkHgV4lN1EvtH6zaMhF+f0yEXy7IoIKsAMcrq43nEivG7McPxFKy8rsC+NnqZ5u+HfCAH68Voup4O7H8006iKtFsZfjdRGyyfrC63/DrgBXguDUnBl8M/DxxyVkfFywdgrzsbw8xDelq7PfrlAGoPAaOJ66/fRSG4CzkFqGrwNOJbUtz7xF1xCawch7gD4FfIKbI7MYTs0053WUNeDaGX28YgIK6OvkG8DTiUqzd1P1T2rxs9i4T4fdeDL/eMACVcpL0TcTI5N8Siyd4om5eTnW5nehffQ+GX68YgGrKEPwK8BRiL5FsDjtKuTF5fe/XiUvcLsPw6x0DUNMyBG8Bfo6YJrO7+jNXJzm2VeI13A18HDiX2Noy9xtWjxiAOpxcZPQ24DzgVcQuZTtwysbRZH/fLmKfk6cSC7g61aWnnAajo8k19VaJRTr/I3BPYppMXk+semn/3cAPgH9OBCDEa2Tl3FMGoNYj+65OB94APIs46fuwhWTXlqlXrf4w8FvEVKIFvLyt9/wE13osU0+TeTZxCddNRMUzYZzNu9zYfTcxh/IVxGDHtdQTng2/nhvzJ7c2Lo+XNWKzoVcD/4R6a8s1hr+sVgbbrurndwH/kgg+sMk7VwxAbUZzOsdjgFcS++xOiK0mV+nnrmtbsUL8Pjurn68E/i1wafVzLmdl1TdHhnSAqqxcSCGbv08GfoeYRJ1TPg5y6IIL8yaXp18gRsABrgL+CPir6uf83az65pABqK2aDoDHAb9BVIQnVvdl83gewrC5JedO6lHwy4E3EZeyJae3zDkDUG2Z7vg/ixgt/iXgnMbfyyYy9KeZvFp9TYgR3ezH/DoReBcBn2z8fYNvIPpw8GlYFjm0iloCHkuE4ROBhzT+7jIRJBkmzUCcxbHZ3GM4A2+RCL30beCjxODG5cQVMfl8mk1+DYABqFnJMGsGxi5iS85nAI8mBlBO5NDjMKeXLFOHFNx5s/Ojac6/y+8Xq68FDh2pXgZuJPr2LiPC7+bGn08HugbEANSsZeU04c7Xwt6daCo/CbgPsRjrmdSXk7VtL3AAuA64prr9MPBVYsWWlAHpXL6BMwBVUlZw2ZScDpcdwAnAPYCHAWcQK1WfVt13BnBS4/+a1lzc9WtEJfcNYgn6rwKfq37+Hneu6HLBUqu9ETEA1aVmdZjX0x7NAhFURxpNzvBq9iseSS75n1Weld4IGYDqk2Z/XzPgNhNSzWpz+v9hg/+XBsoA1DzZyPFqwEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmS+uP/A1wsgSAi/5uTAAAAAElFTkSuQmCC" alt="Beamhook"></div>
+  <div class="mark">
+    <svg viewBox="0 0 1002 290" role="img" aria-label="Beamhook — media keys around a fishhook">
+      <g class="keys">
+        <path d="M97 136 97 178 70 157Z"/>
+        <path d="M151 136 151 178 124 157Z"/>
+        <rect x="268" y="124" width="22" height="66" rx="8"/>
+        <rect x="305" y="124" width="22" height="66" rx="8"/>
+        <path d="M645 128 645 186 695 157Z"/>
+        <path d="M809 136 809 178 836 157Z"/>
+        <path d="M863 136 863 178 890 157Z"/>
+      </g>
+      <path class="hook" d="M462 49A33 33 0 1 0 462 115 33 33 0 1 0 462 49ZM462 68.5A13.5 13.5 0 1 1 462 95.5 13.5 13.5 0 1 1 462 68.5ZM452 100 452 203A41 41 0 0 0 534 203L534 149 504 183 515 197 515 203A21 21 0 0 1 473 203L473 100Z"/>
+    </svg>
+  </div>
   <h1>Beamhook</h1>
   <p class="tag">Your media keys, hooked to the app you meant.</p>
   <p class="desc">A tiny macOS menu-bar app that captures the media keys and sends play/pause to the one app you choose — so Safari and Apple&nbsp;Music can't steal them.</p>
@@ -441,7 +538,14 @@
 
   tray.addEventListener('click', (event) => {
     event.stopPropagation();
-    setPopupOpen(!popup.classList.contains('is-open'));
+    const hoverOpen = window.matchMedia('(hover:hover) and (pointer:fine)').matches &&
+      tray.matches(':hover') && !popup.classList.contains('is-dismissed');
+    const visiblyOpen = popup.classList.contains('is-open') || hoverOpen;
+    popup.classList.toggle('is-dismissed', visiblyOpen);
+    setPopupOpen(!visiblyOpen);
+  });
+  tray.addEventListener('pointerleave', () => {
+    if (window.matchMedia('(hover:hover) and (pointer:fine)').matches) popup.classList.remove('is-dismissed');
   });
   tray.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -457,21 +561,108 @@
   });
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && popup.classList.contains('is-open')) {
-      setPopupOpen(false);
-      tray.focus();
+    if (event.key !== 'Escape') return;
+    if (!targetMenu.hidden) {
+      closeTargetMenu();
+      select.focus();
+      return;
     }
+    if (!popup.classList.contains('is-open')) return;
+    setPopupOpen(false);
+    tray.focus();
   });
 
   const select = popup.querySelector('.glass-select');
+  const targetMenu = popup.querySelector('.glass-target-menu');
+  const appList = popup.querySelector('.glass-apps');
+  const volumeControls = popup.querySelector('.glass-volume-controls');
   const play = popup.querySelector('.glass-play');
   let selectedApp = 'Spotify';
   let isPlaying = true;
+  const supportedApps = {
+    Spotify: { volume: 62, volumeKeys: true, scriptable: true },
+    'Apple Music': { volume: 68, volumeKeys: true, scriptable: true },
+    'Apple TV': { volume: 52, volumeKeys: true, scriptable: true },
+    Safari: { volume: 48, volumeKeys: true, scriptable: true },
+    Chrome: { volume: 44, volumeKeys: true, scriptable: true },
+    Brave: { volume: 44, volumeKeys: true, scriptable: true },
+    VLC: { volume: 72, volumeKeys: true, scriptable: true },
+    VOX: { volume: 58, volumeKeys: true, scriptable: true },
+    'QuickTime Player': { volume: null, volumeKeys: false, scriptable: false },
+    Downcast: { volume: null, volumeKeys: false, scriptable: false }
+  };
 
   select.addEventListener('click', () => {
-    selectedApp = selectedApp === 'Spotify' ? 'Safari' : 'Spotify';
-    select.querySelector('span').textContent = selectedApp;
-    play.setAttribute('aria-label', `${isPlaying ? 'Pause' : 'Play'} ${selectedApp}`);
+    const open = select.getAttribute('aria-expanded') !== 'true';
+    select.setAttribute('aria-expanded', String(open));
+    targetMenu.hidden = !open;
+  });
+
+  function closeTargetMenu() {
+    select.setAttribute('aria-expanded', 'false');
+    targetMenu.hidden = true;
+  }
+
+  function ensureAppRow(app) {
+    let appBlock = Array.from(appList.querySelectorAll('.glass-app[data-app]'))
+      .find((candidate) => candidate.dataset.app === app);
+    if (appBlock) return appBlock;
+
+    appBlock = document.createElement('div');
+    appBlock.className = 'glass-app';
+    appBlock.dataset.app = app;
+    appBlock.innerHTML = `<div class="glass-row"><span class="name dim"></span><button class="glass-pill" type="button" aria-pressed="false">Hook</button></div>`;
+    appBlock.querySelector('.name').textContent = app;
+    appBlock.querySelector('.glass-pill').addEventListener('click', () => setTarget(app));
+    appList.appendChild(appBlock);
+    return appBlock;
+  }
+
+  function setTarget(app) {
+    const appData = supportedApps[app];
+    ensureAppRow(app);
+    selectedApp = app;
+    select.querySelector('span').textContent = app;
+    select.setAttribute('aria-label', `Hook media keys to ${app}`);
+    play.setAttribute('aria-label', `${isPlaying ? 'Pause' : 'Play'} ${app}`);
+
+    popup.querySelectorAll('.glass-target-menu [data-app]').forEach((option) => {
+      option.setAttribute('aria-checked', String(option.dataset.app === app));
+    });
+    appList.querySelectorAll('.glass-system-volume').forEach((message) => message.remove());
+    appList.querySelectorAll('.glass-app[data-app]').forEach((appBlock) => {
+      const active = appBlock.dataset.app === app;
+      const button = appBlock.querySelector('.glass-pill');
+      button.textContent = active ? 'Hooked' : 'Hook';
+      button.setAttribute('aria-pressed', String(active));
+      button.disabled = active;
+      appBlock.querySelector('.name').classList.toggle('dim', !active);
+      if (!active && appBlock.contains(volumeControls)) volumeControls.remove();
+      if (active && appData.scriptable) appBlock.appendChild(volumeControls);
+      if (active && !appData.scriptable) {
+        const message = document.createElement('span');
+        message.className = 'glass-system-volume';
+        message.textContent = 'system volume only';
+        appBlock.appendChild(message);
+      }
+    });
+
+    if (appData.scriptable) {
+      sliderFill.style.width = `${appData.volume}%`;
+      slider.setAttribute('aria-label', `${app} volume`);
+      slider.setAttribute('aria-valuenow', String(appData.volume));
+      volumeKeys.setAttribute('aria-label', `Route volume keys to ${app}`);
+      volumeKeys.setAttribute('aria-checked', String(appData.volumeKeys));
+    }
+    closeTargetMenu();
+  }
+
+  targetMenu.querySelectorAll('[data-app]').forEach((option) => {
+    option.addEventListener('click', () => setTarget(option.dataset.app));
+  });
+
+  document.addEventListener('pointerdown', (event) => {
+    if (!event.target.closest('.glass-target-picker')) closeTargetMenu();
   });
 
   function renderPlayButton() {
@@ -487,16 +678,8 @@
     renderPlayButton();
   });
 
-  popup.querySelectorAll('.glass-row[data-app]').forEach((row) => {
-    row.querySelector('.glass-pill').addEventListener('click', () => {
-      popup.querySelectorAll('.glass-row[data-app]').forEach((candidate) => {
-        const active = candidate === row;
-        const button = candidate.querySelector('.glass-pill');
-        button.textContent = active ? 'Hooked' : 'Hook';
-        button.setAttribute('aria-pressed', String(active));
-        candidate.querySelector('.name').classList.toggle('dim', !active);
-      });
-    });
+  popup.querySelectorAll('.glass-app[data-app]').forEach((appBlock) => {
+    appBlock.querySelector('.glass-pill').addEventListener('click', () => setTarget(appBlock.dataset.app));
   });
 
   const slider = popup.querySelector('.glass-slider');
@@ -505,6 +688,7 @@
   function setSliderValue(clientX) {
     const bounds = slider.getBoundingClientRect();
     const value = Math.round(Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width)) * 100);
+    supportedApps[selectedApp].volume = value;
     sliderFill.style.width = `${value}%`;
     slider.setAttribute('aria-valuenow', String(value));
   }
@@ -527,13 +711,16 @@
     event.preventDefault();
     const current = Number(slider.getAttribute('aria-valuenow'));
     const value = event.key === 'Home' ? 0 : event.key === 'End' ? 100 : Math.max(0, Math.min(100, current + (['ArrowRight', 'ArrowUp'].includes(event.key) ? 5 : -5)));
+    supportedApps[selectedApp].volume = value;
     sliderFill.style.width = `${value}%`;
     slider.setAttribute('aria-valuenow', String(value));
   });
 
   const volumeKeys = popup.querySelector('.glass-check');
   volumeKeys.addEventListener('click', () => {
-    volumeKeys.setAttribute('aria-checked', String(volumeKeys.getAttribute('aria-checked') !== 'true'));
+    const enabled = volumeKeys.getAttribute('aria-checked') !== 'true';
+    supportedApps[selectedApp].volumeKeys = enabled;
+    volumeKeys.setAttribute('aria-checked', String(enabled));
   });
 
   const launchToggle = popup.querySelector('.glass-toggle');
@@ -545,7 +732,7 @@
   addButton.addEventListener('click', () => {
     const added = addButton.getAttribute('aria-pressed') === 'true';
     addButton.setAttribute('aria-pressed', String(!added));
-    addButton.textContent = added ? '＋ Add an app…' : '✓ Music added';
+    addButton.textContent = added ? '＋ Add apps using AppleScript' : '✓ Add apps using AppleScript';
   });
 
   const dragHandle = popup.querySelector('.glass-label');
@@ -579,7 +766,10 @@
   window.addEventListener('pointercancel', stopDragging);
   dragHandle.addEventListener('lostpointercapture', stopDragging);
 
+  const whoops = document.querySelector('.whoops');
+
   function quitBeamhook() {
+    setPopupOpen(false);
     if (popup) {
       popup.style.display = 'none';
     }
@@ -592,10 +782,130 @@
     }
     const appName = document.querySelector('.menu-item.active-app');
     if (appName) {
-      appName.textContent = 'Finder';
+      // Swap only the label text node — the dropdown stays intact for relaunch.
+      appName.firstChild.textContent = 'Finder';
       appName.style.pointerEvents = 'none';
+      appName.removeAttribute('tabindex');
+      const dropdown = appName.querySelector('.dropdown-menu');
+      if (dropdown) {
+        dropdown.style.display = 'none';
+      }
+    }
+    whoops.hidden = false;
+  }
+
+  function relaunchBeamhook() {
+    whoops.hidden = true;
+    if (popup) {
+      popup.style.display = '';
+    }
+    if (tray) {
+      tray.style.display = '';
+    }
+    const hint = document.querySelector('.hover-hint');
+    if (hint) {
+      hint.style.display = '';
+    }
+    const appName = document.querySelector('.menu-item.active-app');
+    if (appName) {
+      appName.firstChild.textContent = 'Beamhook';
+      appName.style.pointerEvents = '';
+      appName.setAttribute('tabindex', '0');
+      const dropdown = appName.querySelector('.dropdown-menu');
+      if (dropdown) {
+        dropdown.style.display = '';
+      }
     }
   }
+</script>
+
+<script>
+  /* 3D dot-terrain backdrop: a monochrome grid of points in perspective — layered sine
+     waves plus a ripple that follows the cursor, which also yaws/tilts the view.
+     Black dots on light, white on dark, one dim ink. Reduced motion = one static frame. */
+  (() => {
+    const canvas = document.getElementById('bg-fx');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const motionQuery = window.matchMedia('(prefers-reduced-motion: no-preference)');
+
+    const GX = 110, GZ = 58; /* grid resolution: x across, z into the screen */
+    const INK = { light: '#000', dark: '#fff' };
+    const DIM = { light: .16, dark: .2 };
+
+    let width = 0, height = 0, rafId = null;
+    const pointer = { x: .5, y: .4, tx: .5, ty: .4 };
+
+    function resize() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function frame(now) {
+      const scheme = darkQuery.matches ? 'dark' : 'light';
+      const t = now * .001;
+      pointer.x += (pointer.tx - pointer.x) * .045;
+      pointer.y += (pointer.ty - pointer.y) * .045;
+
+      const yaw = (pointer.x - .5) * .35;
+      const cosA = Math.cos(yaw), sinA = Math.sin(yaw);
+      const horizon = height * .06 + (pointer.y - .5) * height * .05;
+      const rx = (pointer.x - .5) * 2.4;                 /* ripple center in world coords */
+      const rz = Math.max(0, Math.min(1, 1 - pointer.y));
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = INK[scheme];
+      const dim = DIM[scheme];
+      for (let j = 0; j < GZ; j++) {
+        const z0 = j / (GZ - 1);                         /* 0 = near, 1 = far */
+        for (let i = 0; i < GX; i++) {
+          const x0 = (i / (GX - 1) - .5) * 2.6;
+          const dxw = x0 - rx, dzw = (z0 - rz) * 1.8;
+          const y = .05 * Math.sin(x0 * 7 + t * 1.1) * Math.cos(z0 * 6 - t * .8)
+                  + .03 * Math.sin(x0 * 13 - t * .6) * Math.sin(z0 * 9 + t)
+                  + .08 * .012 / (dxw * dxw + dzw * dzw + .012);
+          const dz = z0 - .35;                           /* yaw around the plane's center */
+          const x1 = x0 * cosA + dz * sinA;
+          const z1 = Math.max(.02, -x0 * sinA + dz * cosA + .35);
+          const p = 1 / (z1 * 2.2 + .35);                /* perspective scale */
+          const sx = width * .5 + x1 * p * width * .55;
+          const sy = horizon + p * height * .3 - y * p * height * 1.15;
+          if (sx < -4 || sx > width + 4 || sy < -4 || sy > height + 4) continue;
+          const size = Math.min(2.4, Math.max(.4, p * 1.5));
+          let a = dim * Math.min(1, p * .8);
+          if (z1 > .85) a *= (1 - z1) / .15;             /* haze out at the horizon */
+          ctx.globalAlpha = a;
+          ctx.fillRect(sx - size / 2, sy - size / 2, size, size);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function tick(now) {
+      frame(now);
+      rafId = motionQuery.matches ? window.requestAnimationFrame(tick) : null;
+    }
+    function start() {
+      if (rafId === null) rafId = window.requestAnimationFrame(tick);
+    }
+
+    window.addEventListener('pointermove', (event) => {
+      pointer.tx = event.clientX / width;
+      pointer.ty = event.clientY / height;
+    }, { passive: true });
+    window.addEventListener('resize', () => { resize(); start(); });
+    darkQuery.addEventListener('change', start);
+    motionQuery.addEventListener('change', start);
+
+    resize();
+    start();
+  })();
 </script>
 </body>
 </html>
