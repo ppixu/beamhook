@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Beamhook — media keys, hooked to the app you meant</title>
-<meta name="description" content="A minimal macOS menu-bar app that captures the hardware media keys and routes play/pause/next/previous to the one app you choose.">
+<meta name="description" content="Make your Mac's media keys predictable. Hook play/pause, next, previous, and optionally volume to the app you choose instead of whichever player macOS remembers.">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a">
 <meta name="color-scheme" content="light dark">
@@ -412,7 +412,7 @@
     <div class="dropdown-menu">
       <div class="menu-title">Beamhook</div>
       <hr class="menu-hr">
-      <a href="https://ppixu.gumroad.com/l/beamhook" target="_blank" rel="noopener">Buy on Gumroad...<span class="shortcut">⌘B</span></a>
+      <a href="https://ppixu.gumroad.com/l/beamhook" target="_blank" rel="noopener">Get the official build...<span class="shortcut">⌘B</span></a>
       <a href="https://github.com/ppixu/beamhook" target="_blank" rel="noopener">View on GitHub...<span class="shortcut">⌘G</span></a>
       <hr class="menu-hr">
       <div class="menu-action" onclick="quitBeamhook()">Quit Beamhook<span class="shortcut">⌘Q</span></div>
@@ -441,6 +441,8 @@
           <button type="button" role="menuitemradio" data-app="Safari" aria-checked="false"><span class="menu-check">✓</span>Safari</button>
           <button type="button" role="menuitemradio" data-app="Chrome" aria-checked="false"><span class="menu-check">✓</span>Chrome</button>
           <button type="button" role="menuitemradio" data-app="Brave" aria-checked="false"><span class="menu-check">✓</span>Brave</button>
+          <button type="button" role="menuitemradio" data-app="Arc" aria-checked="false"><span class="menu-check">✓</span>Arc</button>
+          <button type="button" role="menuitemradio" data-app="Vivaldi" aria-checked="false"><span class="menu-check">✓</span>Vivaldi</button>
           <button type="button" role="menuitemradio" data-app="VLC" aria-checked="false"><span class="menu-check">✓</span>VLC</button>
           <button type="button" role="menuitemradio" data-app="VOX" aria-checked="false"><span class="menu-check">✓</span>VOX</button>
           <button type="button" role="menuitemradio" data-app="QuickTime Player" aria-checked="false"><span class="menu-check">✓</span>QuickTime Player</button>
@@ -496,15 +498,15 @@
   </div>
   <h1>Beamhook</h1>
   <p class="tag">Your media keys, hooked to the app you meant.</p>
-  <p class="desc">A tiny macOS menu-bar app that captures the media keys and sends play/pause to the one app you choose — so Safari and Apple&nbsp;Music can't steal them.</p>
+  <p class="desc">Make your Mac's media keys predictable. Hook play/pause, next, previous, and optionally volume to the app you choose — so macOS can't redirect them to Apple&nbsp;Music, YouTube, or whichever player it remembers. See and adjust the volume of apps currently playing audio when they support AppleScript.</p>
 
   <div class="paths">
     <section class="path">
       <div class="path-head">
         <span class="path-title">Get the app</span>
-        <span class="path-note">€2 · ready to run</span>
+        <span class="path-note">€8 · one time</span>
       </div>
-      <p class="path-desc">A signed &amp; notarized build — download and run, no Xcode needed. Same app as the source, and it supports development.</p>
+      <p class="path-desc">The signed &amp; notarized, ready-to-run app with all Beamhook 1.x updates. Same complete app as the source; your purchase supports continued development.</p>
       <div class="buy-wrap">
         <a class="buy" href="https://ppixu.gumroad.com/l/beamhook">Get it on Gumroad</a>
       </div>
@@ -522,7 +524,7 @@
     <a href="https://github.com/ppixu/beamhook">GitHub ↗</a>
     <a href="https://github.com/ppixu/beamhook/blob/main/LICENSE">GPL-3.0</a>
   </div>
-  <p class="meta">macOS 14+ · Apple Silicon &amp; Intel</p>
+  <p class="meta">macOS 14.2+ · tested on Tahoe 26.5 · Apple Silicon &amp; Intel</p>
 </div>
 </div>
 
@@ -586,6 +588,8 @@
     Safari: { volume: 48, volumeKeys: true, scriptable: true },
     Chrome: { volume: 44, volumeKeys: true, scriptable: true },
     Brave: { volume: 44, volumeKeys: true, scriptable: true },
+    Arc: { volume: 46, volumeKeys: true, scriptable: true },
+    Vivaldi: { volume: 42, volumeKeys: true, scriptable: true },
     VLC: { volume: 72, volumeKeys: true, scriptable: true },
     VOX: { volume: 58, volumeKeys: true, scriptable: true },
     'QuickTime Player': { volume: null, volumeKeys: false, scriptable: false },
@@ -824,6 +828,8 @@
      waves plus a ripple that follows the cursor, which also yaws/tilts the view.
      Black dots on light, white on dark, one dim ink. Reduced motion = one static frame. */
   (() => {
+    const ENABLED = false; /* backdrop disabled for now — flip to true to bring it back */
+    if (!ENABLED) return;
     const canvas = document.getElementById('bg-fx');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');

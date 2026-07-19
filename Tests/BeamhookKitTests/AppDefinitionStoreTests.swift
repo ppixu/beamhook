@@ -18,6 +18,8 @@ final class AppDefinitionStoreTests: XCTestCase {
         XCTAssertTrue(ids.contains("safari-youtube"))
         XCTAssertTrue(ids.contains("chrome-youtube"))
         XCTAssertTrue(ids.contains("brave-youtube"))
+        XCTAssertTrue(ids.contains("arc-youtube"))
+        XCTAssertTrue(ids.contains("vivaldi-youtube"))
         XCTAssertTrue(BuiltInApps.all.allSatisfy { $0.isBuiltIn })
     }
 
@@ -26,9 +28,12 @@ final class AppDefinitionStoreTests: XCTestCase {
             BuiltInApps.safariYouTube,
             BuiltInApps.chromeYouTube,
             BuiltInApps.braveYouTube,
+            BuiltInApps.arcYouTube,
+            BuiltInApps.vivaldiYouTube,
         ]
         XCTAssertEqual(browsers.map(\.bundleID), [
             "com.apple.Safari", "com.google.Chrome", "com.brave.Browser",
+            "company.thebrowser.Browser", "com.vivaldi.Vivaldi",
         ])
         for browser in browsers {
             XCTAssertTrue(browser.playPauseScript.contains(".ytp-play-button"))

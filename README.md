@@ -12,23 +12,29 @@
 <p align="center">
   <a href="https://ppixu.github.io/beamhook/"><b>Website</b></a>
   &nbsp;•&nbsp;
-  <a href="https://ppixu.gumroad.com/l/beamhook"><b>Buy on Gumroad (€2)</b></a>
+  <a href="https://ppixu.gumroad.com/l/beamhook"><b>Get the official build (€8)</b></a>
 </p>
 
 ---
 
-A tiny macOS menu-bar app that sends the hardware media keys
-(play/pause/next/previous) to **one app you choose** — so Safari and Apple
-Music can't hijack them. macOS 14+.
+Beamhook makes your Mac's media keys predictable. It sends play/pause,
+next, and previous to **one app you choose** — so macOS can't redirect them
+to Apple Music, YouTube, or whichever player it remembers. It also lets you
+control the volume of apps that are currently playing audio, when the app
+supports AppleScript. Requires macOS 14.2 or later; tested on macOS Tahoe 26.5.
 
 ## Features
 
-- Pick one target app — nothing else can steal the keys.
+- Hook the media keys to one target app — nothing else can steal them.
 - Play/pause button that reflects what's actually playing.
-- Volume sliders for scriptable apps while they're open.
-- Built in: Spotify, Apple Music, Apple TV, Safari, Chrome, Brave, VLC, VOX,
-  QuickTime, Downcast —
-  or add any AppleScriptable app.
+- Volume sliders for scriptable apps that are currently playing audio.
+- Optionally route the keyboard's volume keys to the selected app.
+- Built in: Spotify, Apple Music, Apple TV, Safari, Chrome, Brave, Arc,
+  Vivaldi, VLC, VOX, QuickTime Player, and Downcast.
+- Add another app with your own AppleScript commands.
+
+Some apps do not expose suitable AppleScript controls and cannot be controlled
+this way.
 
 The browser targets control the active YouTube tab. Enable **Allow JavaScript
 from Apple Events** in Safari's Develop menu or the Chromium browser's
@@ -45,11 +51,14 @@ brew install xcodegen
 
 Then grant **Accessibility** when prompted, pick your app, and press play.
 
-## Or download it — €2
+## Or get the official build — €8
 
-Rather not build? A signed & notarized, ready-to-run build is **€2** on Gumroad — the same app, and it supports development.
+Rather not build it yourself? The **€8 one-time purchase** on Gumroad includes
+the signed and notarized, ready-to-run app and all Beamhook 1.x updates. It is
+the same complete app as the open-source version, and your purchase supports
+continued development.
 
-[![Buy on Gumroad](https://img.shields.io/badge/Buy%20on-Gumroad-ff90e8?style=for-the-badge&logo=gumroad)](https://ppixu.gumroad.com/l/beamhook)
+[![Get the official build on Gumroad](https://img.shields.io/badge/Official%20build-%E2%82%AC8-ff90e8?style=for-the-badge&logo=gumroad)](https://ppixu.gumroad.com/l/beamhook)
 
 ## License
 

@@ -3,7 +3,7 @@ import Foundation
 public enum BuiltInApps {
     public static let all: [AppDefinition] = [
         spotify, music, appleTV, safariYouTube, chromeYouTube, braveYouTube,
-        vlc, vox, quickTime, downcast,
+        arcYouTube, vivaldiYouTube, vlc, vox, quickTime, downcast,
     ]
 
     public static let spotify = AppDefinition(
@@ -95,6 +95,14 @@ public enum BuiltInApps {
     public static let braveYouTube = browserDefinition(
         id: "brave-youtube", displayName: "Brave", bundleID: "com.brave.Browser",
         script: { chromiumScript(application: "Brave Browser", javascript: $0) })
+
+    public static let arcYouTube = browserDefinition(
+        id: "arc-youtube", displayName: "Arc", bundleID: "company.thebrowser.Browser",
+        script: { chromiumScript(application: "Arc", javascript: $0) })
+
+    public static let vivaldiYouTube = browserDefinition(
+        id: "vivaldi-youtube", displayName: "Vivaldi", bundleID: "com.vivaldi.Vivaldi",
+        script: { chromiumScript(application: "Vivaldi", javascript: $0) })
 
     private static let playPauseJS = """
         (() => { const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; if (!m) return false; const youtube = document.querySelector('.ytp-play-button'); if (youtube) youtube.click(); else if (m.paused) void m.play(); else m.pause(); return true; })()

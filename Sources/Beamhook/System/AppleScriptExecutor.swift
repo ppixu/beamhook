@@ -29,13 +29,15 @@ final class AppleScriptExecutor: ScriptExecuting {
 }
 
 enum BrowserKind: String, Sendable {
-    case safari, chrome, brave
+    case safari, chrome, brave, arc, vivaldi
 
     static func target(id: String?) -> BrowserKind? {
         switch id {
         case "safari-youtube": return .safari
         case "chrome-youtube": return .chrome
         case "brave-youtube": return .brave
+        case "arc-youtube": return .arc
+        case "vivaldi-youtube": return .vivaldi
         default: return nil
         }
     }
@@ -45,6 +47,8 @@ enum BrowserKind: String, Sendable {
         case .safari: "Safari"
         case .chrome: "Google Chrome"
         case .brave: "Brave Browser"
+        case .arc: "Arc"
+        case .vivaldi: "Vivaldi"
         }
     }
 
@@ -53,6 +57,8 @@ enum BrowserKind: String, Sendable {
         case .safari: "com.apple.Safari"
         case .chrome: "com.google.Chrome"
         case .brave: "com.brave.Browser"
+        case .arc: "company.thebrowser.Browser"
+        case .vivaldi: "com.vivaldi.Vivaldi"
         }
     }
 }

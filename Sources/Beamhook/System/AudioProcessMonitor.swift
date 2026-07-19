@@ -74,6 +74,12 @@ final class AudioProcessMonitor: ObservableObject {
         if rawBundleID == "com.brave.Browser" || rawBundleID.hasPrefix("com.brave.Browser.helper") {
             return ("Brave", "com.brave.Browser")
         }
+        if rawBundleID == "company.thebrowser.Browser" || rawBundleID.hasPrefix("company.thebrowser.Browser.helper") {
+            return ("Arc", "company.thebrowser.Browser")
+        }
+        if rawBundleID == "com.vivaldi.Vivaldi" || rawBundleID.hasPrefix("com.vivaldi.Vivaldi.helper") {
+            return ("Vivaldi", "com.vivaldi.Vivaldi")
+        }
         return nil
     }
 
