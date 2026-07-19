@@ -103,6 +103,14 @@ final class MediaKeyTap {
         }
 
         if key.isVolume && volumeKeysHijacked {
+            // Command-volume is an escape hatch to the normal system volume.
+            // Remove Command before passing the event through so macOS receives
+            // an ordinary volume key rather than a modified shortcut.
+            if event.flags.contains(.maskCommand) {
+                event.flags = event.flags.subtracting(.maskCommand)
+                return Unmanaged.passUnretained(event)
+            }
+
             // Forward on key-down AND repeats so holding the key ramps the volume.
             if decoded.isDown {
                 DispatchQueue.main.async { [weak self] in self?.handler(key) }

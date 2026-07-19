@@ -29,6 +29,7 @@ supports AppleScript. Requires macOS 14.2 or later; tested on macOS Tahoe 26.5.
 - Play/pause button that reflects what's actually playing.
 - Volume sliders for scriptable apps that are currently playing audio.
 - Optionally route the keyboard's volume keys to the selected app.
+- Hold Command while pressing a volume key to adjust the Mac's system volume instead.
 - Built in: Spotify, Apple Music, Apple TV, Safari, Chrome, Brave, Arc,
   Vivaldi, VLC, VOX, QuickTime Player, and Downcast.
 - Add another app with your own AppleScript commands.
