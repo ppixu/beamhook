@@ -10,7 +10,7 @@
 <p align="center">Your media keys, hooked to the app you meant.</p>
 
 <p align="center">
-  <a href="https://ppixu.github.io/beamhook/"><b>Website</b></a>
+  <a href="https://beamhook.app/"><b>Website</b></a>
   &nbsp;•&nbsp;
   <a href="https://ppixu.gumroad.com/l/beamhook"><b>Get the official build (€5)</b></a>
 </p>
