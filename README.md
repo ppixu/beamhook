@@ -17,6 +17,10 @@
 
 ---
 
+<p align="center">
+  <img src="docs/demo.gif" width="720" alt="Demo: hooking the media keys to Spotify, then to Safari's YouTube tab, and back">
+</p>
+
 Beamhook makes your Mac's media keys predictable. It sends play/pause,
 next, and previous to **one app you choose** — so macOS can't redirect them
 to Apple Music, YouTube, or whichever player it remembers. It also lets you

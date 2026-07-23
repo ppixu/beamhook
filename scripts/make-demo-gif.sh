@@ -24,14 +24,14 @@ FPS=12
 
 command -v ffmpeg >/dev/null || { echo "error: ffmpeg not found (brew install ffmpeg)" >&2; exit 1; }
 
-PALETTE="$(mktemp -t beamhook-palette).png"
+PALETTE="$(mktemp -d -t beamhook-palette)/palette.png"
 FILTERS="fps=$FPS,scale=$WIDTH:-1:flags=lanczos"
 
-ffmpeg -v warning -i "$IN" -vf "$FILTERS,palettegen=stats_mode=diff" -y "$PALETTE"
+ffmpeg -v warning -i "$IN" -vf "$FILTERS,palettegen=stats_mode=diff" -update 1 -frames:v 1 -y "$PALETTE"
 ffmpeg -v warning -i "$IN" -i "$PALETTE" \
   -lavfi "$FILTERS,paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle" \
   -y "$OUT"
-rm -f "$PALETTE"
+rm -rf "$(dirname "$PALETTE")"
 
 ls -lh "$OUT" | awk '{print $9": "$5}'
 echo "If it's over ~4 MB, retry with a smaller width: ./scripts/make-demo-gif.sh $IN $OUT 640"
