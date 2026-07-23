@@ -9,19 +9,21 @@ final class HookHUD {
     static let shared = HookHUD()
     private init() {}
 
+    private static let systemVolumeHint = "⌘ + 🔊 for system volume"
+
     private enum Presentation {
-        case hooked(appName: String)
+        case hooked(appName: String, volumeKeysHijacked: Bool)
         case volume(appName: String, percent: Int)
 
         var appName: String {
             switch self {
-            case .hooked(let appName), .volume(let appName, _): appName
+            case .hooked(let appName, _), .volume(let appName, _): appName
             }
         }
 
         var hideDelay: TimeInterval {
             switch self {
-            case .hooked: 2.0
+            case .hooked(_, let volumeKeysHijacked): volumeKeysHijacked ? 3.0 : 2.0
             case .volume: 1.5
             }
         }
@@ -41,6 +43,7 @@ final class HookHUD {
 
     private var panel: NSPanel?
     private var label: NSTextField?
+    private var detailLabel: NSTextField?
     private var hookIcon: NSImageView?
     private var volumeRow: NSView?
     private var volumeBar: VolumeBarView?
@@ -77,8 +80,8 @@ final class HookHUD {
     }
 
     /// Flash "<appName> hooked" just below the menu bar, under the status item.
-    func show(appName: String) {
-        show(.hooked(appName: appName))
+    func show(appName: String, volumeKeysHijacked: Bool = false) {
+        show(.hooked(appName: appName, volumeKeysHijacked: volumeKeysHijacked))
     }
 
     /// Show an app-specific volume HUD after a hooked volume-key command succeeds.
@@ -109,12 +112,16 @@ final class HookHUD {
 
         let panel = ensurePanel()
         switch presentation {
-        case .hooked(let appName):
+        case .hooked(let appName, let volumeKeysHijacked):
             label?.stringValue = "\(appName) hooked"
+            detailLabel?.stringValue = Self.systemVolumeHint
+            detailLabel?.isHidden = !volumeKeysHijacked
             hookIcon?.isHidden = false
             volumeRow?.isHidden = true
         case .volume(let appName, let percent):
             label?.stringValue = appName
+            detailLabel?.stringValue = Self.systemVolumeHint
+            detailLabel?.isHidden = false
             hookIcon?.isHidden = true
             volumeRow?.isHidden = false
             volumeBar?.percent = percent
@@ -196,8 +203,53 @@ final class HookHUD {
         }
     }
 
+    /// Use the opposite of the system appearance so the HUD stands apart from
+    /// the desktop while preserving the user's high-contrast preference.
+    private func applyContrastingAppearance(to panel: NSPanel) {
+        let systemAppearance = NSApp.effectiveAppearance.bestMatch(from: [
+            .aqua,
+            .darkAqua,
+            .accessibilityHighContrastAqua,
+            .accessibilityHighContrastDarkAqua,
+        ])
+        let contrastingAppearance: NSAppearance.Name
+        let systemUsesDarkColors: Bool
+        switch systemAppearance {
+        case .darkAqua:
+            contrastingAppearance = .aqua
+            systemUsesDarkColors = true
+        case .accessibilityHighContrastDarkAqua:
+            contrastingAppearance = .accessibilityHighContrastAqua
+            systemUsesDarkColors = true
+        case .accessibilityHighContrastAqua:
+            contrastingAppearance = .accessibilityHighContrastDarkAqua
+            systemUsesDarkColors = false
+        default:
+            contrastingAppearance = .darkAqua
+            systemUsesDarkColors = false
+        }
+        // Reassigning an identical appearance makes Liquid Glass rebuild its
+        // backdrop, producing a black first frame on the launch notification.
+        if panel.appearance?.name != contrastingAppearance {
+            panel.appearance = NSAppearance(named: contrastingAppearance)
+        }
+        if #available(macOS 26.0, *),
+           let glass = panel.contentView as? NSGlassEffectView {
+            // Glass remains backdrop-adaptive even with a forced appearance, so
+            // explicitly bias it toward the opposite luminance as well.
+            let tint = (systemUsesDarkColors ? NSColor.white : NSColor.black)
+                .withAlphaComponent(0.52)
+            if glass.tintColor?.isEqual(tint) != true {
+                glass.tintColor = tint
+            }
+        }
+    }
+
     private func ensurePanel() -> NSPanel {
-        if let panel { return panel }
+        if let panel {
+            applyContrastingAppearance(to: panel)
+            return panel
+        }
 
         let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 220, height: 58),
                             styleMask: [.borderless, .nonactivatingPanel],
@@ -223,7 +275,20 @@ final class HookHUD {
         text.lineBreakMode = .byTruncatingTail
         text.translatesAutoresizingMaskIntoConstraints = false
 
-        let header = NSStackView(views: [icon, text])
+        let detail = NSTextField(labelWithString: "")
+        detail.font = .systemFont(ofSize: 11, weight: .regular)
+        detail.textColor = .secondaryLabelColor
+        detail.lineBreakMode = .byTruncatingTail
+        detail.isHidden = true
+        detail.translatesAutoresizingMaskIntoConstraints = false
+
+        let labels = NSStackView(views: [text, detail])
+        labels.orientation = .vertical
+        labels.alignment = .leading
+        labels.spacing = 2
+        labels.translatesAutoresizingMaskIntoConstraints = false
+
+        let header = NSStackView(views: [icon, labels])
         header.orientation = .horizontal
         header.alignment = .centerY
         header.spacing = 11
@@ -275,9 +340,8 @@ final class HookHUD {
 
         let chrome: NSView
         if #available(macOS 26.0, *) {
-            // Regular is the adaptive variant Apple recommends over arbitrary
-            // content. Leaving it untinted lets macOS choose its tint, contrast,
-            // rim, and transparency from the backdrop and user settings.
+            // Keep the system's regular optical treatment; applyContrastingAppearance
+            // supplies the opposite light/dark tint after this becomes contentView.
             let glass = NSGlassEffectView()
             glass.style = .regular
             glass.cornerRadius = 24
@@ -299,8 +363,10 @@ final class HookHUD {
         }
 
         panel.contentView = chrome
+        applyContrastingAppearance(to: panel)
         self.panel = panel
         self.label = text
+        self.detailLabel = detail
         self.hookIcon = icon
         self.volumeRow = volumeStack
         self.volumeBar = bar

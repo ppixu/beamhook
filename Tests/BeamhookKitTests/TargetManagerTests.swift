@@ -31,6 +31,25 @@ final class TargetManagerTests: XCTestCase {
         XCTAssertEqual(tm2.selectedTargetID, "spotify")
     }
 
+    func testNoSelectionPersists() {
+        let defaults = makeDefaults()
+        let resolver = MockResolver()
+        let tm = makeManager(resolver: resolver, defaults: defaults)
+        tm.selectedTargetID = nil
+
+        let tm2 = makeManager(resolver: resolver, defaults: defaults)
+        XCTAssertTrue(tm2.hasSavedSelection)
+        XCTAssertNil(tm2.selectedTargetID)
+    }
+
+    func testFreshManagerHasNoSavedSelection() {
+        let defaults = makeDefaults()
+        let tm = makeManager(resolver: MockResolver(), defaults: defaults)
+
+        XCTAssertFalse(tm.hasSavedSelection)
+        XCTAssertNil(tm.selectedTargetID)
+    }
+
     func testRouteForwardsToRunningTarget() async {
         let resolver = MockResolver()
         let spotify = MockMediaApp(id: "spotify", isRunning: true)

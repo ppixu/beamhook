@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://ppixu.github.io/beamhook/"><b>Website</b></a>
   &nbsp;•&nbsp;
-  <a href="https://ppixu.gumroad.com/l/beamhook"><b>Get the official build (€8)</b></a>
+  <a href="https://ppixu.gumroad.com/l/beamhook"><b>Get the official build (€5)</b></a>
 </p>
 
 ---
@@ -52,14 +52,14 @@ brew install xcodegen
 
 Then grant **Accessibility** when prompted, pick your app, and press play.
 
-## Or get the official build — €8
+## Or get the official build — €5
 
-Rather not build it yourself? The **€8 one-time purchase** on Gumroad includes
+Rather not build it yourself? The **€5 one-time purchase** on Gumroad includes
 the signed and notarized, ready-to-run app and all Beamhook 1.x updates. It is
 the same complete app as the open-source version, and your purchase supports
 continued development.
 
-[![Get the official build on Gumroad](https://img.shields.io/badge/Official%20build-%E2%82%AC8-ff90e8?style=for-the-badge&logo=gumroad)](https://ppixu.gumroad.com/l/beamhook)
+[![Get the official build on Gumroad](https://img.shields.io/badge/Official%20build-%E2%82%AC5-ff90e8?style=for-the-badge&logo=gumroad)](https://ppixu.gumroad.com/l/beamhook)
 
 ## License
 

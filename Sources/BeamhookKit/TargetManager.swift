@@ -6,6 +6,7 @@ public final class TargetManager {
     private let runner: ScriptRunning
     private let volumeStep: Int
     private static let storageKey = "selectedTargetAppID"
+    private static let noTargetSentinel = "__beamhook_no_target__"
 
     /// - Parameters:
     ///   - runner: serializes AppleScript off the main thread (single-flight).
@@ -21,11 +22,20 @@ public final class TargetManager {
     }
 
     public var selectedTargetID: String? {
-        get { defaults.string(forKey: Self.storageKey) }
+        get {
+            guard let stored = defaults.string(forKey: Self.storageKey),
+                  stored != Self.noTargetSentinel else { return nil }
+            return stored
+        }
         set {
             if let newValue { defaults.set(newValue, forKey: Self.storageKey) }
-            else { defaults.removeObject(forKey: Self.storageKey) }
+            else { defaults.set(Self.noTargetSentinel, forKey: Self.storageKey) }
         }
+    }
+
+    /// Distinguishes a fresh install from an explicitly persisted "no target" choice.
+    public var hasSavedSelection: Bool {
+        defaults.object(forKey: Self.storageKey) != nil
     }
 
     /// Routes a media key to the selected target, off the main thread. No-op for

@@ -75,7 +75,10 @@ final class AppState: ObservableObject {
         // Default the target to Spotify on first run — or if the persisted target no
         // longer resolves (e.g. a built-in was removed/renamed, like Swinsian), so a
         // stale selection can't silently strand the user with a dead target.
-        if targetManager.selectedTargetID == nil || registry.app(withID: targetManager.selectedTargetID!) == nil {
+        let savedTargetIsMissing = targetManager.selectedTargetID.map {
+            registry.app(withID: $0) == nil
+        } ?? false
+        if !targetManager.hasSavedSelection || savedTargetIsMissing {
             targetManager.selectedTargetID = BuiltInApps.spotify.id
             self.selectedTargetID = BuiltInApps.spotify.id
         }
@@ -141,7 +144,8 @@ final class AppState: ObservableObject {
                     let running = def.map { self.isRunning(bundleID: $0.bundleID) } ?? false
                     Self.log.info("startup hook: target=\(def?.displayName ?? "nil", privacy: .public) running=\(running)")
                     if let def, running {
-                        HookHUD.shared.show(appName: def.displayName)
+                        HookHUD.shared.show(appName: def.displayName,
+                                            volumeKeysHijacked: self.tap.volumeKeysHijacked)
                     }
                 }
             }
@@ -209,14 +213,15 @@ final class AppState: ObservableObject {
         }
     }
 
-    func setTarget(_ id: String) {
+    func setTarget(_ id: String?) {
         selectedTargetID = id
         targetManager.selectedTargetID = id
         configureBrowserTransportForPendingScan()
         updateVolumeHijack()
         // Confirm the new hook with a centre-screen HUD (user-initiated, so always).
         if let def = currentTargetDefinition() {
-            HookHUD.shared.show(appName: def.displayName)
+            HookHUD.shared.show(appName: def.displayName,
+                                volumeKeysHijacked: tap.volumeKeysHijacked)
         }
     }
 
@@ -230,7 +235,7 @@ final class AppState: ObservableObject {
             browserTargetRunning = nil
             browserMediaCandidates = []
             selectedBrowserMediaID = nil
-            tap.transportKeysHijacked = true
+            tap.transportKeysHijacked = selectedTargetID != nil
             return
         }
 
@@ -284,7 +289,13 @@ final class AppState: ObservableObject {
     }
 
     private func configureBrowserTransportForPendingScan() {
-        if selectedTargetIsBrowser {
+        if selectedTargetID == nil {
+            browserMediaInjectionAvailable = nil
+            browserTargetRunning = nil
+            browserMediaCandidates = []
+            selectedBrowserMediaID = nil
+            tap.transportKeysHijacked = false
+        } else if selectedTargetIsBrowser {
             browserMediaInjectionAvailable = nil
             browserTargetRunning = nil
             browserMediaCandidates = []
@@ -379,6 +390,12 @@ final class AppState: ObservableObject {
         volumeKeyOverride[bundleID] = on
         UserDefaults.standard.set(volumeKeyOverride, forKey: Self.volumeOverrideKey)
         updateVolumeHijack()
+        if on,
+           tap.volumeKeysHijacked,
+           let def = currentTargetDefinition(),
+           def.bundleID == bundleID {
+            HookHUD.shared.show(appName: def.displayName, volumeKeysHijacked: true)
+        }
     }
 
     /// The volume keys are hijacked for the target only when it exposes a scriptable

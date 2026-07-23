@@ -20,6 +20,17 @@ struct MenuContentView: View {
 
             Text("Hook media keys to:").font(.caption).foregroundStyle(.secondary)
             Menu {
+                Button {
+                    playing = nil
+                    state.setTarget(nil)
+                } label: {
+                    if state.selectedTargetID == nil {
+                        Label("Nothing", systemImage: "checkmark")
+                    } else {
+                        Text("Nothing")
+                    }
+                }
+                Divider()
                 ForEach(state.availableApps) { app in
                     Button {
                         playing = nil
@@ -82,8 +93,6 @@ struct MenuContentView: View {
             // nothing at all when nothing is playing.
             PlayingAppsList()
 
-            addAppButton
-
             Divider()
             SettingsSection()
 
@@ -123,7 +132,7 @@ struct MenuContentView: View {
 
     private var targetName: String {
         let id = state.selectedTargetID
-        return state.availableApps.first { $0.id == id }?.displayName ?? "target"
+        return state.availableApps.first { $0.id == id }?.displayName ?? "Nothing"
     }
 
     private var playPauseButton: some View {
@@ -136,16 +145,8 @@ struct MenuContentView: View {
                 .frame(maxWidth: .infinity)
         }
         .controlSize(.regular)
+        .disabled(state.selectedTargetID == nil)
         .help(playing == true ? "Pause \(targetName)" : "Play \(targetName)")
-    }
-
-    private var addAppButton: some View {
-        Button {
-            AddAppWindow.shared.show(state: state)
-        } label: {
-            Label("Add an app…", systemImage: "plus")
-        }
-        .controlSize(.small)
     }
 
     private var permissionBanner: some View {
@@ -174,6 +175,11 @@ private struct PlayingAppsListAvailable: View {
     @EnvironmentObject var state: AppState
     @StateObject private var monitor = AudioProcessMonitor()
 
+    private var targetBundleID: String? {
+        guard let id = state.selectedTargetID else { return nil }
+        return state.availableApps.first { $0.id == id }?.bundleID
+    }
+
     /// What to show, deduplicated with currently-playing apps first:
     ///   1. apps with a live audio stream (from Core Audio), plus
     ///   2. known volume-scriptable apps (Spotify, Apple Music, VLC, …) that are
@@ -197,6 +203,11 @@ private struct PlayingAppsListAvailable: View {
         for def in scriptableRunning where seen.insert(def.bundleID).inserted {
             out.append(PlayingApp(id: def.bundleID, displayName: def.displayName, bundleID: def.bundleID))
         }
+        if let targetBundleID,
+           let targetIndex = out.firstIndex(where: { $0.bundleID == targetBundleID }),
+           targetIndex != 0 {
+            out.insert(out.remove(at: targetIndex), at: 0)
+        }
         return out
     }
 
@@ -207,8 +218,11 @@ private struct PlayingAppsListAvailable: View {
             let list = rows
             if !list.isEmpty {
                 Divider()
-                ForEach(list) { app in
+                ForEach(Array(list.enumerated()), id: \.element.id) { index, app in
                     AppVolumeRow(playing: app)
+                    if index == 0, app.bundleID == targetBundleID, list.count > 1 {
+                        Divider()
+                    }
                 }
             }
         }
@@ -244,24 +258,43 @@ private struct AppVolumeRow: View {
                 Text(playing.displayName).font(.subheadline)
                     .opacity(isTarget ? 1 : 0.55)
                 Spacer()
-                Button(isTarget ? "Hooked" : "Hook") { hook() }
+                Button(isTarget ? "Unhook" : "Hook") {
+                    if isTarget {
+                        state.setTarget(nil)
+                    } else {
+                        hook()
+                    }
+                }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .disabled(isTarget)
-                    .help(isTarget ? "The media keys already control this app"
+                    .help(isTarget ? "Return media-key control to macOS"
                                    : "Send the media keys to this app")
             }
             if scriptable && isTarget {
                 Slider(value: $volume, in: 0...100) { editing in
                     if !editing { state.setVolume(Int(volume), for: playing.bundleID) }
                 }
-                Toggle("Volume keys", isOn: Binding(
-                    get: { state.volumeKeysEnabled(bundleID: playing.bundleID) },
-                    set: { state.setVolumeKeysEnabled($0, bundleID: playing.bundleID) }))
-                    .toggleStyle(.checkbox)
-                    .controlSize(.small)
-                    .font(.caption)
-                    .help("Route the hardware volume keys to this app while it's the hooked target")
+                HStack(spacing: 6) {
+                    Toggle("Volume keys", isOn: Binding(
+                        get: { state.volumeKeysEnabled(bundleID: playing.bundleID) },
+                        set: { state.setVolumeKeysEnabled($0, bundleID: playing.bundleID) }))
+                        .toggleStyle(.checkbox)
+                        .controlSize(.small)
+                        .font(.caption)
+                        .help("Route the hardware volume keys to this app while it's the hooked target")
+                    if state.volumeKeysEnabled(bundleID: playing.bundleID) {
+                        HStack(spacing: 2) {
+                            Text("⌘ +")
+                            Image(systemName: "speaker.wave.2.fill")
+                            Text("for system")
+                        }
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                        .fixedSize()
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Command plus Volume for system")
+                    }
+                }
             } else if isTarget {
                 Text("system volume only").font(.caption2).foregroundStyle(.secondary)
             }
