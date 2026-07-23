@@ -16,11 +16,14 @@ struct BeamhookApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let state = AppState()
+    let updater = UpdaterModel()
     private var statusItem: NSStatusItem?
     private let popover = NSPopover()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let hosting = NSHostingController(rootView: MenuContentView().environmentObject(state))
+        let hosting = NSHostingController(rootView: MenuContentView()
+            .environmentObject(state)
+            .environmentObject(updater))
         hosting.sizingOptions = [.preferredContentSize]   // popover sizes to the content
         popover.contentViewController = hosting
         // .transient dismisses on any click OUTSIDE the popover, but not while you

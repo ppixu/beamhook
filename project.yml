@@ -1,4 +1,8 @@
 name: Beamhook
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    majorVersion: 2.6.0
 options:
   bundleIdPrefix: com.github.ppixu
   deploymentTarget:
@@ -27,6 +31,7 @@ targets:
     dependencies:
       - target: BeamhookKit
         embed: true
+      - package: Sparkle
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.github.ppixu.beamhook
