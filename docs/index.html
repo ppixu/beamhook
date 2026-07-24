@@ -42,6 +42,8 @@
   .tray{position:absolute;left:auto;right:var(--tray-right);top:calc(50% - 11px);
     display:flex;align-items:center;justify-content:center;
     width:22px;height:22px;border-radius:5px;outline:none;cursor:pointer}
+  /* Keep hover active across the gap to the popup without enlarging the visible control. */
+  .tray::after{content:"";position:absolute;inset:-3px -6px -18px;background:transparent}
   .tray:hover,.tray:focus-visible{background:rgba(0,0,0,.08)}
   .tray-icon{width:14px;height:14px;display:block;
     transition:transform .28s cubic-bezier(.34,1.45,.64,1)}

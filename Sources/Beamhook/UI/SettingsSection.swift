@@ -5,7 +5,6 @@ import BeamhookKit
 /// window (AddAppWindow), not a sheet — a sheet would dismiss the menu-bar popover.
 struct SettingsSection: View {
     @EnvironmentObject var state: AppState
-    @EnvironmentObject var updater: UpdaterModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -21,15 +20,6 @@ struct SettingsSection: View {
                 Label("Add an app…", systemImage: "plus")
             }
             .controlSize(.small)
-
-            HStack(spacing: 6) {
-                Button("Check for updates…") { updater.checkForUpdates() }
-                    .controlSize(.small)
-                    .disabled(!updater.canCheckForUpdates)
-                Text("v\(updater.version)")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
 
             customAppsList
         }

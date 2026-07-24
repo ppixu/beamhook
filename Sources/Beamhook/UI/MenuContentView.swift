@@ -9,6 +9,7 @@ private struct MenuRefreshContext: Hashable {
 
 struct MenuContentView: View {
     @EnvironmentObject var state: AppState
+    @EnvironmentObject var updater: UpdaterModel
     @State private var playing: Bool?
 
     var body: some View {
@@ -105,6 +106,9 @@ struct MenuContentView: View {
                     .accessibilityHidden(true)
                 Text("Beamhook")
                     .font(.subheadline.weight(.semibold))
+                Text("v\(shortVersion)")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
                 Spacer(minLength: 8)
                 Button("Quit") { NSApplication.shared.terminate(nil) }
             }
@@ -133,6 +137,12 @@ struct MenuContentView: View {
     private var targetName: String {
         let id = state.selectedTargetID
         return state.availableApps.first { $0.id == id }?.displayName ?? "Nothing"
+    }
+
+    private var shortVersion: String {
+        let components = updater.version.split(separator: ".", omittingEmptySubsequences: false)
+        guard components.count == 3, components.last == "0" else { return updater.version }
+        return components.dropLast().joined(separator: ".")
     }
 
     private var playPauseButton: some View {

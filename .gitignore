@@ -18,3 +18,4 @@ CLAUDE.md
 # Release/distribution tooling — kept local, not published
 release.sh
 RELEASING.md
+launch-copy.md

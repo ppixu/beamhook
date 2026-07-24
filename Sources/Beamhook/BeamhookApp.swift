@@ -21,6 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let popover = NSPopover()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        updater.start()
+
         let hosting = NSHostingController(rootView: MenuContentView()
             .environmentObject(state)
             .environmentObject(updater))

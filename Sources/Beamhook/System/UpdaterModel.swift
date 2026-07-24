@@ -1,33 +1,28 @@
-import AppKit
+import Foundation
 import Combine
 import Sparkle
 
-/// Thin ObservableObject wrapper around Sparkle's standard updater so SwiftUI
-/// views can offer "Check for updates…" and disable it while a check runs.
-/// Scheduled background checks are driven by Sparkle itself (SUFeedURL /
-/// SUEnableAutomaticChecks in Info.plist).
+/// Owns Sparkle's updater and exposes the app version to SwiftUI.
 @MainActor
 final class UpdaterModel: ObservableObject {
-    private let controller = SPUStandardUpdaterController(startingUpdater: true,
+    private let controller = SPUStandardUpdaterController(startingUpdater: false,
                                                           updaterDelegate: nil,
                                                           userDriverDelegate: nil)
-
-    @Published var canCheckForUpdates = false
-
-    init() {
-        controller.updater.publisher(for: \.canCheckForUpdates)
-            .receive(on: DispatchQueue.main)
-            .assign(to: &$canCheckForUpdates)
-    }
+    private var hasStarted = false
 
     var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
     }
 
-    func checkForUpdates() {
-        // Beamhook is an agent app; bring it forward so Sparkle's update
-        // window doesn't appear behind whatever the user is doing.
-        NSApp.activate(ignoringOtherApps: true)
-        controller.checkForUpdates(nil)
+    func start() {
+        guard !hasStarted else { return }
+        hasStarted = true
+
+        controller.startUpdater()
+
+        // Sparkle recommends doing this immediately after startup when an app
+        // intentionally checks on every launch. Respect the persisted setting.
+        guard controller.updater.automaticallyChecksForUpdates else { return }
+        controller.updater.checkForUpdatesInBackground()
     }
 }
