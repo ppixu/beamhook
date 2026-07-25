@@ -15,11 +15,15 @@
 #      Security > App-Specific Passwords), then store notary credentials once:
 #        xcrun notarytool store-credentials "Beamhook-Notary" \
 #          --apple-id "you@example.com" --team-id "XXXXXXXXXX" --password "abcd-efgh-ijkl-mnop"
-#   4. (Recommended) set a real bundle id before shipping: change
-#      PRODUCT_BUNDLE_IDENTIFIER in project.yml from dev.local.Beamhook to e.g.
-#      co.yourdomain.beamhook. (Changing it means re-granting Accessibility once.)
+#
+# The shipping bundle id is com.github.ppixu.beamhook (set in project.yml). Do
+# not change it now that builds are in the wild: it would orphan every user's
+# Accessibility grant and break Sparkle's update continuity.
 #
 # Then just:  ./release.sh
+#
+# This script stops at the DMG for Gumroad. The Sparkle side — update zip and
+# signed appcast — is scripts/sign-release.sh. Full procedure: RELEASING.md.
 #
 set -euo pipefail
 cd "$(dirname "$0")"

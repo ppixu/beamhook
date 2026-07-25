@@ -363,6 +363,8 @@ final class AppState: ObservableObject {
 
     /// Rank a browser's sources with currently playing tabs first, then the selected
     /// target, then previously observed playback recency. Only three survive.
+    /// Ranking decides *which* three; the rows are then shown in name order, so
+    /// pausing a source can't make it jump past its neighbours under the cursor.
     private func recentBrowserSources(
         from candidates: [BrowserMediaCandidate],
         browser: BrowserKind
@@ -396,7 +398,13 @@ final class AppState: ObservableObject {
                 if lhsRecency != rhsRecency { return lhsRecency > rhsRecency }
                 return lhs.id < rhs.id
             }
-        let displayed = Array(ranked.prefix(3))
+        let displayed = Array(ranked.prefix(3)).sorted { lhs, rhs in
+            switch lhs.label.localizedStandardCompare(rhs.label) {
+            case .orderedAscending: return true
+            case .orderedDescending: return false
+            case .orderedSame: return lhs.id < rhs.id
+            }
+        }
 
         // Keep only the recency needed for future three-row rankings.
         let retainedIDs = Set(displayed.map(\.id))

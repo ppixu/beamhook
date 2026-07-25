@@ -15,6 +15,14 @@ one-time, includes all 1.x updates); building from source is always free.
 - Media-key routing state is synchronized between the menu and event-tap
   threads.
 
+### Changed
+
+- The chosen browser media source is now remembered for as long as that page
+  stays open, instead of being saved by tab position. Reloading the page,
+  navigating away, or quitting Beamhook clears the choice, and the menu falls
+  back to whatever is playing — a stale position could previously control an
+  unrelated tab.
+
 ### Security
 
 - Official updates now require a signed appcast and verify the archive before
