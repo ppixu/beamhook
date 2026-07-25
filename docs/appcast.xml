@@ -7,7 +7,7 @@
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
     <title>Beamhook</title>
-    <link>https://ppixu.github.io/beamhook/appcast.xml</link>
+    <link>https://beamhook.app/appcast.xml</link>
     <description>Updates for the official Beamhook build.</description>
     <language>en</language>
   </channel>
