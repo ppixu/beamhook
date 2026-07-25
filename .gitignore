@@ -20,6 +20,7 @@ release.sh
 RELEASING.md
 launch-copy.md
 
-# Built update zips — the paid binary must never land in the public repo;
-# they are uploaded to the R2 update host instead (see RELEASING.md).
+# Built distribution artifacts — the paid binary must never land in the public
+# repo; they go to Gumroad and the R2 update host instead (see RELEASING.md).
 Beamhook-*.zip
+Beamhook-*.dmg
