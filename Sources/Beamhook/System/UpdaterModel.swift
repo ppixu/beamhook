@@ -6,8 +6,8 @@ import Sparkle
 
 /// Owns Sparkle's updater and exposes the app version to SwiftUI.
 ///
-/// Auto-updating is compiled in **only for the official build** (`release.sh`
-/// defines `OFFICIAL_BUILD`). A build made from a `git clone` is signed with
+/// Auto-updating is compiled in **only for the tracked `Official` configuration**
+/// (`project.yml` defines `OFFICIAL_BUILD`). A normal source build is signed with
 /// whatever identity the builder happens to have, so it can never accept the
 /// officially signed update: Sparkle requires the replacement bundle to carry
 /// the same code-signing identity as the running app, so the update would fail

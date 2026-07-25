@@ -15,9 +15,7 @@ docs/implementation-plan.md
 # Claude Code guidance — kept local, not tracked
 CLAUDE.md
 
-# Release/distribution tooling — kept local, not published
-release.sh
-RELEASING.md
+# Local release copy/launch notes
 launch-copy.md
 
 # Built distribution artifacts — the paid binary must never land in the public

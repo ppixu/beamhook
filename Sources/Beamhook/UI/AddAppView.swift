@@ -59,6 +59,7 @@ struct AddAppView: View {
     @State private var showMore = false
     @State private var showManual = false
     @State private var copied = false
+    @State private var showScriptConfirmation = false
 
     init(prefillName: String = "", prefillBundleID: String = "") {
         _displayName = State(initialValue: prefillName)
@@ -78,6 +79,12 @@ struct AddAppView: View {
             .padding(24)
         }
         .frame(width: 460, height: 560)
+        .alert("Trust this AppleScript?", isPresented: $showScriptConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Add & hook") { addApp() }
+        } message: {
+            Text("Beamhook will run these scripts with your macOS account's permissions. Only continue if you reviewed them and trust their source.")
+        }
     }
 
     // The recommended path: let an AI figure out the settings.
@@ -91,6 +98,14 @@ struct AddAppView: View {
                     .frame(maxWidth: .infinity)
             }
             .controlSize(.large)
+
+            Label {
+                Text("Review generated scripts before pasting them. AppleScript can run shell commands and access data with your account's permissions.")
+            } icon: {
+                Image(systemName: "exclamationmark.shield")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
 
             DisclosureGroup("Prefer to do it by hand?", isExpanded: $showManual) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -129,7 +144,7 @@ struct AddAppView: View {
                 Spacer()
                 Button("Cancel") { AddAppWindow.shared.hide() }
                     .keyboardShortcut(.cancelAction)
-                Button("Add & hook") { addApp() }
+                Button("Add & hook") { showScriptConfirmation = true }
                     .keyboardShortcut(.defaultAction)
                     .disabled(displayName.isEmpty || bundleID.isEmpty || playPause.isEmpty)
             }
@@ -177,7 +192,9 @@ struct AddAppView: View {
 
         Beamhook drives NATIVE macOS apps through their AppleScript dictionary only \
         (no web/Electron apps). Using ONLY commands that exist in this app's real \
-        AppleScript dictionary (verify with: sdef /Applications/<App>.app), give me:
+        AppleScript dictionary (verify with: sdef /Applications/<App>.app), and NEVER \
+        using `do shell script`, `run script`, command-line tools, or network requests, \
+        give me:
 
         1. Bundle identifier (e.g. com.example.app).
         2. Play/Pause — a one-line AppleScript that TOGGLES playback, e.g.

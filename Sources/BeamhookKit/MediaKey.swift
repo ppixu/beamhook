@@ -1,10 +1,10 @@
 import Foundation
 
-public enum MediaCommand: Equatable {
+public enum MediaCommand: Equatable, Sendable {
     case playPause, next, previous
 }
 
-public enum MediaKey: Equatable {
+public enum MediaKey: Equatable, Sendable {
     case playPause, next, previous, fastForward, rewind, volumeUp, volumeDown, mute
 
     /// Keycodes from <IOKit/hidsystem/ev_keymap.h>.
@@ -48,7 +48,7 @@ public enum MediaKey: Equatable {
     }
 }
 
-public struct MediaKeyEvent: Equatable {
+public struct MediaKeyEvent: Equatable, Sendable {
     public let key: MediaKey
     public let isDown: Bool
     public let isRepeat: Bool

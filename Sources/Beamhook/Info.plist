@@ -26,5 +26,9 @@
     <string>sUl1DVwVvgH/iR0NDfmPAYSQ2L5EriTwsi0AFzA7Ieg=</string>
     <key>SUEnableAutomaticChecks</key>
     <true/>
+    <key>SUVerifyUpdateBeforeExtraction</key>
+    <true/>
+    <key>SURequireSignedFeed</key>
+    <true/>
 </dict>
 </plist>

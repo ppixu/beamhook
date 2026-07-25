@@ -9,19 +9,34 @@ private let kSystemDefinedEventType: UInt32 = 14
 /// Threading contract: the public methods (start/stop/ensureEnabled/recreate, isEnabled)
 /// are expected to be called from the main thread (AppState/TapWatchdog do so). All
 /// mutation of the tap state (eventTap/runLoopSource) is marshalled onto the tap thread
-/// via performOnTapThread; the callback runs on the tap thread. Do not call the public
-/// methods concurrently from multiple threads.
-final class MediaKeyTap {
+/// via performOnTapThread; the callback runs on the tap thread. Cross-thread routing
+/// flags and the run-loop handoff are protected by `stateLock`.
+final class MediaKeyTap: @unchecked Sendable {
     typealias Handler = (MediaKey) -> Void
 
+    private struct RoutingState {
+        var transportKeysHijacked = true
+        var volumeKeysHijacked = false
+    }
+
     private let handler: Handler
+    private let stateLock = NSLock()
+    private var routingState = RoutingState()
+
     /// Browser targets leave transport keys to macOS until tab injection is
     /// available; all other targets keep Beamhook's exclusive routing.
-    var transportKeysHijacked = true
+    var transportKeysHijacked: Bool {
+        get { withStateLock { routingState.transportKeysHijacked } }
+        set { withStateLock { routingState.transportKeysHijacked = newValue } }
+    }
+
     /// When true, hardware volume up/down keys are swallowed and forwarded to the
-    /// target app instead of the system. Set from the main thread; read on the tap
-    /// thread — a plain Bool is safe here (single-word, tolerates a one-tick stale read).
-    var volumeKeysHijacked = false
+    /// target app instead of the system.
+    var volumeKeysHijacked: Bool {
+        get { withStateLock { routingState.volumeKeysHijacked } }
+        set { withStateLock { routingState.volumeKeysHijacked = newValue } }
+    }
+
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var thread: Thread?
@@ -42,9 +57,11 @@ final class MediaKeyTap {
     }
 
     private func threadMain() {
-        threadRunLoop = CFRunLoopGetCurrent()
+        let runLoop = CFRunLoopGetCurrent()
+        withStateLock { threadRunLoop = runLoop }
         createTap()
         CFRunLoopRun()
+        withStateLock { threadRunLoop = nil }
     }
 
     private func createTap() {
@@ -65,7 +82,7 @@ final class MediaKeyTap {
             NSLog("MediaKeyTap: failed to create tap — Accessibility not granted?")
             return
         }
-        eventTap = tap
+        withStateLock { eventTap = tap }
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         runLoopSource = source
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
@@ -75,7 +92,9 @@ final class MediaKeyTap {
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         // System disabled the tap — re-enable and keep the event.
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: true) }
+            if let tap = withStateLock({ eventTap }) {
+                CGEvent.tapEnable(tap: tap, enable: true)
+            }
             return Unmanaged.passUnretained(event)
         }
 
@@ -140,7 +159,7 @@ final class MediaKeyTap {
     }
 
     var isEnabled: Bool {
-        guard let tap = eventTap else { return false }
+        guard let tap = withStateLock({ eventTap }) else { return false }
         return CGEvent.tapIsEnabled(tap: tap)
     }
 
@@ -148,7 +167,7 @@ final class MediaKeyTap {
     func ensureEnabled() {
         performOnTapThread { [weak self] in
             guard let self else { return }
-            if let tap = self.eventTap {
+            if let tap = self.withStateLock({ self.eventTap }) {
                 if !CGEvent.tapIsEnabled(tap: tap) { CGEvent.tapEnable(tap: tap, enable: true) }
             } else {
                 self.createTap()
@@ -164,7 +183,7 @@ final class MediaKeyTap {
                 CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
             }
             self.runLoopSource = nil
-            self.eventTap = nil
+            self.withStateLock { self.eventTap = nil }
             self.createTap()
         }
     }
@@ -172,21 +191,32 @@ final class MediaKeyTap {
     func stop() {
         performOnTapThread { [weak self] in
             guard let self else { return }
-            if let tap = self.eventTap { CGEvent.tapEnable(tap: tap, enable: false) }
+            if let tap = self.withStateLock({ self.eventTap }) {
+                CGEvent.tapEnable(tap: tap, enable: false)
+            }
             if let source = self.runLoopSource {
                 CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
             }
             CFRunLoopStop(CFRunLoopGetCurrent())
             self.runLoopSource = nil
-            self.eventTap = nil
-            self.threadRunLoop = nil
+            self.withStateLock {
+                self.eventTap = nil
+                self.threadRunLoop = nil
+            }
         }
         thread = nil
     }
 
     private func performOnTapThread(_ block: @escaping () -> Void) {
-        guard let rl = threadRunLoop else { return }
+        guard let rl = withStateLock({ threadRunLoop }) else { return }
         CFRunLoopPerformBlock(rl, CFRunLoopMode.commonModes.rawValue, block)
         CFRunLoopWakeUp(rl)
+    }
+
+    @discardableResult
+    private func withStateLock<T>(_ body: () throws -> T) rethrows -> T {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return try body()
     }
 }

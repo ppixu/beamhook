@@ -25,7 +25,8 @@ Beamhook makes your Mac's media keys predictable. It sends play/pause,
 next, and previous to **one app you choose** — so macOS can't redirect them
 to Apple Music, YouTube, or whichever player it remembers. It also lets you
 control the volume of apps that are currently playing audio, when the app
-supports AppleScript. Requires macOS 14.2 or later; tested on macOS Tahoe 26.5.
+supports AppleScript. Requires macOS 14.0 or later; the active-audio source list
+requires macOS 14.2. Tested on macOS Tahoe 26.5.
 
 ## Features
 

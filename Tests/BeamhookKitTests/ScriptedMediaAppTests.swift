@@ -87,6 +87,18 @@ final class ScriptedMediaAppTests: XCTestCase {
         XCTAssertNil(app.currentVolume())
     }
 
+    func testCurrentVolumeRejectsNonFiniteScriptOutput() {
+        let presence = MockPresence()
+        presence.runningBundleIDs = ["org.videolan.vlc"]
+
+        for output in ["nan", "inf", "-inf"] {
+            let exec = MockScriptExecutor()
+            exec.cannedOutput = output
+            let app = makeVLC(executor: exec, presence: presence)
+            XCTAssertNil(app.currentVolume(), "output: \(output)")
+        }
+    }
+
     private func makeSpotify(executor: MockScriptExecutor, presence: MockPresence) -> ScriptedMediaApp {
         ScriptedMediaApp(definition: BuiltInApps.spotify, executor: executor, presence: presence)
     }

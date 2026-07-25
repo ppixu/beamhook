@@ -2,7 +2,11 @@ name: Beamhook
 packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
-    majorVersion: 2.6.0
+    exactVersion: 2.9.4
+configs:
+  Debug: debug
+  Release: release
+  Official: release
 options:
   bundleIdPrefix: com.github.ppixu
   deploymentTarget:
@@ -11,8 +15,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "4"
+    MARKETING_VERSION: "1.1.1"
+    CURRENT_PROJECT_VERSION: "5"
     CODE_SIGN_STYLE: Automatic
     ARCHS: "$(ARCHS_STANDARD)"
 targets:
@@ -45,17 +49,29 @@ targets:
         # (b) carries com.apple.security.get-task-allow. Xcode omits the
         # timestamp and *injects* get-task-allow for plain `xcodebuild build`,
         # so Release must opt out of both — otherwise Apple returns "Invalid".
-        # Release-only: Debug keeps get-task-allow so the debugger can attach.
+        # Distribution configs only: Debug keeps get-task-allow so the debugger
+        # can attach. `Official` additionally compiles in Sparkle.
         Release:
           CODE_SIGN_ENTITLEMENTS: Sources/Beamhook/Beamhook-Release.entitlements
           CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
           OTHER_CODE_SIGN_FLAGS: "--timestamp"
+        Official:
+          CODE_SIGN_ENTITLEMENTS: Sources/Beamhook/Beamhook-Release.entitlements
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+          OTHER_CODE_SIGN_FLAGS: "--timestamp"
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) OFFICIAL_BUILD"
   BeamhookKitTests:
     type: bundle.unit-test
     platform: macOS
     sources: [Tests/BeamhookKitTests]
     dependencies:
       - target: BeamhookKit
+  BeamhookTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [Tests/BeamhookTests]
+    dependencies:
+      - target: Beamhook
 schemes:
   BeamhookKit:
     build:
@@ -70,3 +86,7 @@ schemes:
         Beamhook: all
     run:
       config: Debug
+    test:
+      targets: [BeamhookTests]
+    archive:
+      config: Official

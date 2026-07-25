@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ScriptResult {
+public struct ScriptResult: Sendable {
     public let output: String?
     public let succeeded: Bool
     public init(output: String?, succeeded: Bool) {

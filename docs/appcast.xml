@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Sparkle update feed for the official (Gumroad) Beamhook build.
-  Items are appended by scripts/sign-release.sh; the enclosure URLs point at
-  the private update host, not this repo. An empty channel means "up to date".
+  This file is regenerated and signed by scripts/sign-release.sh; the enclosure
+  URLs point at the private update host, not this repo. Do not edit a generated
+  feed by hand because any change invalidates its signed-feed metadata.
 -->
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>

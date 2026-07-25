@@ -44,7 +44,8 @@ public final class ScriptedMediaApp: MediaApp, @unchecked Sendable {
         let result = executor.run(getScript)
         guard result.succeeded,
               let out = result.output?.trimmingCharacters(in: .whitespacesAndNewlines),
-              let raw = Double(out) else { return nil }
+              let raw = Double(out),
+              raw.isFinite else { return nil }
         return VolumeScale.toPercent(raw: raw, kind: definition.volumeScaleKind)
     }
 

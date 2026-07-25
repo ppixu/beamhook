@@ -69,16 +69,17 @@ enum BrowserKind: String, CaseIterable, Sendable {
 
 struct BrowserMediaCandidate: Identifiable, Hashable, Sendable {
     let browser: BrowserKind
-    let windowIndex: Int
-    let tabIndex: Int
+    /// Random identifier owned by the current page. Unlike browser window/tab
+    /// indexes, it remains stable when the user reorders tabs and is discarded
+    /// on cross-origin navigation rather than ever pointing at a different page.
+    let sourceID: String
     let title: String
     let artist: String
-    let url: String
     let isPlaying: Bool
     let isSelected: Bool
     var volume: Int?
 
-    var id: String { "\(browser.rawValue):\(windowIndex):\(tabIndex)" }
+    var id: String { "\(browser.rawValue):\(sourceID)" }
     var label: String { artist.isEmpty ? title : "\(title) — \(artist)" }
 }
 
@@ -90,15 +91,19 @@ struct BrowserMediaScan: Sendable {
 /// Discovers media-bearing tabs and marks one tab for the static browser command
 /// scripts in BeamhookKit. Runs only on a ScriptRunner queue.
 final class BrowserMediaController: @unchecked Sendable {
-    private let executor = AppleScriptExecutor()
+    private let executor: ScriptExecuting
 
     private struct Payload: Decodable {
+        let sourceID: String
         let title: String
         let artist: String
-        let url: String
         let playing: Bool
         let selected: Bool
         let volume: Int?
+    }
+
+    init(executor: ScriptExecuting = AppleScriptExecutor()) {
+        self.executor = executor
     }
 
     func scan(_ browser: BrowserKind) -> BrowserMediaScan {
@@ -113,11 +118,17 @@ final class BrowserMediaController: @unchecked Sendable {
             guard fields.count == 3,
                   let window = Int(fields[0]), let tab = Int(fields[1]),
                   let data = String(fields[2]).data(using: .utf8),
-                  let payload = try? JSONDecoder().decode(Payload.self, from: data)
+                  let payload = try? JSONDecoder().decode(Payload.self, from: data),
+                  Self.isValidSourceID(payload.sourceID)
             else { return nil }
+            // Parsing the indexes validates the row format, but deliberately do
+            // not retain them: positions are not identities and must never be
+            // used by a later action after the browser can have reordered tabs.
+            _ = window
+            _ = tab
             return BrowserMediaCandidate(
-                browser: browser, windowIndex: window, tabIndex: tab,
-                title: payload.title, artist: payload.artist, url: payload.url,
+                browser: browser, sourceID: payload.sourceID,
+                title: payload.title, artist: payload.artist,
                 isPlaying: payload.playing, isSelected: payload.selected,
                 volume: payload.volume.map { min(max($0, 0), 100) })
         }
@@ -134,7 +145,7 @@ final class BrowserMediaController: @unchecked Sendable {
 
     private func scanScript(_ browser: BrowserKind) -> String {
         let js = """
-        (() => { const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; const md = navigator.mediaSession && navigator.mediaSession.metadata; if (!m && !md) return null; return JSON.stringify({title:(md && md.title) || document.title || location.hostname,artist:(md && md.artist) || '',url:location.href,playing:m ? (!m.paused && !m.ended) : navigator.mediaSession.playbackState === 'playing',selected:sessionStorage.getItem('beamhook-selected') === '1',volume:m ? Math.round(m.volume * 100) : null}); })()
+        (() => { const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; const md = navigator.mediaSession && navigator.mediaSession.metadata; if (!m && !md) return null; const key = '__beamhookSourceID_v1'; const makeID = () => globalThis.crypto && globalThis.crypto.randomUUID ? globalThis.crypto.randomUUID() : [Date.now().toString(36), Math.random().toString(36).slice(2)].join('-'); const sourceID = globalThis[key] || (globalThis[key] = makeID()); return JSON.stringify({sourceID,title:(md && md.title) || document.title || location.hostname,artist:(md && md.artist) || '',playing:m ? (!m.paused && !m.ended) : navigator.mediaSession.playbackState === 'playing',selected:sessionStorage.getItem('beamhook-selected') === '1',volume:m ? Math.round(m.volume * 100) : null}); })()
         """
         let evaluate = browser == .safari
             ? "do JavaScript javascriptSource in candidateTab"
@@ -171,42 +182,62 @@ final class BrowserMediaController: @unchecked Sendable {
     private func volumeScript(_ percent: Int, candidate: BrowserMediaCandidate) -> String {
         let clamped = min(max(percent, 0), 100)
         let js = """
-        (() => { const all = Array.from(document.querySelectorAll('video,audio')); const active = all.filter(x => !x.paused && !x.ended); const targets = active.length ? active : (all[0] ? [all[0]] : []); targets.forEach(x => { x.volume = \(clamped) / 100; if (\(clamped) > 0) x.muted = false; }); return targets.length > 0; })()
+        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; const all = Array.from(document.querySelectorAll('video,audio')); const active = all.filter(x => !x.paused && !x.ended); const targets = active.length ? active : (all[0] ? [all[0]] : []); targets.forEach(x => { x.volume = \(clamped) / 100; if (\(clamped) > 0) x.muted = false; }); return targets.length > 0 ? 'MATCH' : 'NO'; })()
         """
         let evaluate = candidate.browser == .safari
-            ? "do JavaScript javascriptSource in targetTab"
-            : "execute targetTab javascript javascriptSource"
+            ? "do JavaScript javascriptSource in candidateTab"
+            : "execute candidateTab javascript javascriptSource"
         return """
         set javascriptSource to "\(js)"
-        tell application "\(candidate.browser.applicationName)"
-            set targetTab to tab \(candidate.tabIndex) of window \(candidate.windowIndex)
-            \(evaluate)
-        end tell
-        """
-    }
-
-    private func selectionScript(_ candidate: BrowserMediaCandidate) -> String {
-        let clear: String
-        let set: String
-        if candidate.browser == .safari {
-            clear = "do JavaScript \"sessionStorage.removeItem('beamhook-selected'); true\" in candidateTab"
-            set = "do JavaScript \"sessionStorage.setItem('beamhook-selected','1'); true\" in targetTab"
-        } else {
-            clear = "execute candidateTab javascript \"sessionStorage.removeItem('beamhook-selected'); true\""
-            set = "execute targetTab javascript \"sessionStorage.setItem('beamhook-selected','1'); true\""
-        }
-        return """
+        set targetFound to false
         tell application "\(candidate.browser.applicationName)"
             repeat with browserWindow in windows
                 repeat with candidateTab in tabs of browserWindow
                     try
-                        \(clear)
+                        set actionResult to \(evaluate)
+                        if actionResult is "MATCH" then set targetFound to true
                     end try
                 end repeat
             end repeat
-            set targetTab to tab \(candidate.tabIndex) of window \(candidate.windowIndex)
-            \(set)
         end tell
+        if targetFound is false then error "Selected browser media source is no longer available"
+        return true
         """
+    }
+
+    private func selectionScript(_ candidate: BrowserMediaCandidate) -> String {
+        let evaluate: String
+        if candidate.browser == .safari {
+            evaluate = "do JavaScript javascriptSource in candidateTab"
+        } else {
+            evaluate = "execute candidateTab javascript javascriptSource"
+        }
+        let js = """
+        (() => { const key = '__beamhookSourceID_v1'; const matches = globalThis[key] === '\(candidate.sourceID)'; if (matches) sessionStorage.setItem('beamhook-selected','1'); else sessionStorage.removeItem('beamhook-selected'); return matches ? 'MATCH' : 'NO'; })()
+        """
+        return """
+        set javascriptSource to "\(js)"
+        set targetFound to false
+        tell application "\(candidate.browser.applicationName)"
+            repeat with browserWindow in windows
+                repeat with candidateTab in tabs of browserWindow
+                    try
+                        set actionResult to \(evaluate)
+                        if actionResult is "MATCH" then set targetFound to true
+                    end try
+                end repeat
+            end repeat
+        end tell
+        if targetFound is false then error "Selected browser media source is no longer available"
+        return true
+        """
+    }
+
+    private static func isValidSourceID(_ value: String) -> Bool {
+        guard (8...64).contains(value.utf8.count) else { return false }
+        return value.utf8.allSatisfy {
+            ($0 >= 48 && $0 <= 57) || ($0 >= 65 && $0 <= 90)
+                || ($0 >= 97 && $0 <= 122) || $0 == 45
+        }
     }
 }

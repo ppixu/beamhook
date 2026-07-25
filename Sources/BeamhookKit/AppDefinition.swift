@@ -1,6 +1,6 @@
 import Foundation
 
-public struct AppDefinition: Codable, Identifiable, Equatable {
+public struct AppDefinition: Codable, Identifiable, Equatable, Sendable {
     public var id: String
     public var displayName: String
     public var bundleID: String

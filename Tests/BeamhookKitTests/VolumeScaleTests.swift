@@ -35,4 +35,21 @@ final class VolumeScaleTests: XCTestCase {
         XCTAssertEqual(VolumeScale.rawString(fromPercent: 150, kind: .integer(max: 100)), "100")
         XCTAssertEqual(VolumeScale.rawString(fromPercent: -10, kind: .integer(max: 100)), "0")
     }
+
+    func testNonFiniteRawValuesReturnNil() {
+        for raw in [Double.nan, Double.infinity, -Double.infinity] {
+            XCTAssertNil(VolumeScale.toPercent(raw: raw, kind: .integer(max: 100)))
+            XCTAssertNil(VolumeScale.toPercent(raw: raw, kind: .unitFloat))
+        }
+    }
+
+    func testExtremeFiniteValuesClampWithoutOverflow() {
+        XCTAssertEqual(VolumeScale.toPercent(raw: Double.greatestFiniteMagnitude,
+                                             kind: .integer(max: 100)), 100)
+        XCTAssertEqual(VolumeScale.toPercent(raw: -Double.greatestFiniteMagnitude,
+                                             kind: .unitFloat), 0)
+        XCTAssertEqual(VolumeScale.rawString(fromPercent: 100,
+                                             kind: .integer(max: Int.max)),
+                       String(Int.max))
+    }
 }

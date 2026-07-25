@@ -4,6 +4,24 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.1.1] — 2026-07-25
+
+### Fixed
+
+- Browser controls now keep targeting the same media source when tabs or
+  windows are reordered, and safely stop if that source navigates away.
+- Invalid non-finite volume values from an app's AppleScript no longer crash
+  Beamhook.
+- Media-key routing state is synchronized between the menu and event-tap
+  threads.
+
+### Security
+
+- Official updates now require a signed appcast and verify the archive before
+  extraction. Sparkle is pinned to 2.9.4 for reproducible release builds.
+- Adding custom AppleScript now clearly warns that scripts run with the user's
+  permissions and asks for confirmation before hooking the app.
+
 ## [1.1.0] — 2026-07-25
 
 ### Added
@@ -47,7 +65,8 @@ YouTube tab.
 - Menu-bar popover shows what's actually playing, pins the hooked app to the
   top of the list, and offers one-click Hook/Unhook per app.
 
-Requires macOS 14.2 or later.
+Requires macOS 14.0 or later. The active-audio source list requires macOS 14.2.
 
+[1.1.1]: https://github.com/ppixu/beamhook/releases/tag/v1.1.1
 [1.1.0]: https://github.com/ppixu/beamhook/releases/tag/v1.1.0
 [1.0.0]: https://github.com/ppixu/beamhook/releases/tag/v1.0.0

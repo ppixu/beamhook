@@ -37,7 +37,7 @@ TARGETS=(
 )
 
 for t in "${TARGETS[@]}"; do
-  [ -e "$t" ] || { echo "  skip (absent): ${t#$APP/}"; continue; }
+  [ -e "$t" ] || { echo "  skip (absent): ${t#"$APP"/}"; continue; }
   # Preserve any entitlements the component already declares, so re-signing
   # Sparkle's helpers cannot silently strip a capability they rely on.
   ents=$(mktemp -t deepsign).plist
@@ -49,7 +49,7 @@ for t in "${TARGETS[@]}"; do
     codesign --force --timestamp --options runtime --sign "$ID" "$t"
   fi
   rm -f "$ents"
-  echo "  signed: ${t#$APP/}"
+  echo "  signed: ${t#"$APP"/}"
 done
 
 # The app last, with its release entitlements (apple-events, no get-task-allow).

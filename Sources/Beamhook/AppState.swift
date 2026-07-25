@@ -271,9 +271,10 @@ final class AppState: ObservableObject {
             return
         }
 
-        let storedID = UserDefaults.standard.string(forKey: "browserMediaSelection.\(browser.rawValue)")
+        // Older builds persisted window/tab indexes. Those are positions, not
+        // identities, and can point at a different tab after any reordering.
+        UserDefaults.standard.removeObject(forKey: "browserMediaSelection.\(browser.rawValue)")
         let chosen = scan.candidates.first(where: { $0.isSelected })
-            ?? scan.candidates.first(where: { $0.id == storedID })
             ?? scan.candidates.first(where: { $0.isPlaying })
             ?? scan.candidates.first
         selectedBrowserMediaID = chosen?.id
@@ -287,7 +288,6 @@ final class AppState: ObservableObject {
     func selectBrowserMedia(_ id: String) {
         guard let candidate = browserMediaCandidates.first(where: { $0.id == id }) else { return }
         selectedBrowserMediaID = id
-        UserDefaults.standard.set(id, forKey: "browserMediaSelection.\(candidate.browser.rawValue)")
         Task {
             _ = await scripting.run { [browserMediaController] in
                 browserMediaController.select(candidate)
