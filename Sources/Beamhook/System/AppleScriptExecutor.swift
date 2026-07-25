@@ -28,7 +28,7 @@ final class AppleScriptExecutor: ScriptExecuting {
     }
 }
 
-enum BrowserKind: String, Sendable {
+enum BrowserKind: String, CaseIterable, Sendable {
     case safari, chrome, brave, arc, vivaldi
 
     static func target(id: String?) -> BrowserKind? {
@@ -40,6 +40,10 @@ enum BrowserKind: String, Sendable {
         case "vivaldi-youtube": return .vivaldi
         default: return nil
         }
+    }
+
+    static func browser(bundleID: String) -> BrowserKind? {
+        allCases.first { $0.bundleID == bundleID }
     }
 
     var applicationName: String {
@@ -72,6 +76,7 @@ struct BrowserMediaCandidate: Identifiable, Hashable, Sendable {
     let url: String
     let isPlaying: Bool
     let isSelected: Bool
+    var volume: Int?
 
     var id: String { "\(browser.rawValue):\(windowIndex):\(tabIndex)" }
     var label: String { artist.isEmpty ? title : "\(title) — \(artist)" }
@@ -93,6 +98,7 @@ final class BrowserMediaController: @unchecked Sendable {
         let url: String
         let playing: Bool
         let selected: Bool
+        let volume: Int?
     }
 
     func scan(_ browser: BrowserKind) -> BrowserMediaScan {
@@ -112,7 +118,8 @@ final class BrowserMediaController: @unchecked Sendable {
             return BrowserMediaCandidate(
                 browser: browser, windowIndex: window, tabIndex: tab,
                 title: payload.title, artist: payload.artist, url: payload.url,
-                isPlaying: payload.playing, isSelected: payload.selected)
+                isPlaying: payload.playing, isSelected: payload.selected,
+                volume: payload.volume.map { min(max($0, 0), 100) })
         }
         return BrowserMediaScan(injectionAvailable: true, candidates: candidates)
     }
@@ -121,9 +128,13 @@ final class BrowserMediaController: @unchecked Sendable {
         executor.run(selectionScript(candidate)).succeeded
     }
 
+    func setVolume(_ percent: Int, for candidate: BrowserMediaCandidate) -> Bool {
+        executor.run(volumeScript(percent, candidate: candidate)).succeeded
+    }
+
     private func scanScript(_ browser: BrowserKind) -> String {
         let js = """
-        (() => { const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; const md = navigator.mediaSession && navigator.mediaSession.metadata; if (!m && !md) return null; return JSON.stringify({title:(md && md.title) || document.title || location.hostname,artist:(md && md.artist) || '',url:location.href,playing:m ? (!m.paused && !m.ended) : navigator.mediaSession.playbackState === 'playing',selected:sessionStorage.getItem('beamhook-selected') === '1'}); })()
+        (() => { const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; const md = navigator.mediaSession && navigator.mediaSession.metadata; if (!m && !md) return null; return JSON.stringify({title:(md && md.title) || document.title || location.hostname,artist:(md && md.artist) || '',url:location.href,playing:m ? (!m.paused && !m.ended) : navigator.mediaSession.playbackState === 'playing',selected:sessionStorage.getItem('beamhook-selected') === '1',volume:m ? Math.round(m.volume * 100) : null}); })()
         """
         let evaluate = browser == .safari
             ? "do JavaScript javascriptSource in candidateTab"
@@ -154,6 +165,23 @@ final class BrowserMediaController: @unchecked Sendable {
         set AppleScript's text item delimiters to oldDelimiters
         if joinedRows is "" then return "OK"
         return "OK" & linefeed & joinedRows
+        """
+    }
+
+    private func volumeScript(_ percent: Int, candidate: BrowserMediaCandidate) -> String {
+        let clamped = min(max(percent, 0), 100)
+        let js = """
+        (() => { const all = Array.from(document.querySelectorAll('video,audio')); const active = all.filter(x => !x.paused && !x.ended); const targets = active.length ? active : (all[0] ? [all[0]] : []); targets.forEach(x => { x.volume = \(clamped) / 100; if (\(clamped) > 0) x.muted = false; }); return targets.length > 0; })()
+        """
+        let evaluate = candidate.browser == .safari
+            ? "do JavaScript javascriptSource in targetTab"
+            : "execute targetTab javascript javascriptSource"
+        return """
+        set javascriptSource to "\(js)"
+        tell application "\(candidate.browser.applicationName)"
+            set targetTab to tab \(candidate.tabIndex) of window \(candidate.windowIndex)
+            \(evaluate)
+        end tell
         """
     }
 

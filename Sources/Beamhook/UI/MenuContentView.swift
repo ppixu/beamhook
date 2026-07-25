@@ -19,7 +19,10 @@ struct MenuContentView: View {
                 Divider()
             }
 
-            Text("Hook media keys to:").font(.caption).foregroundStyle(.secondary)
+            Text("Hook media keys to:")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
             Menu {
                 Button {
                     playing = nil
@@ -190,6 +193,17 @@ private struct PlayingAppsListAvailable: View {
         return state.availableApps.first { $0.id == id }?.bundleID
     }
 
+    private var activeBrowserBundleIDs: Set<String> {
+        Set(monitor.playingApps.compactMap {
+            BrowserKind.browser(bundleID: $0.bundleID)?.bundleID
+        })
+    }
+
+    private var browserRefreshID: String {
+        ([state.isMenuVisible ? "visible" : "hidden"] + activeBrowserBundleIDs.sorted())
+            .joined(separator: ":")
+    }
+
     /// What to show, deduplicated with currently-playing apps first:
     ///   1. apps with a live audio stream (from Core Audio), plus
     ///   2. known volume-scriptable apps (Spotify, Apple Music, VLC, …) that are
@@ -243,6 +257,16 @@ private struct PlayingAppsListAvailable: View {
                 monitor.stop()
             }
         }
+        .task(id: browserRefreshID) {
+            guard state.isMenuVisible else {
+                await state.refreshActiveBrowserMedia(bundleIDs: [])
+                return
+            }
+            while !Task.isCancelled {
+                await state.refreshActiveBrowserMedia(bundleIDs: activeBrowserBundleIDs)
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+            }
+        }
         .onDisappear { monitor.stop() }
     }
 }
@@ -260,14 +284,29 @@ private struct AppVolumeRow: View {
         return def.bundleID == playing.bundleID
     }
 
+    private var isBrowser: Bool {
+        BrowserKind.browser(bundleID: playing.bundleID) != nil
+    }
+
+    private var browserSources: [BrowserMediaCandidate] {
+        guard let browser = BrowserKind.browser(bundleID: playing.bundleID) else { return [] }
+        // AppState has already ranked and capped each browser's sources by recency.
+        return state.activeBrowserMediaCandidates.filter { $0.browser == browser }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
+            HStack(spacing: 6) {
                 // The hooked app's title is fully opaque; the rest sit back a bit.
                 Text(playing.displayName).font(.subheadline)
                     .opacity(isTarget ? 1 : 0.55)
-                Spacer()
+                    .lineLimit(1)
+                Spacer(minLength: 2)
+                // Browsers expose multiple independently controllable media sources,
+                // so their volume always lives in the named child rows below.
+                if scriptable && !isTarget && !isBrowser {
+                    compactSlider
+                }
                 Button(isTarget ? "Unhook" : "Hook") {
                     if isTarget {
                         state.setTarget(nil)
@@ -280,37 +319,29 @@ private struct AppVolumeRow: View {
                     .help(isTarget ? "Return media-key control to macOS"
                                    : "Send the media keys to this app")
             }
-            if scriptable && isTarget {
+            if scriptable && isTarget && !isBrowser {
                 Slider(value: $volume, in: 0...100) { editing in
                     if !editing { state.setVolume(Int(volume), for: playing.bundleID) }
                 }
-                HStack(spacing: 6) {
-                    Toggle("Volume keys", isOn: Binding(
-                        get: { state.volumeKeysEnabled(bundleID: playing.bundleID) },
-                        set: { state.setVolumeKeysEnabled($0, bundleID: playing.bundleID) }))
-                        .toggleStyle(.checkbox)
-                        .controlSize(.small)
-                        .font(.caption)
-                        .help("Route the hardware volume keys to this app while it's the hooked target")
-                    if state.volumeKeysEnabled(bundleID: playing.bundleID) {
-                        HStack(spacing: 2) {
-                            Text("⌘ +")
-                            Image(systemName: "speaker.wave.2.fill")
-                            Text("for system")
-                        }
-                        .font(.system(size: 9))
-                        .foregroundStyle(.tertiary)
-                        .fixedSize()
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Command plus Volume for system")
-                    }
-                }
-            } else if isTarget {
+                volumeKeyControls
+            } else if isTarget && !isBrowser && browserSources.isEmpty {
                 Text("system volume only").font(.caption2).foregroundStyle(.secondary)
+            }
+            ForEach(browserSources) { candidate in
+                BrowserVolumeRow(candidate: candidate)
+            }
+            if scriptable && isTarget && isBrowser {
+                volumeKeyControls
             }
         }
         .task(id: state.isMenuVisible) {
             guard state.isMenuVisible else { return }
+            if isBrowser {
+                // Browser volume is source-specific. We only need the capability
+                // flag here; BrowserVolumeRow obtains each source's live volume.
+                scriptable = state.volumeScriptable(bundleID: playing.bundleID)
+                return
+            }
             if let cached = state.volumeByBundle[playing.bundleID] {
                 volume = Double(cached); scriptable = true
             } else {
@@ -327,6 +358,41 @@ private struct AppVolumeRow: View {
         }
     }
 
+    private var compactSlider: some View {
+        Slider(value: $volume, in: 0...100) { editing in
+            if !editing { state.setVolume(Int(volume), for: playing.bundleID) }
+        }
+        .controlSize(.mini)
+        .tint(.gray)
+        .frame(width: 52)
+        .accessibilityLabel("\(playing.displayName) volume")
+        .help("\(playing.displayName) volume: \(Int(volume))%")
+    }
+
+    private var volumeKeyControls: some View {
+        HStack(spacing: 6) {
+            Toggle("Volume keys", isOn: Binding(
+                get: { state.volumeKeysEnabled(bundleID: playing.bundleID) },
+                set: { state.setVolumeKeysEnabled($0, bundleID: playing.bundleID) }))
+                .toggleStyle(.checkbox)
+                .controlSize(.small)
+                .font(.caption)
+                .help("Route the hardware volume keys to this app while it's the hooked target")
+            if state.volumeKeysEnabled(bundleID: playing.bundleID) {
+                HStack(spacing: 2) {
+                    Text("⌘ +")
+                    Image(systemName: "speaker.wave.2.fill")
+                    Text("for system")
+                }
+                .font(.system(size: 9))
+                .foregroundStyle(.tertiary)
+                .fixedSize()
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Command plus Volume for system")
+            }
+        }
+    }
+
     /// Hook the media keys to this app. If it's a known app, just select it;
     /// otherwise open the Add-an-app window prefilled with its details.
     private func hook() {
@@ -336,6 +402,45 @@ private struct AppVolumeRow: View {
             AddAppWindow.shared.show(state: state,
                                      prefillName: playing.displayName,
                                      prefillBundleID: playing.bundleID)
+        }
+    }
+}
+
+@available(macOS 14.2, *)
+private struct BrowserVolumeRow: View {
+    @EnvironmentObject var state: AppState
+    let candidate: BrowserMediaCandidate
+    @State private var volume: Double = 50
+    @State private var isEditing = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(candidate.label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .help(candidate.label)
+            Spacer(minLength: 2)
+            Slider(value: $volume, in: 0...100) { editing in
+                isEditing = editing
+                if !editing {
+                    state.setBrowserVolume(Int(volume), for: candidate)
+                }
+            }
+            .controlSize(.mini)
+            .tint(.gray)
+            .frame(width: 58)
+            .accessibilityLabel("\(candidate.label) volume")
+            .help(candidate.isPlaying
+                  ? "\(candidate.label) volume: \(Int(volume))%"
+                  : "\(candidate.label) volume while paused: \(Int(volume))%")
+        }
+        .padding(.leading, 8)
+        .task(id: candidate.id) {
+            if let value = candidate.volume { volume = Double(value) }
+        }
+        .onChange(of: candidate.volume) { _, newValue in
+            if !isEditing, let newValue { volume = Double(newValue) }
         }
     }
 }

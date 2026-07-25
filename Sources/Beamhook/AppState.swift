@@ -22,6 +22,11 @@ final class AppState: ObservableObject {
     /// against a wedged target can never sit in front of a user's key press.
     private let pollRunner = ScriptRunner()
     private let browserMediaController = BrowserMediaController()
+    /// Per-browser playback recency used to keep the menu bounded to the three
+    /// most relevant source tabs even when a browser has hundreds of media tabs.
+    private var browserSourceRecency: [String: UInt64] = [:]
+    private var playingBrowserSourceIDs = Set<String>()
+    private var browserSourceRecencySequence: UInt64 = 0
     /// Coalescing state for volume-key repeats (main-actor isolated → race-free):
     /// each key press bumps `pendingVolumeSteps`; a single drain task applies the
     /// net delta off-main, so a held key never stacks up blocked Apple-event sends.
@@ -46,6 +51,9 @@ final class AppState: ObservableObject {
     @Published var browserTargetRunning: Bool?
     @Published var browserMediaCandidates: [BrowserMediaCandidate] = []
     @Published var selectedBrowserMediaID: String?
+    /// Volume-controllable browser tabs for browsers whose Core Audio process
+    /// currently has an output stream. Populated only while the menu is visible.
+    @Published var activeBrowserMediaCandidates: [BrowserMediaCandidate] = []
     /// Whether the current output device's volume is adjustable. Informational only
     /// (drives a UI hint); it does NOT auto-enable the volume-key hijack.
     @Published private(set) var outputVolumeControllable: Bool = true
@@ -288,6 +296,108 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Discover volume-controllable tabs in browsers that Core Audio currently
+    /// reports as producing output. The selected browser's regular scan is reused
+    /// when possible so opening the menu doesn't send duplicate Apple events.
+    func refreshActiveBrowserMedia(bundleIDs: Set<String>) async {
+        let browsers = BrowserKind.allCases.filter { bundleIDs.contains($0.bundleID) }
+        guard !browsers.isEmpty else {
+            activeBrowserMediaCandidates = []
+            browserSourceRecency = [:]
+            playingBrowserSourceIDs = []
+            return
+        }
+
+        let activePrefixes = browsers.map { "\($0.rawValue):" }
+        browserSourceRecency = browserSourceRecency.filter { entry in
+            activePrefixes.contains { entry.key.hasPrefix($0) }
+        }
+        playingBrowserSourceIDs = Set(playingBrowserSourceIDs.filter { id in
+            activePrefixes.contains { id.hasPrefix($0) }
+        })
+
+        var candidates: [BrowserMediaCandidate] = []
+        for browser in browsers {
+            guard !Task.isCancelled else { return }
+            let scanCandidates: [BrowserMediaCandidate]
+            if BrowserKind.target(id: selectedTargetID) == browser,
+               browserMediaInjectionAvailable == true {
+                scanCandidates = browserMediaCandidates
+            } else {
+                let scan = await pollRunner.run { [browserMediaController] in
+                    browserMediaController.scan(browser)
+                }
+                guard !Task.isCancelled else { return }
+                scanCandidates = scan.injectionAvailable ? scan.candidates : []
+            }
+            candidates.append(contentsOf: recentBrowserSources(
+                from: scanCandidates,
+                browser: browser
+            ))
+        }
+        activeBrowserMediaCandidates = candidates
+    }
+
+    /// Rank a browser's sources with currently playing tabs first, then the selected
+    /// target, then previously observed playback recency. Only three survive.
+    private func recentBrowserSources(
+        from candidates: [BrowserMediaCandidate],
+        browser: BrowserKind
+    ) -> [BrowserMediaCandidate] {
+        let prefix = "\(browser.rawValue):"
+        let candidateIDs = Set(candidates.map(\.id))
+        browserSourceRecency = browserSourceRecency.filter { entry in
+            !entry.key.hasPrefix(prefix) || candidateIDs.contains(entry.key)
+        }
+
+        let previouslyPlaying = Set(playingBrowserSourceIDs.filter { $0.hasPrefix(prefix) })
+        let nowPlaying = Set(candidates.lazy.filter(\.isPlaying).map(\.id))
+        for candidate in candidates where candidate.isPlaying
+            && !previouslyPlaying.contains(candidate.id) {
+            browserSourceRecencySequence &+= 1
+            browserSourceRecency[candidate.id] = browserSourceRecencySequence
+        }
+        playingBrowserSourceIDs.subtract(previouslyPlaying)
+        playingBrowserSourceIDs.formUnion(nowPlaying)
+
+        let ranked = candidates
+            .filter {
+                $0.volume != nil
+                    && ($0.isPlaying || $0.isSelected || browserSourceRecency[$0.id] != nil)
+            }
+            .sorted { lhs, rhs in
+                if lhs.isPlaying != rhs.isPlaying { return lhs.isPlaying }
+                if lhs.isSelected != rhs.isSelected { return lhs.isSelected }
+                let lhsRecency = browserSourceRecency[lhs.id] ?? 0
+                let rhsRecency = browserSourceRecency[rhs.id] ?? 0
+                if lhsRecency != rhsRecency { return lhsRecency > rhsRecency }
+                return lhs.id < rhs.id
+            }
+        let displayed = Array(ranked.prefix(3))
+
+        // Keep only the recency needed for future three-row rankings.
+        let retainedIDs = Set(displayed.map(\.id))
+        browserSourceRecency = browserSourceRecency.filter { entry in
+            !entry.key.hasPrefix(prefix) || retainedIDs.contains(entry.key)
+        }
+        return displayed
+    }
+
+    func setBrowserVolume(_ percent: Int, for candidate: BrowserMediaCandidate) {
+        let clamped = min(max(percent, 0), 100)
+        if let index = activeBrowserMediaCandidates.firstIndex(where: { $0.id == candidate.id }) {
+            activeBrowserMediaCandidates[index].volume = clamped
+        }
+        if let index = browserMediaCandidates.firstIndex(where: { $0.id == candidate.id }) {
+            browserMediaCandidates[index].volume = clamped
+        }
+        Task {
+            _ = await scripting.run { [browserMediaController] in
+                browserMediaController.setVolume(clamped, for: candidate)
+            }
+        }
+    }
+
     private func configureBrowserTransportForPendingScan() {
         if selectedTargetID == nil {
             browserMediaInjectionAvailable = nil
@@ -383,7 +493,7 @@ final class AppState: ObservableObject {
     /// On only when the user has explicitly opted this app in. Defaults to OFF —
     /// Beamhook never silently takes over the volume keys.
     func volumeKeysEnabled(bundleID: String) -> Bool {
-        volumeKeyOverride[bundleID] ?? false
+        VolumeKeyRouting.isEnabled(for: bundleID, preferences: volumeKeyOverride)
     }
 
     func setVolumeKeysEnabled(_ on: Bool, bundleID: String) {
@@ -401,9 +511,11 @@ final class AppState: ObservableObject {
     /// The volume keys are hijacked for the target only when it exposes a scriptable
     /// volume AND the user has explicitly enabled it for that app.
     private func updateVolumeHijack() {
-        let supported = targetManager.targetSupportsVolume
-        let enabled = targetManager.targetBundleID.map { volumeKeysEnabled(bundleID: $0) } ?? false
-        tap.volumeKeysHijacked = supported && enabled
+        tap.volumeKeysHijacked = VolumeKeyRouting.shouldHijack(
+            targetBundleID: targetManager.targetBundleID,
+            targetSupportsVolume: targetManager.targetSupportsVolume,
+            preferences: volumeKeyOverride
+        )
     }
 }
 

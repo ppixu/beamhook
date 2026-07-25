@@ -31,7 +31,10 @@ supports AppleScript. Requires macOS 14.2 or later; tested on macOS Tahoe 26.5.
 
 - Hook the media keys to one target app — nothing else can steal them.
 - Play/pause button that reflects what's actually playing.
-- Volume sliders for scriptable apps that are currently playing audio.
+- Volume sliders for scriptable apps that are currently playing audio, whether
+  or not they are hooked.
+- Per-tab volume sliders for actively playing browser sources when JavaScript
+  from Apple Events is enabled.
 - Optionally route the keyboard's volume keys to the selected app.
 - Hold Command while pressing a volume key to adjust the Mac's system volume instead.
 - Built in: Spotify, Apple Music, Apple TV, Safari, Chrome, Brave, Arc,
