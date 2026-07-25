@@ -103,6 +103,35 @@ final class TargetManagerTests: XCTestCase {
         XCTAssertTrue(spotify.performedCommands.isEmpty)
     }
 
+    func testDirectRouteForwardsToBundleWithoutChangingHookedTarget() async {
+        let resolver = MockResolver()
+        let spotify = MockMediaApp(id: "spotify", isRunning: true)
+        let music = MockMediaApp(id: "music", isRunning: true)
+        resolver.apps["spotify"] = spotify
+        resolver.apps["music"] = music
+        let tm = makeManager(resolver: resolver)
+        tm.selectedTargetID = "spotify"
+
+        await tm.route(.playPause, toBundleID: music.bundleID)
+
+        XCTAssertEqual(music.performedCommands, [.playPause])
+        XCTAssertTrue(spotify.performedCommands.isEmpty)
+        XCTAssertEqual(tm.selectedTargetID, "spotify")
+    }
+
+    func testDirectRouteNoOpForUnknownOrUnreadyBundle() async {
+        let resolver = MockResolver()
+        let music = MockMediaApp(id: "music", isRunning: true)
+        music.readyValue = false
+        resolver.apps["music"] = music
+        let tm = makeManager(resolver: resolver)
+
+        await tm.route(.playPause, toBundleID: "com.example.missing")
+        await tm.route(.playPause, toBundleID: music.bundleID)
+
+        XCTAssertTrue(music.performedCommands.isEmpty)
+    }
+
     // MARK: - adjustVolume
 
     private func makeVolumeTarget(current: Int?, running: Bool = true) -> (MockResolver, MockMediaApp) {

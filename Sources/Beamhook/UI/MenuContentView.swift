@@ -109,15 +109,19 @@ struct MenuContentView: View {
                     .accessibilityHidden(true)
                 Text("Beamhook")
                     .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                 Text("v\(shortVersion)")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                 Spacer(minLength: 8)
                 Button("Quit") { NSApplication.shared.terminate(nil) }
             }
         }
         .padding(12)
-        .frame(width: 200)
+        .frame(width: 220)
         .task(id: state.isMenuVisible) {
             guard state.isMenuVisible else { return }
             while !Task.isCancelled {
@@ -277,6 +281,7 @@ private struct AppVolumeRow: View {
     let playing: PlayingApp
     @State private var volume: Double = 50
     @State private var scriptable = false
+    @State private var appIsPlaying: Bool?
 
     private var isTarget: Bool {
         guard let id = state.selectedTargetID,
@@ -294,9 +299,18 @@ private struct AppVolumeRow: View {
         return state.activeBrowserMediaCandidates.filter { $0.browser == browser }
     }
 
+    private var supportsDirectPlayPause: Bool {
+        !isBrowser && state.availableApps.contains {
+            $0.bundleID == playing.bundleID && !$0.playPauseScript.isEmpty
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
+                if !isTarget && supportsDirectPlayPause {
+                    compactPlayPauseButton
+                }
                 // The hooked app's title is fully opaque; the rest sit back a bit.
                 Text(playing.displayName).font(.subheadline)
                     .opacity(isTarget ? 1 : 0.55)
@@ -356,6 +370,37 @@ private struct AppVolumeRow: View {
         .onChange(of: state.volumeByBundle[playing.bundleID]) { _, newVal in
             if let v = newVal { volume = Double(v) }
         }
+        .task(id: "\(state.isMenuVisible):\(isTarget):\(playing.bundleID)") {
+            guard state.isMenuVisible, !isTarget, supportsDirectPlayPause else {
+                appIsPlaying = nil
+                return
+            }
+            while !Task.isCancelled {
+                appIsPlaying = await state.isPlaying(bundleID: playing.bundleID)
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+            }
+        }
+    }
+
+    private var compactPlayPauseButton: some View {
+        Button {
+            let wasPlaying = appIsPlaying == true
+            appIsPlaying = !wasPlaying
+            state.togglePlayPause(bundleID: playing.bundleID)
+        } label: {
+            Image(systemName: appIsPlaying == true ? "pause.fill" : "play.fill")
+                .font(.system(size: 8, weight: .semibold))
+                .frame(width: 14, height: 14)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel(appIsPlaying == true
+                            ? "Pause \(playing.displayName)"
+                            : "Play \(playing.displayName)")
+        .help(appIsPlaying == true
+              ? "Pause \(playing.displayName)"
+              : "Play \(playing.displayName)")
     }
 
     private var compactSlider: some View {
@@ -412,9 +457,17 @@ private struct BrowserVolumeRow: View {
     let candidate: BrowserMediaCandidate
     @State private var volume: Double = 50
     @State private var isEditing = false
+    @State private var sourceIsPlaying = false
+
+    private var browserIsTarget: Bool {
+        BrowserKind.target(id: state.selectedTargetID) == candidate.browser
+    }
 
     var body: some View {
         HStack(spacing: 6) {
+            if !browserIsTarget {
+                compactPlayPauseButton
+            }
             Text(candidate.label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -437,10 +490,39 @@ private struct BrowserVolumeRow: View {
         }
         .padding(.leading, 8)
         .task(id: candidate.id) {
+            sourceIsPlaying = candidate.isPlaying
             if let value = candidate.volume { volume = Double(value) }
+        }
+        .onChange(of: candidate.isPlaying) { _, newValue in
+            sourceIsPlaying = newValue
         }
         .onChange(of: candidate.volume) { _, newValue in
             if !isEditing, let newValue { volume = Double(newValue) }
         }
+    }
+
+    private var compactPlayPauseButton: some View {
+        Button {
+            let previous = sourceIsPlaying
+            sourceIsPlaying.toggle()
+            Task {
+                if !(await state.toggleBrowserPlayPause(candidate)) {
+                    sourceIsPlaying = previous
+                }
+            }
+        } label: {
+            Image(systemName: sourceIsPlaying ? "pause.fill" : "play.fill")
+                .font(.system(size: 8, weight: .semibold))
+                .frame(width: 14, height: 14)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel(sourceIsPlaying
+                            ? "Pause \(candidate.label)"
+                            : "Play \(candidate.label)")
+        .help(sourceIsPlaying
+              ? "Pause \(candidate.label)"
+              : "Play \(candidate.label)")
     }
 }

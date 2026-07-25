@@ -46,6 +46,15 @@ public final class TargetManager {
         await runner.run { app.perform(command) }   // perform() re-checks readiness off-main
     }
 
+    /// Sends a command directly to a running app without changing the hooked
+    /// media-key target. Used by the compact controls in the playing-app list.
+    public func route(_ command: MediaCommand, toBundleID bundleID: String) async {
+        guard let app = resolver.allApps().first(where: { $0.bundleID == bundleID }),
+              app.isReady
+        else { return }
+        await runner.run { app.perform(command) }   // perform() re-checks readiness off-main
+    }
+
     /// Applies `steps` volume-key presses (positive = up) to the target in a single
     /// off-main round-trip: read current, clamp, set. Returns the app it acted on and
     /// the new volume 0...100, or nil if there's nothing to do (no target / not ready /

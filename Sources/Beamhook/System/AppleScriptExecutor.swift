@@ -143,6 +143,10 @@ final class BrowserMediaController: @unchecked Sendable {
         executor.run(volumeScript(percent, candidate: candidate)).succeeded
     }
 
+    func togglePlayPause(_ candidate: BrowserMediaCandidate) -> Bool {
+        executor.run(playPauseScript(candidate)).succeeded
+    }
+
     private func scanScript(_ browser: BrowserKind) -> String {
         let js = """
         (() => { const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; const md = navigator.mediaSession && navigator.mediaSession.metadata; if (!m && !md) return null; const key = '__beamhookSourceID_v1'; const makeID = () => globalThis.crypto && globalThis.crypto.randomUUID ? globalThis.crypto.randomUUID() : [Date.now().toString(36), Math.random().toString(36).slice(2)].join('-'); const sourceID = globalThis[key] || (globalThis[key] = makeID()); return JSON.stringify({sourceID,title:(md && md.title) || document.title || location.hostname,artist:(md && md.artist) || '',playing:m ? (!m.paused && !m.ended) : navigator.mediaSession.playbackState === 'playing',selected:sessionStorage.getItem('beamhook-selected') === '1',volume:m ? Math.round(m.volume * 100) : null}); })()
@@ -183,6 +187,31 @@ final class BrowserMediaController: @unchecked Sendable {
         let clamped = min(max(percent, 0), 100)
         let js = """
         (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; const all = Array.from(document.querySelectorAll('video,audio')); const active = all.filter(x => !x.paused && !x.ended); const targets = active.length ? active : (all[0] ? [all[0]] : []); targets.forEach(x => { x.volume = \(clamped) / 100; if (\(clamped) > 0) x.muted = false; }); return targets.length > 0 ? 'MATCH' : 'NO'; })()
+        """
+        let evaluate = candidate.browser == .safari
+            ? "do JavaScript javascriptSource in candidateTab"
+            : "execute candidateTab javascript javascriptSource"
+        return """
+        set javascriptSource to "\(js)"
+        set targetFound to false
+        tell application "\(candidate.browser.applicationName)"
+            repeat with browserWindow in windows
+                repeat with candidateTab in tabs of browserWindow
+                    try
+                        set actionResult to \(evaluate)
+                        if actionResult is "MATCH" then set targetFound to true
+                    end try
+                end repeat
+            end repeat
+        end tell
+        if targetFound is false then error "Selected browser media source is no longer available"
+        return true
+        """
+    }
+
+    private func playPauseScript(_ candidate: BrowserMediaCandidate) -> String {
+        let js = """
+        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; if (!m) return 'NO'; const youtube = document.querySelector('.ytp-play-button'); if (youtube) youtube.click(); else if (m.paused || m.ended) void m.play(); else m.pause(); return 'MATCH'; })()
         """
         let evaluate = candidate.browser == .safari
             ? "do JavaScript javascriptSource in candidateTab"

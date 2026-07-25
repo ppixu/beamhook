@@ -221,6 +221,29 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Read and toggle a non-target app without changing where the hardware media
+    /// keys are hooked. Reads stay on the low-priority polling queue; the user
+    /// command uses the command queue.
+    func isPlaying(bundleID: String) async -> Bool? {
+        guard let app = registry.allApps().first(where: { $0.bundleID == bundleID }) else {
+            return nil
+        }
+        return await pollRunner.run { app.isPlaying() }
+    }
+
+    func togglePlayPause(bundleID: String) {
+        Task { await targetManager.route(.playPause, toBundleID: bundleID) }
+    }
+
+    /// Toggle one exact browser media source. BrowserMediaController resolves the
+    /// stable page-owned source ID at action time, so tab reordering cannot make
+    /// this control act on a different tab.
+    func toggleBrowserPlayPause(_ candidate: BrowserMediaCandidate) async -> Bool {
+        await scripting.run { [browserMediaController] in
+            browserMediaController.togglePlayPause(candidate)
+        }
+    }
+
     func setTarget(_ id: String?) {
         selectedTargetID = id
         targetManager.selectedTargetID = id

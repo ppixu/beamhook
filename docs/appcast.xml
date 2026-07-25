@@ -1,24 +1,36 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+--><!--
   Sparkle update feed for the official (Gumroad) Beamhook build.
   This file is regenerated and signed by scripts/sign-release.sh; the enclosure
   URLs point at the private update host, not this repo. Do not edit a generated
   feed by hand because any change invalidates its signed-feed metadata.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Beamhook</title>
+        <link>https://beamhook.app/appcast.xml</link>
+        <description>Updates for the official Beamhook build.</description>
+        <language>en</language>
+        <item>
+            <title>1.1.1</title>
+            <pubDate>Sat, 25 Jul 2026 21:46:03 +0300</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.1</link>
+            <sparkle:version>5</sparkle:version>
+            <sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.1.1.zip" length="1853151" type="application/octet-stream" sparkle:edSignature="CelyK+3aph5TatX8uYmxQ/D48Fng4RWwRVaEf2/S6myZ2F/TWXQNBHDeC3ibhslCw029KH5a8xiqShk+DBctBA=="></enclosure>
+        </item>
+        <item>
+            <title>Beamhook 1.1.0</title>
+            <pubDate>Sat, 25 Jul 2026 16:49:39 +0300</pubDate>
+            <sparkle:version>4</sparkle:version>
+            <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.0</link>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.1.0.zip" sparkle:edSignature="ZsrxwoqH8BcX5m3igOPmp5m2KbaZbSGNpAMBnTX40oiGSWwbZ6cFP6eMPPJxUwOJ5PtXB6bnh4cCK70kMW2MDg==" length="1816577" type="application/octet-stream"></enclosure>
+        </item>
+    </channel>
+</rss><!-- sparkle-signatures:
+edSignature: hXOI2t8BH2xCK+v8Vior/2ogg3Yb4/7xrd42qsIKaiG94cp3/gJmxUpmx8/w0g0LsQGrLt9S9amwBD4Zkf7xBg==
+length: 2238
 -->
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-  <channel>
-    <title>Beamhook</title>
-    <link>https://beamhook.app/appcast.xml</link>
-    <description>Updates for the official Beamhook build.</description>
-    <language>en</language>
-    <item>
-      <title>Beamhook 1.1.0</title>
-      <pubDate>Sat, 25 Jul 2026 16:49:39 +0300</pubDate>
-      <sparkle:version>4</sparkle:version>
-      <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.0</link>
-      <enclosure url="https://updates.beamhook.app/Beamhook-1.1.0.zip" sparkle:edSignature="ZsrxwoqH8BcX5m3igOPmp5m2KbaZbSGNpAMBnTX40oiGSWwbZ6cFP6eMPPJxUwOJ5PtXB6bnh4cCK70kMW2MDg==" length="1816577" type="application/octet-stream"/>
-    </item>
-  </channel>
-</rss>

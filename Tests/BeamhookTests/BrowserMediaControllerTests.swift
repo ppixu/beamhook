@@ -52,6 +52,21 @@ final class BrowserMediaControllerTests: XCTestCase {
         XCTAssertTrue(script?.contains("targetFound is false") == true)
     }
 
+    func testPlayPauseResolvesExactSourceIdentityInsideBrowser() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        let candidate = makeCandidate()
+
+        XCTAssertTrue(controller.togglePlayPause(candidate))
+
+        let script = try? XCTUnwrap(executor.scripts.last)
+        XCTAssertTrue(script?.contains(candidate.sourceID) == true)
+        XCTAssertTrue(script?.contains("repeat with browserWindow in windows") == true)
+        XCTAssertTrue(script?.contains("m.pause()") == true)
+        XCTAssertTrue(script?.contains("m.play()") == true)
+        XCTAssertFalse(script?.contains("set targetTab to tab") == true)
+    }
+
     private func makeCandidate() -> BrowserMediaCandidate {
         BrowserMediaCandidate(
             browser: .chrome,
