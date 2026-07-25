@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 APP="${1:?usage: sign-release.sh path/to/Beamhook.app}"
-BASE_URL="${UPDATE_BASE_URL:-https://UPDATE-HOST-NOT-CONFIGURED.example}"
+BASE_URL="${UPDATE_BASE_URL:-https://updates.beamhook.app}"
 
 SIGN_UPDATE=$(ls ~/Library/Developer/Xcode/DerivedData/Beamhook-*/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update 2>/dev/null | head -1)
 [ -n "$SIGN_UPDATE" ] || { echo "error: Sparkle's sign_update not found — build the app once so SPM fetches Sparkle" >&2; exit 1; }
