@@ -10,5 +10,14 @@
     <link>https://beamhook.app/appcast.xml</link>
     <description>Updates for the official Beamhook build.</description>
     <language>en</language>
+    <item>
+      <title>Beamhook 1.1.0</title>
+      <pubDate>Sat, 25 Jul 2026 16:49:39 +0300</pubDate>
+      <sparkle:version>4</sparkle:version>
+      <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.0</link>
+      <enclosure url="https://updates.beamhook.app/Beamhook-1.1.0.zip" sparkle:edSignature="ZsrxwoqH8BcX5m3igOPmp5m2KbaZbSGNpAMBnTX40oiGSWwbZ6cFP6eMPPJxUwOJ5PtXB6bnh4cCK70kMW2MDg==" length="1816577" type="application/octet-stream"/>
+    </item>
   </channel>
 </rss>
