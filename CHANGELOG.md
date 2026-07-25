@@ -8,8 +8,9 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ### Added
 
-- **Automatic updates.** The official build now updates itself via Sparkle, and
-  you can check for updates on demand from the menu-bar popover.
+- **Automatic updates.** The official build now checks for updates in the
+  background on launch and installs them via Sparkle. Builds made from source
+  do not auto-update.
 - **Per-tab volume sliders** for browser sources that are actively playing,
   when "Allow JavaScript from Apple Events" is enabled in the browser.
 
