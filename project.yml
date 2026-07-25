@@ -40,6 +40,16 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Sources/Beamhook/Beamhook.entitlements
         ENABLE_HARDENED_RUNTIME: YES
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
+      configs:
+        # Notarization rejects a build that (a) lacks a secure timestamp or
+        # (b) carries com.apple.security.get-task-allow. Xcode omits the
+        # timestamp and *injects* get-task-allow for plain `xcodebuild build`,
+        # so Release must opt out of both — otherwise Apple returns "Invalid".
+        # Release-only: Debug keeps get-task-allow so the debugger can attach.
+        Release:
+          CODE_SIGN_ENTITLEMENTS: Sources/Beamhook/Beamhook-Release.entitlements
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+          OTHER_CODE_SIGN_FLAGS: "--timestamp"
   BeamhookKitTests:
     type: bundle.unit-test
     platform: macOS
