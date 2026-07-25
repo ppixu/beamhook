@@ -24,3 +24,5 @@ launch-copy.md
 # repo; they go to Gumroad and the R2 update host instead (see RELEASING.md).
 Beamhook-*.zip
 Beamhook-*.dmg
+# A built .app can also land in the repo root as a signing/staging leftover.
+/Beamhook.app/
