@@ -7,7 +7,7 @@
 
 <h1 align="center">Beamhook</h1>
 
-<p align="center">Your media keys, hooked to the app you meant.</p>
+<p align="center">Hook your media keys to a specific app.</p>
 
 <p align="center">
   <a href="https://beamhook.app/"><b>Website</b></a>
