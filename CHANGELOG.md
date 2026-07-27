@@ -4,6 +4,22 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.1.3] — 2026-07-27
+
+### Changed
+
+- Browser media controls respond noticeably faster. Beamhook now checks the tab
+  it last saw a source in before falling back to searching every open tab, so
+  play/pause and the volume sliders act straight away instead of after a scan.
+- Media keys aimed at a hooked browser take the same fast path, so pressing
+  pause reaches the tab without waiting on a full scan first.
+
+### Fixed
+
+- Pressing play/pause twice in quick succession no longer sends two commands.
+  The button now ignores further presses until the one in flight finishes, so a
+  double-press can't toggle a source back to where it started.
+
 ## [1.1.2] — 2026-07-27
 
 ### Fixed
