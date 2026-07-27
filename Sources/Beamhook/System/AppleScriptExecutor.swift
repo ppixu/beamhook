@@ -156,6 +156,18 @@ final class BrowserMediaController: @unchecked Sendable {
         perform(.playPause, on: candidate)
     }
 
+    /// Read one exact browser source using the scan's cached location as a fast
+    /// path and its page-owned source ID as the authority.
+    func isPlaying(_ candidate: BrowserMediaCandidate) -> Bool? {
+        let result = executor.run(playbackStateScript(candidate))
+        guard result.succeeded else { return nil }
+        switch result.output?.trimmingCharacters(in: .whitespacesAndNewlines) {
+        case "PLAYING": return true
+        case "PAUSED": return false
+        default: return nil
+        }
+    }
+
     func perform(_ command: MediaCommand, on candidate: BrowserMediaCandidate) -> Bool {
         let script: String
         switch command {
@@ -215,6 +227,49 @@ final class BrowserMediaController: @unchecked Sendable {
         (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; \(BrowserJS.pick) const p = bhPick(); if (!p || p.live) return 'NO'; const youtube = document.querySelector('.ytp-play-button'); if (youtube) youtube.click(); else if (p.el.paused || p.el.ended) void p.el.play(); else p.el.pause(); return 'MATCH'; })()
         """
         return targetedActionScript(js, candidate: candidate)
+    }
+
+    private func playbackStateScript(_ candidate: BrowserMediaCandidate) -> String {
+        let js = """
+        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; \(BrowserJS.pick) const p = bhPick(); if (!p) return 'NO'; return (!p.el.paused && !p.el.ended) ? 'PLAYING' : 'PAUSED'; })()
+        """
+        let evaluate = candidate.browser == .safari
+            ? "do JavaScript javascriptSource in candidateTab"
+            : "execute candidateTab javascript javascriptSource"
+        return """
+        set javascriptSource to "\(js)"
+        set targetFound to false
+        set playbackState to "NO"
+        tell application "\(candidate.browser.applicationName)"
+            try
+                set candidateTab to tab \(candidate.tabIndex) of window \(candidate.windowIndex)
+                set queryResult to \(evaluate)
+                if queryResult is not "NO" then
+                    set targetFound to true
+                    set playbackState to queryResult
+                end if
+            end try
+            if targetFound is false then
+                repeat with browserWindow in windows
+                    repeat with candidateTab in tabs of browserWindow
+                        try
+                            set queryResult to \(evaluate)
+                            if queryResult is not "NO" then
+                                set targetFound to true
+                                set playbackState to queryResult
+                                exit repeat
+                            end if
+                        end try
+                    end repeat
+                    if targetFound then
+                        exit repeat
+                    end if
+                end repeat
+            end if
+        end tell
+        if targetFound is false then error "Selected browser media source is no longer available"
+        return playbackState
+        """
     }
 
     private func nextScript(_ candidate: BrowserMediaCandidate) -> String {

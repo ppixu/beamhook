@@ -7,11 +7,15 @@ private struct MenuRefreshContext: Hashable {
     let isVisible: Bool
 }
 
+private struct PlaybackPollContext: Hashable {
+    let target: PlaybackTargetContext
+    let isVisible: Bool
+}
+
 struct MenuContentView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var updater: UpdaterModel
-    @State private var playing: Bool?
-    @State private var playPauseInFlight = false
+    @State private var playback = PlaybackStatus()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -26,7 +30,6 @@ struct MenuContentView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             Menu {
                 Button {
-                    playing = nil
                     state.setTarget(nil)
                 } label: {
                     if state.selectedTargetID == nil {
@@ -38,7 +41,6 @@ struct MenuContentView: View {
                 Divider()
                 ForEach(state.availableApps) { app in
                     Button {
-                        playing = nil
                         state.setTarget(app.id)
                     } label: {
                         Group {
@@ -123,11 +125,22 @@ struct MenuContentView: View {
         }
         .padding(12)
         .frame(width: 220)
-        .task(id: state.isMenuVisible) {
-            guard state.isMenuVisible else { return }
+        .onChange(of: state.playbackTargetContext, initial: true) { _, context in
+            playback.reset(for: context)
+        }
+        .task(id: PlaybackPollContext(
+            target: state.playbackTargetContext,
+            isVisible: state.isMenuVisible
+        )) {
+            let context = state.playbackTargetContext
+            playback.reset(for: context)
+            guard state.isMenuVisible, context.targetID != nil else { return }
             while !Task.isCancelled {
-                let latest = await state.isTargetPlaying()
-                if !playPauseInFlight { playing = latest }
+                let latest = await state.isTargetPlaying(in: context)
+                guard !Task.isCancelled, context == state.playbackTargetContext else {
+                    return
+                }
+                playback.accept(latest, for: context)
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
             }
         }
@@ -156,26 +169,34 @@ struct MenuContentView: View {
 
     private var playPauseButton: some View {
         Button {
-            guard !playPauseInFlight else { return }
-            let wasPlaying = (playing == true)
-            playing = !wasPlaying   // optimistic; the 1.5s poll reconciles with reality
-            playPauseInFlight = true
+            let context = state.playbackTargetContext
+            let previousState = playback.isPlaying
+            guard playback.beginToggle(for: context) else { return }
             Task {
-                if !(await state.togglePlayPauseTarget()) {
-                    playing = wasPlaying
+                let succeeded = await state.togglePlayPauseTarget(in: context)
+                let confirmedState = succeeded
+                    ? await state.confirmTargetPlaying(in: context)
+                    : nil
+                guard context == state.playbackTargetContext else {
+                    return
                 }
-                playPauseInFlight = false
+                playback.finishToggle(
+                    succeeded: succeeded,
+                    confirmedState: confirmedState,
+                    previousState: previousState,
+                    for: context
+                )
             }
         } label: {
-            Image(systemName: playing == true ? "pause.fill" : "play.fill")
+            Image(systemName: playback.isPlaying == true ? "pause.fill" : "play.fill")
                 .frame(maxWidth: .infinity)
         }
         .controlSize(.regular)
         .disabled(state.selectedTargetID == nil
                   || !state.selectedBrowserSourceSupportsTransport
-                  || playPauseInFlight)
+                  || playback.commandInFlight)
         .help(state.selectedBrowserSourceSupportsTransport
-              ? (playing == true ? "Pause \(targetName)" : "Play \(targetName)")
+              ? (playback.isPlaying == true ? "Pause \(targetName)" : "Play \(targetName)")
               : "This tab is a call, which has no play/pause. Volume still works.")
     }
 

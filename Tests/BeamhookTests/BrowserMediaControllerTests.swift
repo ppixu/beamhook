@@ -81,6 +81,53 @@ final class BrowserMediaControllerTests: XCTestCase {
         XCTAssertFalse(script?.contains("set targetTab to tab") == true)
     }
 
+    func testPlaybackStateReadsExactSourceIdentity() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        let candidate = makeCandidate()
+
+        executor.output = "PLAYING"
+        XCTAssertEqual(controller.isPlaying(candidate), true)
+        executor.output = "PAUSED"
+        XCTAssertEqual(controller.isPlaying(candidate), false)
+
+        let script = try? XCTUnwrap(executor.scripts.last)
+        XCTAssertTrue(script?.contains(candidate.sourceID) == true)
+        XCTAssertTrue(script?.contains("set candidateTab to tab 9 of window 4") == true)
+        XCTAssertTrue(script?.contains("repeat with browserWindow in windows") == true)
+        let cachedLookup = script?.range(of: "set candidateTab to tab 9 of window 4")
+        let fallbackLookup = script?.range(of: "repeat with browserWindow in windows")
+        XCTAssertNotNil(cachedLookup)
+        XCTAssertNotNil(fallbackLookup)
+        if let cachedLookup, let fallbackLookup {
+            XCTAssertLessThan(cachedLookup.lowerBound, fallbackLookup.lowerBound)
+        }
+    }
+
+    func testPlaybackStateReturnsNilWhenExactSourceCannotBeRead() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        executor.output = "NO"
+
+        XCTAssertNil(controller.isPlaying(makeCandidate()))
+
+        executor.succeeds = false
+        XCTAssertNil(controller.isPlaying(makeCandidate()))
+    }
+
+    func testTargetedSafariPlaybackStateAppleScriptCompiles() throws {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        executor.output = "PLAYING"
+
+        XCTAssertEqual(controller.isPlaying(makeCandidate(browser: .safari)), true)
+
+        let source = try XCTUnwrap(executor.scripts.last)
+        let script = try XCTUnwrap(NSAppleScript(source: source))
+        var error: NSDictionary?
+        XCTAssertTrue(script.compileAndReturnError(&error), "\(error ?? [:])")
+    }
+
     func testNextAndPreviousUseValidatedCachedTarget() {
         let executor = RecordingScriptExecutor()
         let controller = BrowserMediaController(executor: executor)
@@ -199,6 +246,106 @@ final class BrowserMediaControllerTests: XCTestCase {
         return """
         \(window)\t\(tab)\t{"sourceID":"\(escapedID)","title":"Test","artist":"","playing":true,"selected":false,"live":\(live),"volume":50}
         """
+    }
+}
+
+final class PlaybackStatusTests: XCTestCase {
+    func testLatePollFromPreviousTargetIsIgnored() {
+        let safari = context(target: "safari-youtube", source: "safari:video", revision: 1)
+        let spotify = context(target: "spotify", revision: 2)
+        var status = PlaybackStatus()
+
+        status.reset(for: safari)
+        status.accept(true, for: safari)
+        status.reset(for: spotify)
+        status.accept(false, for: spotify)
+        status.accept(true, for: safari)
+
+        XCTAssertEqual(status.context, spotify)
+        XCTAssertEqual(status.isPlaying, false)
+    }
+
+    func testLateCommandCompletionCannotOverwriteNewTarget() {
+        let safari = context(target: "safari-youtube", source: "safari:video", revision: 1)
+        let spotify = context(target: "spotify", revision: 2)
+        var status = PlaybackStatus()
+
+        status.reset(for: safari)
+        status.accept(true, for: safari)
+        XCTAssertTrue(status.beginToggle(for: safari))
+        status.reset(for: spotify)
+        status.accept(true, for: spotify)
+        status.finishToggle(
+            succeeded: false,
+            confirmedState: nil,
+            previousState: true,
+            for: safari
+        )
+
+        XCTAssertEqual(status.context, spotify)
+        XCTAssertEqual(status.isPlaying, true)
+        XCTAssertFalse(status.commandInFlight)
+    }
+
+    func testOldCompletionIsIgnoredAfterSwitchingBackToSameTarget() {
+        let firstSafari = context(
+            target: "safari-youtube",
+            source: "safari:video",
+            revision: 1
+        )
+        let spotify = context(target: "spotify", revision: 2)
+        let secondSafari = context(
+            target: "safari-youtube",
+            source: "safari:video",
+            revision: 3
+        )
+        var status = PlaybackStatus()
+
+        status.reset(for: firstSafari)
+        XCTAssertTrue(status.beginToggle(for: firstSafari))
+        status.reset(for: spotify)
+        status.reset(for: secondSafari)
+        status.accept(false, for: secondSafari)
+        status.finishToggle(
+            succeeded: true,
+            confirmedState: true,
+            previousState: false,
+            for: firstSafari
+        )
+
+        XCTAssertEqual(status.context, secondSafari)
+        XCTAssertEqual(status.isPlaying, false)
+    }
+
+    func testConfirmedStateReconcilesOptimisticToggle() {
+        let spotify = context(target: "spotify", revision: 1)
+        var status = PlaybackStatus()
+
+        status.reset(for: spotify)
+        status.accept(false, for: spotify)
+        XCTAssertTrue(status.beginToggle(for: spotify))
+        XCTAssertEqual(status.isPlaying, true)
+        status.finishToggle(
+            succeeded: true,
+            confirmedState: false,
+            previousState: false,
+            for: spotify
+        )
+
+        XCTAssertEqual(status.isPlaying, false)
+        XCTAssertFalse(status.commandInFlight)
+    }
+
+    private func context(
+        target: String?,
+        source: String? = nil,
+        revision: UInt64
+    ) -> PlaybackTargetContext {
+        PlaybackTargetContext(
+            targetID: target,
+            browserMediaID: source,
+            revision: revision
+        )
     }
 }
 

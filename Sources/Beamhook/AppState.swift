@@ -3,6 +3,59 @@ import Combine
 import os
 import BeamhookKit
 
+/// Identifies one specific hooked playback destination at one point in time.
+/// `revision` distinguishes Safari → Spotify → Safari from the original Safari
+/// selection, so an old asynchronous result can never become current again.
+struct PlaybackTargetContext: Hashable, Sendable {
+    let targetID: String?
+    let browserMediaID: String?
+    let revision: UInt64
+}
+
+/// Small, testable state machine for the menu's optimistic play/pause control.
+/// Every mutation is tagged with its playback context; late polls and command
+/// completions from an earlier hook are ignored.
+struct PlaybackStatus {
+    private(set) var context: PlaybackTargetContext?
+    private(set) var isPlaying: Bool?
+    private(set) var commandContext: PlaybackTargetContext?
+
+    var commandInFlight: Bool { commandContext != nil }
+
+    mutating func reset(for context: PlaybackTargetContext) {
+        self.context = context
+        isPlaying = nil
+        commandContext = nil
+    }
+
+    mutating func accept(_ value: Bool?, for context: PlaybackTargetContext) {
+        guard self.context == context, commandContext == nil else { return }
+        isPlaying = value
+    }
+
+    mutating func beginToggle(for context: PlaybackTargetContext) -> Bool {
+        guard self.context == context, commandContext == nil else { return false }
+        commandContext = context
+        isPlaying = !(isPlaying == true)
+        return true
+    }
+
+    mutating func finishToggle(
+        succeeded: Bool,
+        confirmedState: Bool?,
+        previousState: Bool?,
+        for context: PlaybackTargetContext
+    ) {
+        guard self.context == context, commandContext == context else { return }
+        if succeeded {
+            if let confirmedState { isPlaying = confirmedState }
+        } else {
+            isPlaying = previousState
+        }
+        commandContext = nil
+    }
+}
+
 @MainActor
 final class AppState: ObservableObject {
     let store: AppDefinitionStore
@@ -33,7 +86,15 @@ final class AppState: ObservableObject {
     private var pendingVolumeSteps = 0
     private var volumeDrainInFlight = false
 
-    @Published var selectedTargetID: String?
+    /// Incremented whenever the hooked app or selected browser source changes.
+    /// It deliberately is not reset, even if the same destination is selected
+    /// again, because outstanding work from its previous selection is stale.
+    private var playbackContextRevision: UInt64 = 0
+    @Published var selectedTargetID: String? {
+        didSet {
+            if selectedTargetID != oldValue { playbackContextRevision &+= 1 }
+        }
+    }
     @Published var availableApps: [AppDefinition]
     @Published var hasAccessibility: Bool = false
     /// Passive AppleScript reads are useful only while the user can see their
@@ -50,7 +111,11 @@ final class AppState: ObservableObject {
     @Published var browserMediaInjectionAvailable: Bool?
     @Published var browserTargetRunning: Bool?
     @Published var browserMediaCandidates: [BrowserMediaCandidate] = []
-    @Published var selectedBrowserMediaID: String?
+    @Published var selectedBrowserMediaID: String? {
+        didSet {
+            if selectedBrowserMediaID != oldValue { playbackContextRevision &+= 1 }
+        }
+    }
     /// Volume-controllable browser tabs for browsers whose Core Audio process
     /// currently has an output stream. Populated only while the menu is visible.
     @Published var activeBrowserMediaCandidates: [BrowserMediaCandidate] = []
@@ -212,27 +277,78 @@ final class AppState: ObservableObject {
         RunLoop.main.add(timer, forMode: .common)
     }
 
-    // Play/pause helpers used by the in-menu control. Both run their AppleScript
-    // off the main thread so a slow/launching target can't freeze the popover. The
-    // read runs on the poll runner, so a slow status read can't delay key commands.
-    func isTargetPlaying() async -> Bool? {
-        if selectedTargetIsBrowser, browserMediaInjectionAvailable != true { return nil }
-        guard let id = selectedTargetID, let app = registry.app(withID: id) else { return nil }
-        return await pollRunner.run { app.isPlaying() }
+    /// Snapshot used to tag every asynchronous playback read and command. The
+    /// revision makes the context unique across A → B → A target switches.
+    var playbackTargetContext: PlaybackTargetContext {
+        PlaybackTargetContext(
+            targetID: selectedTargetID,
+            browserMediaID: selectedTargetIsBrowser ? selectedBrowserMediaID : nil,
+            revision: playbackContextRevision
+        )
     }
 
-    func togglePlayPauseTarget() async -> Bool {
+    // Play/pause helpers used by the in-menu control. Reads run off the main
+    // thread and are accepted only while their exact target context is current.
+    // Browser reads address the cached page-owned source directly instead of
+    // rescanning every tab.
+    func isTargetPlaying(in context: PlaybackTargetContext) async -> Bool? {
+        await targetPlayingState(in: context, using: pollRunner)
+    }
+
+    /// Read immediately after a user command on the command lane. Since the toggle
+    /// has already completed, this is queued directly behind it and authoritatively
+    /// reconciles the optimistic icon without waiting for the periodic poll.
+    func confirmTargetPlaying(in context: PlaybackTargetContext) async -> Bool? {
+        await targetPlayingState(in: context, using: scripting)
+    }
+
+    private func targetPlayingState(
+        in context: PlaybackTargetContext,
+        using runner: ScriptRunner
+    ) async -> Bool? {
+        guard context == playbackTargetContext, let id = context.targetID else { return nil }
+
+        let result: Bool?
+        if let browser = BrowserKind.target(id: id) {
+            guard browserMediaInjectionAvailable == true,
+                  let candidate = browserMediaCandidates.first(where: {
+                      $0.id == context.browserMediaID && $0.browser == browser
+                  })
+            else { return nil }
+            result = await runner.run { [browserMediaController] in
+                browserMediaController.isPlaying(candidate)
+            }
+        } else {
+            guard let app = registry.app(withID: id) else { return nil }
+            result = await runner.run { app.isPlaying() }
+        }
+
+        guard context == playbackTargetContext else { return nil }
+        return result
+    }
+
+    func togglePlayPauseTarget(in context: PlaybackTargetContext) async -> Bool {
+        guard context == playbackTargetContext else { return false }
         if selectedTargetIsBrowser, browserMediaInjectionAvailable != true {
             MediaKeyTap.postNativePlayPause()
             return true
         }
         if selectedTargetIsBrowser {
-            guard let candidate = selectedBrowserMediaCandidate,
+            guard let candidate = browserMediaCandidates.first(where: {
+                      $0.id == context.browserMediaID
+                  }),
                   candidate.supportsTransport
             else { return false }
             return await performBrowserCommand(.playPause, on: candidate)
         } else {
-            return await targetManager.route(.playPause)
+            guard let id = context.targetID, let app = registry.app(withID: id) else {
+                return false
+            }
+            return await scripting.run {
+                guard app.isReady else { return false }
+                app.perform(.playPause)
+                return true
+            }
         }
     }
 
