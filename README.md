@@ -13,6 +13,8 @@
   <a href="https://beamhook.app/"><b>Website</b></a>
   &nbsp;•&nbsp;
   <a href="https://ppixu.gumroad.com/l/beamhook"><b>Get the official build (€5)</b></a>
+  &nbsp;•&nbsp;
+  <a href="https://github.com/ppixu/beamhook/issues"><b>Report a bug</b></a>
 </p>
 
 ---
@@ -68,6 +70,15 @@ the same complete app as the open-source version, and your purchase supports
 continued development.
 
 [![Get the official build on Gumroad](https://img.shields.io/badge/Official%20build-%E2%82%AC5-ff90e8?style=for-the-badge&logo=gumroad)](https://ppixu.gumroad.com/l/beamhook)
+
+## Bugs and requests
+
+Found a bug, or want an app supported that isn't in the list? Please open a
+[GitHub issue](https://github.com/ppixu/beamhook/issues) — that's the place for
+it, whether you bought the official build or built it yourself. Search the
+[open issues](https://github.com/ppixu/beamhook/issues) first in case it's
+already known, and include your macOS version, the Beamhook version, and the app
+you were controlling.
 
 ## License
 

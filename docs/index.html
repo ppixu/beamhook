@@ -357,6 +357,10 @@
   .buy:active{transform:translate(1px,1px);box-shadow:1px 1px 0 #111}
   .buy-wrap{text-align:center;margin:26px 0 10px}
 
+  .support{color:var(--soft);font-size:.95rem;line-height:1.5;margin:0 auto 26px;max-width:44ch}
+  .support a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line);transition:border-color .15s}
+  .support a:hover{border-color:var(--ink)}
+
   .links{display:flex;flex-wrap:wrap;gap:24px;row-gap:10px;justify-content:center;font-size:.96rem}
   .links a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line);padding-bottom:2px;transition:border-color .15s}
   .links a:hover{border-color:var(--ink)}
@@ -522,8 +526,11 @@
     </section>
   </div>
 
+  <p class="support">Found a bug, or an app you'd like supported? Please <a href="https://github.com/ppixu/beamhook/issues">open an issue on GitHub</a> — that's the place for it, whether you bought the app or built it yourself.</p>
+
   <div class="links">
     <a href="https://github.com/ppixu/beamhook">GitHub ↗</a>
+    <a href="https://github.com/ppixu/beamhook/issues">Issues ↗</a>
     <a href="https://github.com/ppixu/beamhook/blob/main/LICENSE">GPL-3.0</a>
   </div>
   <p class="meta">macOS 14.0+ · tested on Tahoe 26.5 · Apple Silicon &amp; Intel</p>
