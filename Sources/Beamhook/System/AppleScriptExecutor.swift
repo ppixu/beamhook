@@ -77,6 +77,10 @@ struct BrowserMediaCandidate: Identifiable, Hashable, Sendable {
     let artist: String
     let isPlaying: Bool
     let isSelected: Bool
+    /// False for a call/conference tab, whose only media is a live `MediaStream`.
+    /// Volume still applies; play/pause does not, since pausing a live stream
+    /// just freezes the user's view of the meeting.
+    let supportsTransport: Bool
     var volume: Int?
 
     var id: String { "\(browser.rawValue):\(sourceID)" }
@@ -99,6 +103,7 @@ final class BrowserMediaController: @unchecked Sendable {
         let artist: String
         let playing: Bool
         let selected: Bool
+        let live: Bool
         let volume: Int?
     }
 
@@ -130,6 +135,7 @@ final class BrowserMediaController: @unchecked Sendable {
                 browser: browser, sourceID: payload.sourceID,
                 title: payload.title, artist: payload.artist,
                 isPlaying: payload.playing, isSelected: payload.selected,
+                supportsTransport: !payload.live,
                 volume: payload.volume.map { min(max($0, 0), 100) })
         }
         return BrowserMediaScan(injectionAvailable: true, candidates: candidates)
@@ -149,7 +155,7 @@ final class BrowserMediaController: @unchecked Sendable {
 
     private func scanScript(_ browser: BrowserKind) -> String {
         let js = """
-        (() => { const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; const md = navigator.mediaSession && navigator.mediaSession.metadata; if (!m && !md) return null; const key = '__beamhookSourceID_v1'; const makeID = () => globalThis.crypto && globalThis.crypto.randomUUID ? globalThis.crypto.randomUUID() : [Date.now().toString(36), Math.random().toString(36).slice(2)].join('-'); const sourceID = globalThis[key] || (globalThis[key] = makeID()); return JSON.stringify({sourceID,title:(md && md.title) || document.title || location.hostname,artist:(md && md.artist) || '',playing:m ? (!m.paused && !m.ended) : navigator.mediaSession.playbackState === 'playing',selected:sessionStorage.getItem('beamhook-selected') === '1',volume:m ? Math.round(m.volume * 100) : null}); })()
+        (() => { \(BrowserJS.pick) const p = bhPick(); const md = navigator.mediaSession && navigator.mediaSession.metadata; if (!p && !md) return null; const key = '__beamhookSourceID_v1'; const makeID = () => globalThis.crypto && globalThis.crypto.randomUUID ? globalThis.crypto.randomUUID() : [Date.now().toString(36), Math.random().toString(36).slice(2)].join('-'); const sourceID = globalThis[key] || (globalThis[key] = makeID()); return JSON.stringify({sourceID,title:(md && md.title) || document.title || location.hostname,artist:(md && md.artist) || '',playing:p ? (!p.el.paused && !p.el.ended) : navigator.mediaSession.playbackState === 'playing',live:p ? p.live : false,selected:sessionStorage.getItem('beamhook-selected') === '1',volume:p ? Math.round(p.el.volume * 100) : null}); })()
         """
         let evaluate = browser == .safari
             ? "do JavaScript javascriptSource in candidateTab"
@@ -186,7 +192,7 @@ final class BrowserMediaController: @unchecked Sendable {
     private func volumeScript(_ percent: Int, candidate: BrowserMediaCandidate) -> String {
         let clamped = min(max(percent, 0), 100)
         let js = """
-        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; const all = Array.from(document.querySelectorAll('video,audio')); const active = all.filter(x => !x.paused && !x.ended); const targets = active.length ? active : (all[0] ? [all[0]] : []); targets.forEach(x => { x.volume = \(clamped) / 100; if (\(clamped) > 0) x.muted = false; }); return targets.length > 0 ? 'MATCH' : 'NO'; })()
+        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; \(BrowserJS.pick) const p = bhPick(); if (!p) return 'NO'; p.group.forEach(x => { x.volume = \(clamped) / 100; if (\(clamped) > 0) x.muted = false; }); return 'MATCH'; })()
         """
         let evaluate = candidate.browser == .safari
             ? "do JavaScript javascriptSource in candidateTab"
@@ -211,7 +217,7 @@ final class BrowserMediaController: @unchecked Sendable {
 
     private func playPauseScript(_ candidate: BrowserMediaCandidate) -> String {
         let js = """
-        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; if (!m) return 'NO'; const youtube = document.querySelector('.ytp-play-button'); if (youtube) youtube.click(); else if (m.paused || m.ended) void m.play(); else m.pause(); return 'MATCH'; })()
+        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; \(BrowserJS.pick) const p = bhPick(); if (!p || p.live) return 'NO'; const youtube = document.querySelector('.ytp-play-button'); if (youtube) youtube.click(); else if (p.el.paused || p.el.ended) void p.el.play(); else p.el.pause(); return 'MATCH'; })()
         """
         let evaluate = candidate.browser == .safari
             ? "do JavaScript javascriptSource in candidateTab"

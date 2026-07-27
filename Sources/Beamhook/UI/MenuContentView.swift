@@ -162,8 +162,10 @@ struct MenuContentView: View {
                 .frame(maxWidth: .infinity)
         }
         .controlSize(.regular)
-        .disabled(state.selectedTargetID == nil)
-        .help(playing == true ? "Pause \(targetName)" : "Play \(targetName)")
+        .disabled(state.selectedTargetID == nil || !state.selectedBrowserSourceSupportsTransport)
+        .help(state.selectedBrowserSourceSupportsTransport
+              ? (playing == true ? "Pause \(targetName)" : "Play \(targetName)")
+              : "This tab is a call, which has no play/pause. Volume still works.")
     }
 
     private var permissionBanner: some View {
@@ -465,7 +467,9 @@ private struct BrowserVolumeRow: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            if !browserIsTarget {
+            // A call tab keeps its slider but never gets a play/pause button:
+            // pausing a live MediaStream would only freeze the meeting.
+            if !browserIsTarget && candidate.supportsTransport {
                 compactPlayPauseButton
             }
             Text(candidate.label)

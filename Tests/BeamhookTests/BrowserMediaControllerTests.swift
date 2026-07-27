@@ -62,9 +62,70 @@ final class BrowserMediaControllerTests: XCTestCase {
         let script = try? XCTUnwrap(executor.scripts.last)
         XCTAssertTrue(script?.contains(candidate.sourceID) == true)
         XCTAssertTrue(script?.contains("repeat with browserWindow in windows") == true)
-        XCTAssertTrue(script?.contains("m.pause()") == true)
-        XCTAssertTrue(script?.contains("m.play()") == true)
+        XCTAssertTrue(script?.contains("p.el.pause()") == true)
+        XCTAssertTrue(script?.contains("p.el.play()") == true)
         XCTAssertFalse(script?.contains("set targetTab to tab") == true)
+    }
+
+    func testCallTabIsListedButCannotBeDrivenByTransport() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        executor.output = scanOutput(window: 1, tab: 1,
+                                     sourceID: "550e8400-e29b-41d4-a716-446655440000",
+                                     live: true)
+
+        let candidates = controller.scan(.chrome).candidates
+
+        // A meeting keeps its row — the volume slider is the point — but must
+        // never offer transport: pausing a live MediaStream freezes the call.
+        XCTAssertEqual(candidates.count, 1)
+        XCTAssertEqual(candidates.first?.supportsTransport, false)
+    }
+
+    func testRegularMediaTabSupportsTransport() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        executor.output = scanOutput(window: 1, tab: 1,
+                                     sourceID: "550e8400-e29b-41d4-a716-446655440000")
+
+        XCTAssertEqual(controller.scan(.chrome).candidates.first?.supportsTransport, true)
+    }
+
+    func testEachSourceCarriesItsOwnTransportCapability() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        let meeting = "550e8400-e29b-41d4-a716-446655440000"
+        let video = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+        executor.output = """
+        OK
+        \(row(window: 1, tab: 1, sourceID: meeting, live: true))
+        \(row(window: 1, tab: 2, sourceID: video, live: false))
+        """
+
+        let candidates = controller.scan(.safari).candidates
+
+        XCTAssertEqual(candidates.count, 2)
+        XCTAssertEqual(candidates.first(where: { $0.sourceID == meeting })?.supportsTransport,
+                       false)
+        XCTAssertEqual(candidates.first(where: { $0.sourceID == video })?.supportsTransport,
+                       true)
+    }
+
+    func testTransportScriptsDeclineALiveStream() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+
+        _ = controller.togglePlayPause(makeCandidate())
+        let playPause = executor.scripts.last
+        _ = controller.setVolume(30, for: makeCandidate())
+        let volume = executor.scripts.last
+
+        // The backstop behind the hidden UI control: even a stale selection that
+        // reaches a call tab must refuse to touch its transport. Volume, which is
+        // meaningful on a call, carries no such guard and writes the whole group.
+        XCTAssertTrue(playPause?.contains("if (!p || p.live) return 'NO'") == true)
+        XCTAssertTrue(volume?.contains("p.group.forEach") == true)
+        XCTAssertFalse(volume?.contains("p.live") == true)
     }
 
     private func makeCandidate() -> BrowserMediaCandidate {
@@ -75,17 +136,25 @@ final class BrowserMediaControllerTests: XCTestCase {
             artist: "Test artist",
             isPlaying: true,
             isSelected: false,
+            supportsTransport: true,
             volume: 50
         )
     }
 
-    private func scanOutput(window: Int, tab: Int, sourceID: String) -> String {
+    private func scanOutput(window: Int, tab: Int, sourceID: String,
+                            live: Bool = false) -> String {
+        """
+        OK
+        \(row(window: window, tab: tab, sourceID: sourceID, live: live))
+        """
+    }
+
+    private func row(window: Int, tab: Int, sourceID: String, live: Bool) -> String {
         let escapedID = sourceID
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
         return """
-        OK
-        \(window)\t\(tab)\t{"sourceID":"\(escapedID)","title":"Test","artist":"","playing":true,"selected":false,"volume":50}
+        \(window)\t\(tab)\t{"sourceID":"\(escapedID)","title":"Test","artist":"","playing":true,"selected":false,"live":\(live),"volume":50}
         """
     }
 }

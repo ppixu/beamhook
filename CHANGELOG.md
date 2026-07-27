@@ -4,6 +4,17 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.1.2] — 2026-07-27
+
+### Fixed
+
+- Video calls in Safari and Chrome — Google Meet, Teams, Discord and the like —
+  no longer offer a play/pause button. Pressing it only froze your own view of
+  the call. Their volume slider stays, so you can still turn a meeting down.
+- A call tab can no longer quietly claim the media keys. Because a meeting
+  counts as "playing" for its whole duration, it could be picked as the hooked
+  browser source ahead of the music you actually meant to control.
+
 ## [1.1.1] — 2026-07-25
 
 ### Fixed

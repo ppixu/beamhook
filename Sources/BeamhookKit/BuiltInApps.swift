@@ -104,8 +104,12 @@ public enum BuiltInApps {
         id: "vivaldi-youtube", displayName: "Vivaldi", bundleID: "com.vivaldi.Vivaldi",
         script: { chromiumScript(application: "Vivaldi", javascript: $0) })
 
+    // A call/conference tab (`p.live`) has no transport to drive — pausing a live
+    // MediaStream would just freeze the user's view of the meeting — so the
+    // transport and play-state scripts decline it. This is the backstop: the UI
+    // hides those controls, but a stale selection must not reach a call either.
     private static let playPauseJS = """
-        (() => { const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; if (!m) return false; const youtube = document.querySelector('.ytp-play-button'); if (youtube) youtube.click(); else if (m.paused) void m.play(); else m.pause(); return true; })()
+        (() => { \(BrowserJS.pick) const p = bhPick(); if (!p || p.live) return false; const youtube = document.querySelector('.ytp-play-button'); if (youtube) youtube.click(); else if (p.el.paused) void p.el.play(); else p.el.pause(); return true; })()
         """
     private static let nextJS = """
         (() => { const b = document.querySelector('.ytp-next-button'); if (!b) return false; b.click(); return true; })()
@@ -114,13 +118,16 @@ public enum BuiltInApps {
         (() => { const b = document.querySelector('.ytp-prev-button'); if (!b) return false; b.click(); return true; })()
         """
     private static let volumeGetJS = """
-        (() => { const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; return m ? Math.round(m.volume * 100) : null; })()
+        (() => { \(BrowserJS.pick) const p = bhPick(); return p ? Math.round(p.el.volume * 100) : null; })()
         """
+    // Volume *is* meaningful on a call, so this one does not decline a live pick.
+    // It writes the whole group: a meeting's audio lives in one element per
+    // participant, and setting just one would leave the rest at full volume.
     private static let volumeSetJS = """
-        (() => { const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; if (!m) return false; m.volume = Math.max(0, Math.min(1, {volume} / 100)); return true; })()
+        (() => { \(BrowserJS.pick) const p = bhPick(); if (!p) return false; const v = Math.max(0, Math.min(1, {volume} / 100)); p.group.forEach(x => { x.volume = v; }); return true; })()
         """
     private static let playStateJS = """
-        (() => { const all = Array.from(document.querySelectorAll('video,audio')); const m = all.find(x => !x.paused && !x.ended) || all[0]; return m ? (m.paused ? 'paused' : 'playing') : null; })()
+        (() => { \(BrowserJS.pick) const p = bhPick(); if (!p || p.live) return null; return p.el.paused ? 'paused' : 'playing'; })()
         """
 
     private static func browserDefinition(

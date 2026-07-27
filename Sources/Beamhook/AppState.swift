@@ -258,6 +258,16 @@ final class AppState: ObservableObject {
 
     var selectedTargetIsBrowser: Bool { BrowserKind.target(id: selectedTargetID) != nil }
 
+    /// Whether the hooked browser source can act on the transport keys. A call
+    /// tab cannot: pausing a live MediaStream only freezes the user's view of the
+    /// meeting. Anything else — including a non-browser target — can.
+    var selectedBrowserSourceSupportsTransport: Bool {
+        guard let id = selectedBrowserMediaID,
+              let candidate = browserMediaCandidates.first(where: { $0.id == id })
+        else { return true }
+        return candidate.supportsTransport
+    }
+
     /// Probe browser injection and enumerate media tabs. Called periodically while
     /// the menu is visible, so granting permission takes effect without relaunching.
     func refreshBrowserMedia() async {
@@ -297,7 +307,13 @@ final class AppState: ObservableObject {
         // Older builds persisted window/tab indexes. Those are positions, not
         // identities, and can point at a different tab after any reordering.
         UserDefaults.standard.removeObject(forKey: "browserMediaSelection.\(browser.rawValue)")
+        // An explicit user choice always wins — including a deliberately hooked
+        // call tab, which the user may want for volume-key control. Failing that,
+        // prefer a source that can actually act on the transport keys: a meeting
+        // reports `isPlaying` for hours and would otherwise claim them silently.
         let chosen = scan.candidates.first(where: { $0.isSelected })
+            ?? scan.candidates.first(where: { $0.isPlaying && $0.supportsTransport })
+            ?? scan.candidates.first(where: { $0.supportsTransport })
             ?? scan.candidates.first(where: { $0.isPlaying })
             ?? scan.candidates.first
         selectedBrowserMediaID = chosen?.id
