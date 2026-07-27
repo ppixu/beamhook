@@ -37,6 +37,35 @@ doubt it, compare `codesign -dv --verbose=4` CDHashes — they must match.
   fetch the zip; that's fine — GPL already permits redistribution. The €5 is
   convenience, not DRM.)
 
+## The one command
+
+Write the `## [<version>]` section in `CHANGELOG.md`, then:
+
+```
+./ship.sh 1.1.3
+```
+
+That runs the whole pipeline: preflight → tests → build/sign/notarize/staple/DMG
+→ update zip → signed appcast → R2 upload → commit and push → wait for Pages and
+verify the live feed → tag → GitHub release. It pauses once, immediately before
+the push, because that push is what offers the update to every existing
+customer. `--yes` skips the prompt for unattended runs; `--dry-run` runs only the
+preflight and builds nothing.
+
+**Preflight runs before the expensive part, on purpose.** It proves the notary
+credential, the Developer ID certificate, `gh` and `wrangler` authentication, the
+R2 bucket, the CHANGELOG section, and that the build number isn't already
+published — all in a couple of seconds. A release once died on an unusable
+keychain credential *after* Apple had already accepted the notarization, ten
+minutes in; `./ship.sh <version> --dry-run` now catches that in two.
+
+The one thing it cannot do is attach the DMG to Gumroad — Gumroad's public API
+is read-only for product files. The script finishes by printing the exact path
+and the four UI steps.
+
+The stages below are what `ship.sh` calls, and remain individually runnable when
+you need to debug one in isolation.
+
 ## Per-release checklist
 
 1. Add the `## [<version>]` section to `CHANGELOG.md` — `release.sh` refuses to
