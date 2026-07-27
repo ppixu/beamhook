@@ -40,19 +40,29 @@ public final class TargetManager {
 
     /// Routes a media key to the selected target, off the main thread. No-op for
     /// non-command keys, no selected target, or a target that isn't running.
-    public func route(_ key: MediaKey) async {
-        guard let command = key.command else { return }
-        guard let app = currentTargetApp(), app.isReady else { return }
-        await runner.run { app.perform(command) }   // perform() re-checks readiness off-main
+    @discardableResult
+    public func route(_ key: MediaKey) async -> Bool {
+        guard let command = key.command, let app = currentTargetApp() else { return false }
+        return await runner.run {
+            // Check at execution time so a command queued while the app is finishing
+            // launch is not silently discarded before it reaches the scripting lane.
+            guard app.isReady else { return false }
+            app.perform(command)   // perform() re-checks readiness off-main
+            return true
+        }
     }
 
     /// Sends a command directly to a running app without changing the hooked
     /// media-key target. Used by the compact controls in the playing-app list.
-    public func route(_ command: MediaCommand, toBundleID bundleID: String) async {
-        guard let app = resolver.allApps().first(where: { $0.bundleID == bundleID }),
-              app.isReady
-        else { return }
-        await runner.run { app.perform(command) }   // perform() re-checks readiness off-main
+    @discardableResult
+    public func route(_ command: MediaCommand, toBundleID bundleID: String) async -> Bool {
+        guard let app = resolver.allApps().first(where: { $0.bundleID == bundleID })
+        else { return false }
+        return await runner.run {
+            guard app.isReady else { return false }
+            app.perform(command)   // perform() re-checks readiness off-main
+            return true
+        }
     }
 
     /// Applies `steps` volume-key presses (positive = up) to the target in a single

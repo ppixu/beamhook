@@ -73,6 +73,11 @@ struct BrowserMediaCandidate: Identifiable, Hashable, Sendable {
     /// indexes, it remains stable when the user reorders tabs and is discarded
     /// on cross-origin navigation rather than ever pointing at a different page.
     let sourceID: String
+    /// Last position observed by the browser scan. This is only a fast-path cache:
+    /// every action validates `sourceID` in the page before doing anything, and
+    /// falls back to an identity-based browser-wide search if the tab moved.
+    let windowIndex: Int
+    let tabIndex: Int
     let title: String
     let artist: String
     let isPlaying: Bool
@@ -126,13 +131,11 @@ final class BrowserMediaController: @unchecked Sendable {
                   let payload = try? JSONDecoder().decode(Payload.self, from: data),
                   Self.isValidSourceID(payload.sourceID)
             else { return nil }
-            // Parsing the indexes validates the row format, but deliberately do
-            // not retain them: positions are not identities and must never be
-            // used by a later action after the browser can have reordered tabs.
-            _ = window
-            _ = tab
+            // Positions are retained only as a fast-path cache. Every later action
+            // validates the page-owned source id before using them.
             return BrowserMediaCandidate(
                 browser: browser, sourceID: payload.sourceID,
+                windowIndex: window, tabIndex: tab,
                 title: payload.title, artist: payload.artist,
                 isPlaying: payload.playing, isSelected: payload.selected,
                 supportsTransport: !payload.live,
@@ -150,7 +153,17 @@ final class BrowserMediaController: @unchecked Sendable {
     }
 
     func togglePlayPause(_ candidate: BrowserMediaCandidate) -> Bool {
-        executor.run(playPauseScript(candidate)).succeeded
+        perform(.playPause, on: candidate)
+    }
+
+    func perform(_ command: MediaCommand, on candidate: BrowserMediaCandidate) -> Bool {
+        let script: String
+        switch command {
+        case .playPause: script = playPauseScript(candidate)
+        case .next: script = nextScript(candidate)
+        case .previous: script = previousScript(candidate)
+        }
+        return executor.run(script).succeeded
     }
 
     private func scanScript(_ browser: BrowserKind) -> String {
@@ -194,46 +207,65 @@ final class BrowserMediaController: @unchecked Sendable {
         let js = """
         (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; \(BrowserJS.pick) const p = bhPick(); if (!p) return 'NO'; p.group.forEach(x => { x.volume = \(clamped) / 100; if (\(clamped) > 0) x.muted = false; }); return 'MATCH'; })()
         """
-        let evaluate = candidate.browser == .safari
-            ? "do JavaScript javascriptSource in candidateTab"
-            : "execute candidateTab javascript javascriptSource"
-        return """
-        set javascriptSource to "\(js)"
-        set targetFound to false
-        tell application "\(candidate.browser.applicationName)"
-            repeat with browserWindow in windows
-                repeat with candidateTab in tabs of browserWindow
-                    try
-                        set actionResult to \(evaluate)
-                        if actionResult is "MATCH" then set targetFound to true
-                    end try
-                end repeat
-            end repeat
-        end tell
-        if targetFound is false then error "Selected browser media source is no longer available"
-        return true
-        """
+        return targetedActionScript(js, candidate: candidate)
     }
 
     private func playPauseScript(_ candidate: BrowserMediaCandidate) -> String {
         let js = """
         (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; \(BrowserJS.pick) const p = bhPick(); if (!p || p.live) return 'NO'; const youtube = document.querySelector('.ytp-play-button'); if (youtube) youtube.click(); else if (p.el.paused || p.el.ended) void p.el.play(); else p.el.pause(); return 'MATCH'; })()
         """
+        return targetedActionScript(js, candidate: candidate)
+    }
+
+    private func nextScript(_ candidate: BrowserMediaCandidate) -> String {
+        let js = """
+        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; const b = document.querySelector('.ytp-next-button'); if (!b) return 'NO'; b.click(); return 'MATCH'; })()
+        """
+        return targetedActionScript(js, candidate: candidate)
+    }
+
+    private func previousScript(_ candidate: BrowserMediaCandidate) -> String {
+        let js = """
+        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; const b = document.querySelector('.ytp-prev-button'); if (!b) return 'NO'; b.click(); return 'MATCH'; })()
+        """
+        return targetedActionScript(js, candidate: candidate)
+    }
+
+    /// Try the scan's last-known tab first, but treat it strictly as a cache. The
+    /// page-owned source id is validated before the JS can act, so a reordered or
+    /// replaced tab is harmless. A cache miss falls back to the safe identity scan.
+    private func targetedActionScript(
+        _ javascript: String,
+        candidate: BrowserMediaCandidate
+    ) -> String {
         let evaluate = candidate.browser == .safari
             ? "do JavaScript javascriptSource in candidateTab"
             : "execute candidateTab javascript javascriptSource"
         return """
-        set javascriptSource to "\(js)"
+        set javascriptSource to "\(javascript)"
         set targetFound to false
         tell application "\(candidate.browser.applicationName)"
-            repeat with browserWindow in windows
-                repeat with candidateTab in tabs of browserWindow
-                    try
-                        set actionResult to \(evaluate)
-                        if actionResult is "MATCH" then set targetFound to true
-                    end try
+            try
+                set candidateTab to tab \(candidate.tabIndex) of window \(candidate.windowIndex)
+                set actionResult to \(evaluate)
+                if actionResult is "MATCH" then set targetFound to true
+            end try
+            if targetFound is false then
+                repeat with browserWindow in windows
+                    repeat with candidateTab in tabs of browserWindow
+                        try
+                            set actionResult to \(evaluate)
+                            if actionResult is "MATCH" then
+                                set targetFound to true
+                                exit repeat
+                            end if
+                        end try
+                    end repeat
+                    if targetFound then
+                        exit repeat
+                    end if
                 end repeat
-            end repeat
+            end if
         end tell
         if targetFound is false then error "Selected browser media source is no longer available"
         return true

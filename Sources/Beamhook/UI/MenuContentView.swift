@@ -11,6 +11,7 @@ struct MenuContentView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var updater: UpdaterModel
     @State private var playing: Bool?
+    @State private var playPauseInFlight = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -125,7 +126,8 @@ struct MenuContentView: View {
         .task(id: state.isMenuVisible) {
             guard state.isMenuVisible else { return }
             while !Task.isCancelled {
-                playing = await state.isTargetPlaying()
+                let latest = await state.isTargetPlaying()
+                if !playPauseInFlight { playing = latest }
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
             }
         }
@@ -154,15 +156,24 @@ struct MenuContentView: View {
 
     private var playPauseButton: some View {
         Button {
+            guard !playPauseInFlight else { return }
             let wasPlaying = (playing == true)
-            state.togglePlayPauseTarget()
             playing = !wasPlaying   // optimistic; the 1.5s poll reconciles with reality
+            playPauseInFlight = true
+            Task {
+                if !(await state.togglePlayPauseTarget()) {
+                    playing = wasPlaying
+                }
+                playPauseInFlight = false
+            }
         } label: {
             Image(systemName: playing == true ? "pause.fill" : "play.fill")
                 .frame(maxWidth: .infinity)
         }
         .controlSize(.regular)
-        .disabled(state.selectedTargetID == nil || !state.selectedBrowserSourceSupportsTransport)
+        .disabled(state.selectedTargetID == nil
+                  || !state.selectedBrowserSourceSupportsTransport
+                  || playPauseInFlight)
         .help(state.selectedBrowserSourceSupportsTransport
               ? (playing == true ? "Pause \(targetName)" : "Play \(targetName)")
               : "This tab is a call, which has no play/pause. Volume still works.")
@@ -284,6 +295,7 @@ private struct AppVolumeRow: View {
     @State private var volume: Double = 50
     @State private var scriptable = false
     @State private var appIsPlaying: Bool?
+    @State private var playPauseInFlight = false
 
     private var isTarget: Bool {
         guard let id = state.selectedTargetID,
@@ -378,7 +390,8 @@ private struct AppVolumeRow: View {
                 return
             }
             while !Task.isCancelled {
-                appIsPlaying = await state.isPlaying(bundleID: playing.bundleID)
+                let latest = await state.isPlaying(bundleID: playing.bundleID)
+                if !playPauseInFlight { appIsPlaying = latest }
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
             }
         }
@@ -386,9 +399,16 @@ private struct AppVolumeRow: View {
 
     private var compactPlayPauseButton: some View {
         Button {
+            guard !playPauseInFlight else { return }
             let wasPlaying = appIsPlaying == true
             appIsPlaying = !wasPlaying
-            state.togglePlayPause(bundleID: playing.bundleID)
+            playPauseInFlight = true
+            Task {
+                if !(await state.togglePlayPause(bundleID: playing.bundleID)) {
+                    appIsPlaying = wasPlaying
+                }
+                playPauseInFlight = false
+            }
         } label: {
             Image(systemName: appIsPlaying == true ? "pause.fill" : "play.fill")
                 .font(.system(size: 8, weight: .semibold))
@@ -396,6 +416,7 @@ private struct AppVolumeRow: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(playPauseInFlight)
         .foregroundStyle(.secondary)
         .accessibilityLabel(appIsPlaying == true
                             ? "Pause \(playing.displayName)"
@@ -460,6 +481,7 @@ private struct BrowserVolumeRow: View {
     @State private var volume: Double = 50
     @State private var isEditing = false
     @State private var sourceIsPlaying = false
+    @State private var playPauseInFlight = false
 
     private var browserIsTarget: Bool {
         BrowserKind.target(id: state.selectedTargetID) == candidate.browser
@@ -498,7 +520,7 @@ private struct BrowserVolumeRow: View {
             if let value = candidate.volume { volume = Double(value) }
         }
         .onChange(of: candidate.isPlaying) { _, newValue in
-            sourceIsPlaying = newValue
+            if !playPauseInFlight { sourceIsPlaying = newValue }
         }
         .onChange(of: candidate.volume) { _, newValue in
             if !isEditing, let newValue { volume = Double(newValue) }
@@ -507,12 +529,15 @@ private struct BrowserVolumeRow: View {
 
     private var compactPlayPauseButton: some View {
         Button {
+            guard !playPauseInFlight else { return }
             let previous = sourceIsPlaying
             sourceIsPlaying.toggle()
+            playPauseInFlight = true
             Task {
                 if !(await state.toggleBrowserPlayPause(candidate)) {
                     sourceIsPlaying = previous
                 }
+                playPauseInFlight = false
             }
         } label: {
             Image(systemName: sourceIsPlaying ? "pause.fill" : "play.fill")
@@ -521,6 +546,7 @@ private struct BrowserVolumeRow: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(playPauseInFlight)
         .foregroundStyle(.secondary)
         .accessibilityLabel(sourceIsPlaying
                             ? "Pause \(candidate.label)"

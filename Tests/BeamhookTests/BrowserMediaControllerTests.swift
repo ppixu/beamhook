@@ -15,6 +15,10 @@ final class BrowserMediaControllerTests: XCTestCase {
 
         XCTAssertEqual(first?.id, reordered?.id)
         XCTAssertEqual(first?.id, "chrome:\(sourceID)")
+        XCTAssertEqual(first?.windowIndex, 1)
+        XCTAssertEqual(first?.tabIndex, 2)
+        XCTAssertEqual(reordered?.windowIndex, 4)
+        XCTAssertEqual(reordered?.tabIndex, 9)
     }
 
     func testInvalidPageSuppliedSourceIdentityIsRejected() {
@@ -49,6 +53,7 @@ final class BrowserMediaControllerTests: XCTestCase {
         let script = try? XCTUnwrap(executor.scripts.last)
         XCTAssertTrue(script?.contains(candidate.sourceID) == true)
         XCTAssertTrue(script?.contains("x.volume = 75 / 100") == true)
+        XCTAssertTrue(script?.contains("set candidateTab to tab 9 of window 4") == true)
         XCTAssertTrue(script?.contains("targetFound is false") == true)
     }
 
@@ -62,9 +67,45 @@ final class BrowserMediaControllerTests: XCTestCase {
         let script = try? XCTUnwrap(executor.scripts.last)
         XCTAssertTrue(script?.contains(candidate.sourceID) == true)
         XCTAssertTrue(script?.contains("repeat with browserWindow in windows") == true)
+        XCTAssertTrue(script?.contains("set candidateTab to tab 9 of window 4") == true)
+        XCTAssertTrue(script?.contains("if targetFound then") == true)
+        let cachedLookup = script?.range(of: "set candidateTab to tab 9 of window 4")
+        let fallbackLookup = script?.range(of: "repeat with browserWindow in windows")
+        XCTAssertNotNil(cachedLookup)
+        XCTAssertNotNil(fallbackLookup)
+        if let cachedLookup, let fallbackLookup {
+            XCTAssertLessThan(cachedLookup.lowerBound, fallbackLookup.lowerBound)
+        }
         XCTAssertTrue(script?.contains("p.el.pause()") == true)
         XCTAssertTrue(script?.contains("p.el.play()") == true)
         XCTAssertFalse(script?.contains("set targetTab to tab") == true)
+    }
+
+    func testNextAndPreviousUseValidatedCachedTarget() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        let candidate = makeCandidate()
+
+        XCTAssertTrue(controller.perform(.next, on: candidate))
+        XCTAssertTrue(executor.scripts.last?.contains(".ytp-next-button") == true)
+        XCTAssertTrue(executor.scripts.last?.contains(
+            "set candidateTab to tab 9 of window 4"
+        ) == true)
+
+        XCTAssertTrue(controller.perform(.previous, on: candidate))
+        XCTAssertTrue(executor.scripts.last?.contains(".ytp-prev-button") == true)
+    }
+
+    func testTargetedSafariActionAppleScriptCompiles() throws {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+
+        XCTAssertTrue(controller.togglePlayPause(makeCandidate(browser: .safari)))
+
+        let source = try XCTUnwrap(executor.scripts.last)
+        let script = try XCTUnwrap(NSAppleScript(source: source))
+        var error: NSDictionary?
+        XCTAssertTrue(script.compileAndReturnError(&error), "\(error ?? [:])")
     }
 
     func testCallTabIsListedButCannotBeDrivenByTransport() {
@@ -128,10 +169,12 @@ final class BrowserMediaControllerTests: XCTestCase {
         XCTAssertFalse(volume?.contains("p.live") == true)
     }
 
-    private func makeCandidate() -> BrowserMediaCandidate {
+    private func makeCandidate(browser: BrowserKind = .chrome) -> BrowserMediaCandidate {
         BrowserMediaCandidate(
-            browser: .chrome,
+            browser: browser,
             sourceID: "550e8400-e29b-41d4-a716-446655440000",
+            windowIndex: 4,
+            tabIndex: 9,
             title: "Test video",
             artist: "Test artist",
             isPlaying: true,

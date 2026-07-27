@@ -16,9 +16,10 @@ final class TargetManagerTests: XCTestCase {
     }
 
     private func makeManager(resolver: MediaAppResolver, defaults: UserDefaults? = nil,
+                             runner: ScriptRunning = InlineScriptRunner(),
                              volumeStep: Int = 6) -> TargetManager {
         TargetManager(defaults: defaults ?? makeDefaults(), resolver: resolver,
-                      runner: InlineScriptRunner(), volumeStep: volumeStep)
+                      runner: runner, volumeStep: volumeStep)
     }
 
     func testSelectionPersists() {
@@ -57,7 +58,23 @@ final class TargetManagerTests: XCTestCase {
         let tm = makeManager(resolver: resolver)
         tm.selectedTargetID = "spotify"
 
-        await tm.route(.playPause)
+        let routed = await tm.route(.playPause)
+        XCTAssertTrue(routed)
+        XCTAssertEqual(spotify.performedCommands, [.playPause])
+    }
+
+    func testRouteChecksReadinessWhenQueuedCommandActuallyRuns() async {
+        let resolver = MockResolver()
+        let spotify = MockMediaApp(id: "spotify", isRunning: true)
+        spotify.readyValue = false
+        resolver.apps["spotify"] = spotify
+        let runner = BeforeRunScriptRunner { spotify.readyValue = true }
+        let tm = makeManager(resolver: resolver, runner: runner)
+        tm.selectedTargetID = "spotify"
+
+        let routed = await tm.route(.playPause)
+
+        XCTAssertTrue(routed)
         XCTAssertEqual(spotify.performedCommands, [.playPause])
     }
 
@@ -68,7 +85,8 @@ final class TargetManagerTests: XCTestCase {
         let tm = makeManager(resolver: resolver)
         tm.selectedTargetID = "spotify"
 
-        await tm.route(.playPause)
+        let routed = await tm.route(.playPause)
+        XCTAssertFalse(routed)
         XCTAssertTrue(spotify.performedCommands.isEmpty)
     }
 
@@ -78,7 +96,8 @@ final class TargetManagerTests: XCTestCase {
         resolver.apps["spotify"] = spotify
         let tm = makeManager(resolver: resolver)
 
-        await tm.route(.playPause)
+        let routed = await tm.route(.playPause)
+        XCTAssertFalse(routed)
         XCTAssertTrue(spotify.performedCommands.isEmpty)
     }
 
@@ -88,7 +107,8 @@ final class TargetManagerTests: XCTestCase {
         resolver.apps["spotify"] = spotify
         let tm = makeManager(resolver: resolver)
         tm.selectedTargetID = "defunct-app"   // not registered in the resolver
-        await tm.route(.playPause)
+        let routed = await tm.route(.playPause)
+        XCTAssertFalse(routed)
         XCTAssertTrue(spotify.performedCommands.isEmpty)
     }
 
@@ -112,8 +132,9 @@ final class TargetManagerTests: XCTestCase {
         let tm = makeManager(resolver: resolver)
         tm.selectedTargetID = "spotify"
 
-        await tm.route(.playPause, toBundleID: music.bundleID)
+        let routed = await tm.route(.playPause, toBundleID: music.bundleID)
 
+        XCTAssertTrue(routed)
         XCTAssertEqual(music.performedCommands, [.playPause])
         XCTAssertTrue(spotify.performedCommands.isEmpty)
         XCTAssertEqual(tm.selectedTargetID, "spotify")
@@ -126,9 +147,11 @@ final class TargetManagerTests: XCTestCase {
         resolver.apps["music"] = music
         let tm = makeManager(resolver: resolver)
 
-        await tm.route(.playPause, toBundleID: "com.example.missing")
-        await tm.route(.playPause, toBundleID: music.bundleID)
+        let missing = await tm.route(.playPause, toBundleID: "com.example.missing")
+        let unready = await tm.route(.playPause, toBundleID: music.bundleID)
 
+        XCTAssertFalse(missing)
+        XCTAssertFalse(unready)
         XCTAssertTrue(music.performedCommands.isEmpty)
     }
 
@@ -207,5 +230,18 @@ final class TargetManagerTests: XCTestCase {
         let result = await tm.adjustVolume(bySteps: 2)
         XCTAssertNil(result)
         XCTAssertTrue(app.setVolumeCalls.isEmpty)
+    }
+}
+
+private final class BeforeRunScriptRunner: ScriptRunning {
+    private let beforeRun: () -> Void
+
+    init(_ beforeRun: @escaping () -> Void) {
+        self.beforeRun = beforeRun
+    }
+
+    func run<T>(_ work: @escaping () -> T) async -> T {
+        beforeRun()
+        return work()
     }
 }

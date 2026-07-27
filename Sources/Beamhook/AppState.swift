@@ -17,9 +17,9 @@ final class AppState: ObservableObject {
     /// Serial off-main queue for user-initiated commands (media keys → target, volume
     /// steps, slider writes), driven via the target manager.
     private let scripting: ScriptRunner
-    /// A SEPARATE serial queue for background/best-effort reads (the 1.5s play-state
-    /// poll, a row's initial volume read). Kept apart from `scripting` so a slow read
-    /// against a wedged target can never sit in front of a user's key press.
+    /// A SEPARATE serial queue for background/best-effort work (the 1.5s play-state
+    /// poll, initial volume reads, browser-selection bookkeeping). Kept apart from
+    /// `scripting` so slow maintenance can never sit in front of a user's key press.
     private let pollRunner = ScriptRunner()
     private let browserMediaController = BrowserMediaController()
     /// Per-browser playback recency used to keep the menu bounded to the three
@@ -122,7 +122,16 @@ final class AppState: ObservableObject {
         switch key {
         case .volumeUp:   nudgeVolume(up: true)
         case .volumeDown: nudgeVolume(up: false)
-        default:          Task { await targetManager.route(key) }
+        default:
+            guard let command = key.command else { return }
+            if selectedTargetIsBrowser, browserMediaInjectionAvailable == true {
+                guard let candidate = selectedBrowserMediaCandidate,
+                      candidate.supportsTransport
+                else { return }
+                Task { _ = await performBrowserCommand(command, on: candidate) }
+            } else {
+                Task { _ = await targetManager.route(key) }
+            }
         }
     }
 
@@ -212,12 +221,18 @@ final class AppState: ObservableObject {
         return await pollRunner.run { app.isPlaying() }
     }
 
-    func togglePlayPauseTarget() {
-        if BrowserKind.target(id: selectedTargetID) != nil,
-           browserMediaInjectionAvailable != true {
+    func togglePlayPauseTarget() async -> Bool {
+        if selectedTargetIsBrowser, browserMediaInjectionAvailable != true {
             MediaKeyTap.postNativePlayPause()
+            return true
+        }
+        if selectedTargetIsBrowser {
+            guard let candidate = selectedBrowserMediaCandidate,
+                  candidate.supportsTransport
+            else { return false }
+            return await performBrowserCommand(.playPause, on: candidate)
         } else {
-            Task { await targetManager.route(.playPause) }
+            return await targetManager.route(.playPause)
         }
     }
 
@@ -231,16 +246,23 @@ final class AppState: ObservableObject {
         return await pollRunner.run { app.isPlaying() }
     }
 
-    func togglePlayPause(bundleID: String) {
-        Task { await targetManager.route(.playPause, toBundleID: bundleID) }
+    func togglePlayPause(bundleID: String) async -> Bool {
+        await targetManager.route(.playPause, toBundleID: bundleID)
     }
 
     /// Toggle one exact browser media source. BrowserMediaController resolves the
     /// stable page-owned source ID at action time, so tab reordering cannot make
     /// this control act on a different tab.
     func toggleBrowserPlayPause(_ candidate: BrowserMediaCandidate) async -> Bool {
+        await performBrowserCommand(.playPause, on: candidate)
+    }
+
+    private func performBrowserCommand(
+        _ command: MediaCommand,
+        on candidate: BrowserMediaCandidate
+    ) async -> Bool {
         await scripting.run { [browserMediaController] in
-            browserMediaController.togglePlayPause(candidate)
+            browserMediaController.perform(command, on: candidate)
         }
     }
 
@@ -258,14 +280,19 @@ final class AppState: ObservableObject {
 
     var selectedTargetIsBrowser: Bool { BrowserKind.target(id: selectedTargetID) != nil }
 
+    private var selectedBrowserMediaCandidate: BrowserMediaCandidate? {
+        guard let id = selectedBrowserMediaID else { return nil }
+        return browserMediaCandidates.first { $0.id == id }
+    }
+
     /// Whether the hooked browser source can act on the transport keys. A call
     /// tab cannot: pausing a live MediaStream only freezes the user's view of the
     /// meeting. Anything else — including a non-browser target — can.
     var selectedBrowserSourceSupportsTransport: Bool {
-        guard let id = selectedBrowserMediaID,
-              let candidate = browserMediaCandidates.first(where: { $0.id == id })
-        else { return true }
-        return candidate.supportsTransport
+        guard selectedTargetIsBrowser, browserMediaInjectionAvailable == true else {
+            return true
+        }
+        return selectedBrowserMediaCandidate?.supportsTransport == true
     }
 
     /// Probe browser injection and enumerate media tabs. Called periodically while
@@ -318,7 +345,10 @@ final class AppState: ObservableObject {
             ?? scan.candidates.first
         selectedBrowserMediaID = chosen?.id
         if let chosen, !chosen.isSelected {
-            _ = await scripting.run { [browserMediaController] in
+            // This is background bookkeeping, not a user command. Keep its required
+            // all-tab marker cleanup off the command lane so it cannot delay a play
+            // click for this browser or another app such as Spotify.
+            _ = await pollRunner.run { [browserMediaController] in
                 browserMediaController.select(chosen)
             }
         }
