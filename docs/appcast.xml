@@ -1,16 +1,34 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><!--
+-->
+<!--
   Sparkle update feed for the official (Gumroad) Beamhook build.
   This file is regenerated and signed by scripts/sign-release.sh; the enclosure
   URLs point at the private update host, not this repo. Do not edit a generated
   feed by hand because any change invalidates its signed-feed metadata.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+-->
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <title>Beamhook</title>
         <link>https://beamhook.app/appcast.xml</link>
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
+        <item>
+            <title>1.1.2</title>
+            <pubDate>Mon, 27 Jul 2026 14:53:03 +0300</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.2</link>
+            <sparkle:version>6</sparkle:version>
+            <sparkle:shortVersionString>1.1.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Fixed</h3>
+<ul>
+<li>Video calls in Safari and Chrome — Google Meet, Teams, Discord and the like — no longer offer a play/pause button. Pressing it only froze your own view of the call. Their volume slider stays, so you can still turn a meeting down.</li>
+<li>A call tab can no longer quietly claim the media keys. Because a meeting counts as "playing" for its whole duration, it could be picked as the hooked browser source ahead of the music you actually meant to control.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.1.2.zip" length="1869879" type="application/octet-stream" sparkle:edSignature="s7b8n7JYgRAs7J/Gv5P3DSt5Gn94ygquStRiUgGTdFO2Q1C75dc7tW9EWxk3xNjZ6XG7XUz+EDLGPlJ4HYY+Cw=="/>
+        </item>
         <item>
             <title>1.1.1</title>
             <pubDate>Sat, 25 Jul 2026 21:46:03 +0300</pubDate>
@@ -18,7 +36,7 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <sparkle:version>5</sparkle:version>
             <sparkle:shortVersionString>1.1.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://updates.beamhook.app/Beamhook-1.1.1.zip" length="1853151" type="application/octet-stream" sparkle:edSignature="CelyK+3aph5TatX8uYmxQ/D48Fng4RWwRVaEf2/S6myZ2F/TWXQNBHDeC3ibhslCw029KH5a8xiqShk+DBctBA=="></enclosure>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.1.1.zip" length="1853151" type="application/octet-stream" sparkle:edSignature="CelyK+3aph5TatX8uYmxQ/D48Fng4RWwRVaEf2/S6myZ2F/TWXQNBHDeC3ibhslCw029KH5a8xiqShk+DBctBA=="/>
         </item>
         <item>
             <title>Beamhook 1.1.0</title>
@@ -27,10 +45,11 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.0</link>
-            <enclosure url="https://updates.beamhook.app/Beamhook-1.1.0.zip" sparkle:edSignature="ZsrxwoqH8BcX5m3igOPmp5m2KbaZbSGNpAMBnTX40oiGSWwbZ6cFP6eMPPJxUwOJ5PtXB6bnh4cCK70kMW2MDg==" length="1816577" type="application/octet-stream"></enclosure>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.1.0.zip" sparkle:edSignature="ZsrxwoqH8BcX5m3igOPmp5m2KbaZbSGNpAMBnTX40oiGSWwbZ6cFP6eMPPJxUwOJ5PtXB6bnh4cCK70kMW2MDg==" length="1816577" type="application/octet-stream"/>
         </item>
     </channel>
-</rss><!-- sparkle-signatures:
-edSignature: hXOI2t8BH2xCK+v8Vior/2ogg3Yb4/7xrd42qsIKaiG94cp3/gJmxUpmx8/w0g0LsQGrLt9S9amwBD4Zkf7xBg==
-length: 2238
+</rss>
+<!-- sparkle-signatures:
+edSignature: qQFWLNysxGbJM1fLefYfyHViA46OoHgzi8eWOceTxzJQiyNY9JbsEZMxLnE91tNTlk8bEUbjzG5R1Lv4cELHBQ==
+length: 3412
 -->

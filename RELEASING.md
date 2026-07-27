@@ -39,8 +39,10 @@ doubt it, compare `codesign -dv --verbose=4` CDHashes — they must match.
 
 ## Per-release checklist
 
-1. Bump `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `project.yml`;
-   update `CHANGELOG.md`. Commit.
+1. Add the `## [<version>]` section to `CHANGELOG.md` — `release.sh` refuses to
+   build without it, because that section becomes the release notes Sparkle
+   shows in its "What's New" panel. The version itself is bumped by
+   `./release.sh <version>` in step 3; commit both together afterwards.
 2. Verify before you sign anything:
    ```
    xcodebuild test -project Beamhook.xcodeproj -scheme BeamhookKit \
@@ -50,14 +52,23 @@ doubt it, compare `codesign -dv --verbose=4` CDHashes — they must match.
    ```
    The browser targeting scripts are only exercised against a fake executor, so
    also smoke-test a real Safari and Chrome window if that code changed.
-3. Build, sign, notarize, staple, and package the DMG in one step:
+3. Bump the version, build, sign, notarize, staple, and package the DMG in one
+   step:
    ```
-   ./release.sh
+   ./release.sh 1.1.2
    ```
-   It regenerates the project, does a `clean build` of the tracked **`Official`**
-   configuration with your Developer ID, deep-signs Sparkle's nested helpers,
-   notarizes and staples both the app and the disk image, and leaves
-   `build/Beamhook.dmg` plus a stapled `build/Build/Products/Official/Beamhook.app`.
+   It rewrites `MARKETING_VERSION` and increments `CURRENT_PROJECT_VERSION` in
+   `project.yml`, regenerates the project, does a `clean build` of the tracked
+   **`Official`** configuration with your Developer ID, deep-signs Sparkle's
+   nested helpers, notarizes and staples both the app and the disk image, and
+   leaves `build/Beamhook.dmg` plus a stapled
+   `build/Build/Products/Official/Beamhook.app`. It also drops a versioned
+   `Beamhook-<version>.dmg` into `~/Dropbox/Apps/Beamhook` for Gumroad.
+
+   Run it without an argument to rebuild the version already in `project.yml`.
+   Either way it **refuses a build number already present in the appcast** —
+   that release would be valid, signed and invisible, since Sparkle compares
+   `CFBundleVersion`.
    Do **not** use `./run.sh` for a shippable build — it signs with the free Apple
    Development identity and launches the app. See the appendix if you need to
    drive the steps by hand.
@@ -66,16 +77,20 @@ doubt it, compare `codesign -dv --verbose=4` CDHashes — they must match.
    ./scripts/sign-release.sh build/Build/Products/Official/Beamhook.app
    ```
    It refuses anything that is not an `Official`, Developer ID-signed, stapled,
-   update-capable build, then creates `Beamhook-<version>.zip`, signs the
-   archive, regenerates `docs/appcast.xml` with Sparkle's signed-feed metadata,
-   and verifies that signature. `UPDATE_BASE_URL` (default
+   update-capable build, then creates `build/Beamhook-<version>.zip`, renders
+   this version's `CHANGELOG.md` section into the item's release notes, signs
+   the archive, regenerates `docs/appcast.xml` with Sparkle's signed-feed
+   metadata, and verifies that signature. `UPDATE_BASE_URL` (default
    `https://updates.beamhook.app`) sets the enclosure prefix.
-5. Upload the zip to the update host, and upload the DMG to Gumroad under a
-   versioned name — `build/Beamhook.dmg` is unversioned and any later build
-   wipes it:
-   ```
-   cp build/Beamhook.dmg ~/Dropbox/Apps/Beamhook/Beamhook-<version>.dmg
-   ```
+
+   It then **uploads the zip to R2 itself** with `wrangler`
+   (`BEAMHOOK_R2_BUCKET`, default `beamhook-updates`) and verifies that the
+   published `content-length` matches both the local file and the feed's
+   enclosure. Without `wrangler` on `PATH` it prints the upload URL instead and
+   skips the upload — everything else still runs.
+5. Upload the DMG to Gumroad. `release.sh` has already put a versioned copy at
+   `~/Dropbox/Apps/Beamhook/Beamhook-<version>.dmg` (`build/Beamhook.dmg` is
+   unversioned and any later build wipes it).
 6. Commit and push `docs/appcast.xml` **exactly as generated**. GitHub Pages
    serves the new signed feed and customers get the update.
 7. `git tag -a v<version> && git push origin v<version>`, then

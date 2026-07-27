@@ -20,7 +20,8 @@
 # not change it now that builds are in the wild: it would orphan every user's
 # Accessibility grant and break Sparkle's update continuity.
 #
-# Then just:  ./release.sh
+# Then just:  ./release.sh 1.1.2      (bumps project.yml, then builds)
+#         or:  ./release.sh          (builds the version already in project.yml)
 #
 # This script stops at the DMG for Gumroad. The Sparkle side — update zip and
 # signed appcast — is scripts/sign-release.sh. Full procedure: RELEASING.md.
@@ -29,6 +30,54 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 NOTARY_PROFILE="${BEAMHOOK_NOTARY_PROFILE:-Beamhook-Notary}"
+DMG_ARCHIVE_DIR="${BEAMHOOK_DMG_ARCHIVE_DIR:-$HOME/Dropbox/Apps/Beamhook}"
+
+# ── Version ───────────────────────────────────────────────────────────────────
+# Everything is checked BEFORE project.yml is touched, so a failed guard never
+# leaves a half-bumped tree behind.
+read_setting() {  # $1 = key in project.yml's settings block
+  sed -n -E "s/^[[:space:]]*$1:[[:space:]]*\"?([^\"]*)\"?[[:space:]]*\$/\1/p" project.yml | head -1
+}
+write_setting() {  # $1 = key, $2 = new value
+  /usr/bin/sed -i '' -E "s|^([[:space:]]*$1:[[:space:]]*).*|\1\"$2\"|" project.yml
+}
+
+VERSION=$(read_setting MARKETING_VERSION)
+BUILD=$(read_setting CURRENT_PROJECT_VERSION)
+BUMP_TO="${1:-}"
+if [ -n "$BUMP_TO" ]; then
+  case "$BUMP_TO" in
+    [0-9]*.[0-9]*.[0-9]*) ;;
+    *) echo "error: version must look like 1.2.3 (got '$BUMP_TO')" >&2; exit 1 ;;
+  esac
+  VERSION="$BUMP_TO"
+  BUILD=$((BUILD + 1))
+fi
+
+# A build number that is already in the feed is the one failure this pipeline
+# cannot otherwise catch: the DMG is valid, notarization passes, the appcast is
+# correctly signed — and not one existing user is ever offered the update,
+# because Sparkle compares CFBundleVersion. Silent from end to end, so stop here.
+if grep -q "<sparkle:version>$BUILD</sparkle:version>" docs/appcast.xml; then
+  echo "error: build $BUILD is already published in docs/appcast.xml." >&2
+  echo "       Re-releasing it would ship an update nobody is offered." >&2
+  echo "       Bump it instead:  ./release.sh <next-version>" >&2
+  exit 1
+fi
+
+# Sparkle shows this section as the update's release notes (see sign-release.sh).
+if ! grep -q "^## \[$VERSION\]" CHANGELOG.md; then
+  echo "error: CHANGELOG.md has no '## [$VERSION]' section." >&2
+  echo "       That section becomes the release notes users see; add it first." >&2
+  exit 1
+fi
+
+if [ -n "$BUMP_TO" ]; then
+  write_setting MARKETING_VERSION "$VERSION"
+  write_setting CURRENT_PROJECT_VERSION "$BUILD"
+  echo "==> Bumped project.yml to $VERSION (build $BUILD)"
+fi
+echo "==> Releasing $VERSION (build $BUILD)"
 
 command -v xcodegen >/dev/null 2>&1 || { echo "error: xcodegen not found (brew install xcodegen)" >&2; exit 1; }
 
@@ -136,26 +185,35 @@ verify_notarization_signatures
 # visible progress, and explicitly gate the release on the final status. On
 # rejection, print Apple's detailed log at the point of failure.
 notarize() {
-  local artifact="$1" submit_result info_result job_id status
+  local artifact="$1" submit_result wait_result job_id status
   submit_result=$(mktemp build/notary-submit.XXXXXX)
-  info_result=$(mktemp build/notary-info.XXXXXX)
+  wait_result=$(mktemp build/notary-wait.XXXXXX)
 
   if ! xcrun notarytool submit "$artifact" \
       --keychain-profile "$NOTARY_PROFILE" --output-format plist \
       >"$submit_result"; then
     unlink "$submit_result"
-    unlink "$info_result"
+    unlink "$wait_result"
     return 1
   fi
 
   job_id=$(plutil -extract id raw -o - "$submit_result")
   unlink "$submit_result"
   echo "   submission id: $job_id"
-  xcrun notarytool wait "$job_id" --keychain-profile "$NOTARY_PROFILE"
-  xcrun notarytool info "$job_id" --keychain-profile "$NOTARY_PROFILE" \
-    --output-format plist >"$info_result"
-  status=$(plutil -extract status raw -o - "$info_result")
-  unlink "$info_result"
+  echo "   waiting for Apple's verdict…"
+
+  # Read the verdict straight from `wait`. A separate `notarytool info` call
+  # would ask the keychain for the notary credential a third time in one run,
+  # and an already-accepted notarization must not be thrown away because a
+  # redundant lookup failed — which is exactly what happened once.
+  if ! xcrun notarytool wait "$job_id" \
+      --keychain-profile "$NOTARY_PROFILE" --output-format plist \
+      >"$wait_result"; then
+    unlink "$wait_result"
+    return 1
+  fi
+  status=$(plutil -extract status raw -o - "$wait_result")
+  unlink "$wait_result"
 
   if [ "$status" != "Accepted" ]; then
     echo "error: notarization finished with status '$status'." >&2
@@ -408,6 +466,23 @@ echo "==> Verifying the finished DMG (expect: 'validate action worked' + 'accept
 xcrun stapler validate "$DMG"
 spctl -a -t open --context context:primary-signature -vv "$DMG" 2>&1 | head -3 || true
 
+# build/Beamhook.dmg is unversioned and the next build overwrites it, so keep a
+# versioned copy on the private side immediately. Never in the repo: the paid
+# binary must not land in public git.
+ARCHIVED_DMG="$DMG_ARCHIVE_DIR/Beamhook-$VERSION.dmg"
+if [ -d "$DMG_ARCHIVE_DIR" ]; then
+  cp "$DMG" "$ARCHIVED_DMG"
+  echo "==> Archived $ARCHIVED_DMG"
+else
+  ARCHIVED_DMG="$DMG"
+  echo "warning: $DMG_ARCHIVE_DIR is missing; skipped the versioned archive copy." >&2
+fi
+
 echo ""
-echo "Done. Upload this file to Gumroad / GitHub Releases:"
-echo "    $DMG"
+echo "Done — $VERSION (build $BUILD)."
+echo ""
+echo "Next:"
+echo "    ./scripts/sign-release.sh $APP"
+echo "        Builds the update zip, signs the appcast, uploads the zip."
+echo "    Gumroad: attach $ARCHIVED_DMG"
+echo "        GitHub Releases stay binary-free on purpose (see RELEASING.md)."

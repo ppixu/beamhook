@@ -3,6 +3,8 @@
 build/
 DerivedData/
 .landingpage-temp/
+# wrangler drops a local cache here when sign-release.sh uploads the update zip
+.wrangler/
 
 # Local planning notes — never published
 MONETIZATION.md
