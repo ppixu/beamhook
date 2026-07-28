@@ -15,6 +15,22 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.1.4</title>
+            <pubDate>Tue, 28 Jul 2026 13:42:38 +0300</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.4</link>
+            <sparkle:version>8</sparkle:version>
+            <sparkle:shortVersionString>1.1.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Added</h3>
+<ul>
+<li>Five new targets that have no AppleScript at all: IINA, Amazon Music, TIDAL, Plexamp, and Deezer. Beamhook drives them by pressing their own menu items in the background — the app never comes forward and nothing is typed into it. Only IINA has been tested so far; if one of the others does nothing when you press play, please open an issue. These targets have no volume slider, because a menu can only step the volume rather than set it.</li>
+<li>The menu bar icon now shows what you have hooked, with a badge for Safari, Chrome, YouTube, Spotify, and Apple Music. Anything else keeps the plain hook.</li>
+<li>A help page at [beamhook.app/help](https://beamhook.app/help) walks through enabling "Allow JavaScript from Apple Events" in Safari and Chrome, with pictures. The browser notice in the menu links straight to it.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.1.4.zip" length="2001701" type="application/octet-stream" sparkle:edSignature="fVV84OFpNNZlUhk27YX01wZ0dYAQnYoOYIACDj/uDD5pRq1DKiig/0VechTvPZal9GrYWmXs6BrF7iZS2YCqBQ=="/>
+        </item>
+        <item>
             <title>1.1.3</title>
             <pubDate>Mon, 27 Jul 2026 16:05:35 +0300</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.3</link>
@@ -69,6 +85,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: 3+UpxycjHthKCfR1TDU9lECYWOzDbfUFafAT1PxiSmX/gbMklNAoDq7InZIKVrnKQRXWDj5Hx2CQuaKgjX4nCg==
-length: 4772
+edSignature: IMo8NAc0wLdW99Qj/cVJigYPIsWHp/3RZ9QU4liHOHgvdb42wmrKzzW+0xffyAtonQFMwsXG/lTxknLJt/s6BQ==
+length: 6330
 -->
