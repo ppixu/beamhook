@@ -15,6 +15,24 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.1.5</title>
+            <pubDate>Tue, 28 Jul 2026 14:27:22 +0300</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.5</link>
+            <sparkle:version>9</sparkle:version>
+            <sparkle:shortVersionString>1.1.5</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Added</h3>
+<ul>
+<li>When macOS is blocking Beamhook from controlling an app, the menu now says so and offers a button to the right Settings pane, instead of quietly showing "system volume only" as though the app had no volume control. Denying that permission only costs the volume slider — the media keys keep working.</li>
+</ul>
+<h3>Removed</h3>
+<ul>
+<li>TIDAL, which was added in 1.1.4 but does not actually respond. Its menu is readable, but pressing its playback items has no effect, and a target that ignores the keys is worse than one that isn't offered.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.1.5.zip" length="1960868" type="application/octet-stream" sparkle:edSignature="DAsRqYHiuu9ZNCJDMko9tChNmY7YAt17o57XB8igwd7nyDo5j03NoVCyuk0by5LvsLXYMTb75jJZbbaoXMn/Ag=="/>
+        </item>
+        <item>
             <title>1.1.4</title>
             <pubDate>Tue, 28 Jul 2026 13:42:38 +0300</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.4</link>
@@ -85,6 +103,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: IMo8NAc0wLdW99Qj/cVJigYPIsWHp/3RZ9QU4liHOHgvdb42wmrKzzW+0xffyAtonQFMwsXG/lTxknLJt/s6BQ==
-length: 6330
+edSignature: dTWZiXQ4pwIXclrQ0XJq6mvJqP56a5v9creWUAr4U5KF8wYTqmxFFkBTfcuvUTCwddclVv8X0YnqTwLXOuySAQ==
+length: 7607
 -->
