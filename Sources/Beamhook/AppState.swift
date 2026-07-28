@@ -12,6 +12,14 @@ struct PlaybackTargetContext: Hashable, Sendable {
     let revision: UInt64
 }
 
+/// Tags one playback read with the local menu-state revision at which it began.
+/// This is separate from `PlaybackTargetContext`: clicking play/pause does not
+/// change the target, but it must still invalidate a poll already in flight.
+struct PlaybackObservation: Equatable {
+    fileprivate let context: PlaybackTargetContext
+    fileprivate let revision: UInt64
+}
+
 /// Small, testable state machine for the menu's optimistic play/pause control.
 /// Every mutation is tagged with its playback context; late polls and command
 /// completions from an earlier hook are ignored.
@@ -19,22 +27,35 @@ struct PlaybackStatus {
     private(set) var context: PlaybackTargetContext?
     private(set) var isPlaying: Bool?
     private(set) var commandContext: PlaybackTargetContext?
+    private var revision: UInt64 = 0
 
     var commandInFlight: Bool { commandContext != nil }
 
     mutating func reset(for context: PlaybackTargetContext) {
+        revision &+= 1
         self.context = context
         isPlaying = nil
         commandContext = nil
     }
 
-    mutating func accept(_ value: Bool?, for context: PlaybackTargetContext) {
-        guard self.context == context, commandContext == nil else { return }
+    func observation(for context: PlaybackTargetContext) -> PlaybackObservation? {
+        guard self.context == context, commandContext == nil else { return nil }
+        return PlaybackObservation(context: context, revision: revision)
+    }
+
+    mutating func accept(_ value: Bool?, from observation: PlaybackObservation) {
+        guard context == observation.context,
+              revision == observation.revision,
+              commandContext == nil
+        else { return }
         isPlaying = value
     }
 
     mutating func beginToggle(for context: PlaybackTargetContext) -> Bool {
         guard self.context == context, commandContext == nil else { return false }
+        // A poll may already be awaiting AppleScript. Make its observation token
+        // stale before optimistically changing the displayed state.
+        revision &+= 1
         commandContext = context
         isPlaying = !(isPlaying == true)
         return true
@@ -48,7 +69,16 @@ struct PlaybackStatus {
     ) {
         guard self.context == context, commandContext == context else { return }
         if succeeded {
-            if let confirmedState { isPlaying = confirmedState }
+            // Apps such as Spotify can briefly return their pre-command state even
+            // after the play/pause Apple event has completed. That contradictory
+            // value is not useful confirmation and caused play → pause → play
+            // flicker. Keep the immediate optimistic state; the next fresh poll
+            // remains authoritative if the command did not actually take effect.
+            let expectedState = previousState.map { !$0 }
+            if let confirmedState,
+               expectedState == nil || confirmedState == expectedState {
+                isPlaying = confirmedState
+            }
         } else {
             isPlaying = previousState
         }

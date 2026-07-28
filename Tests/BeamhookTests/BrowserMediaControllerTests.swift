@@ -279,16 +279,17 @@ final class BrowserMediaControllerTests: XCTestCase {
 }
 
 final class PlaybackStatusTests: XCTestCase {
-    func testLatePollFromPreviousTargetIsIgnored() {
+    func testLatePollFromPreviousTargetIsIgnored() throws {
         let safari = context(target: "safari-youtube", source: "safari:video", revision: 1)
         let spotify = context(target: "spotify", revision: 2)
         var status = PlaybackStatus()
 
         status.reset(for: safari)
-        status.accept(true, for: safari)
+        observe(true, for: safari, with: &status)
+        let staleObservation = try XCTUnwrap(status.observation(for: safari))
         status.reset(for: spotify)
-        status.accept(false, for: spotify)
-        status.accept(true, for: safari)
+        observe(false, for: spotify, with: &status)
+        status.accept(true, from: staleObservation)
 
         XCTAssertEqual(status.context, spotify)
         XCTAssertEqual(status.isPlaying, false)
@@ -300,10 +301,10 @@ final class PlaybackStatusTests: XCTestCase {
         var status = PlaybackStatus()
 
         status.reset(for: safari)
-        status.accept(true, for: safari)
+        observe(true, for: safari, with: &status)
         XCTAssertTrue(status.beginToggle(for: safari))
         status.reset(for: spotify)
-        status.accept(true, for: spotify)
+        observe(true, for: spotify, with: &status)
         status.finishToggle(
             succeeded: false,
             confirmedState: nil,
@@ -334,7 +335,7 @@ final class PlaybackStatusTests: XCTestCase {
         XCTAssertTrue(status.beginToggle(for: firstSafari))
         status.reset(for: spotify)
         status.reset(for: secondSafari)
-        status.accept(false, for: secondSafari)
+        observe(false, for: secondSafari, with: &status)
         status.finishToggle(
             succeeded: true,
             confirmedState: true,
@@ -346,12 +347,12 @@ final class PlaybackStatusTests: XCTestCase {
         XCTAssertEqual(status.isPlaying, false)
     }
 
-    func testConfirmedStateReconcilesOptimisticToggle() {
+    func testStaleConfirmationDoesNotReverseOptimisticToggle() {
         let spotify = context(target: "spotify", revision: 1)
         var status = PlaybackStatus()
 
         status.reset(for: spotify)
-        status.accept(false, for: spotify)
+        observe(false, for: spotify, with: &status)
         XCTAssertTrue(status.beginToggle(for: spotify))
         XCTAssertEqual(status.isPlaying, true)
         status.finishToggle(
@@ -361,8 +362,75 @@ final class PlaybackStatusTests: XCTestCase {
             for: spotify
         )
 
+        XCTAssertEqual(status.isPlaying, true)
+        XCTAssertFalse(status.commandInFlight)
+    }
+
+    func testPollStartedBeforeToggleIsIgnoredAfterCommandFinishes() throws {
+        let spotify = context(target: "spotify", revision: 1)
+        var status = PlaybackStatus()
+
+        status.reset(for: spotify)
+        observe(false, for: spotify, with: &status)
+        let preCommandObservation = try XCTUnwrap(status.observation(for: spotify))
+        XCTAssertTrue(status.beginToggle(for: spotify))
+        status.finishToggle(
+            succeeded: true,
+            confirmedState: true,
+            previousState: false,
+            for: spotify
+        )
+        status.accept(false, from: preCommandObservation)
+
+        XCTAssertEqual(status.isPlaying, true)
+    }
+
+    func testMatchingConfirmationKeepsOptimisticState() {
+        let spotify = context(target: "spotify", revision: 1)
+        var status = PlaybackStatus()
+
+        status.reset(for: spotify)
+        observe(false, for: spotify, with: &status)
+        XCTAssertTrue(status.beginToggle(for: spotify))
+        status.finishToggle(
+            succeeded: true,
+            confirmedState: true,
+            previousState: false,
+            for: spotify
+        )
+
+        XCTAssertEqual(status.isPlaying, true)
+        XCTAssertFalse(status.commandInFlight)
+    }
+
+    func testFailedToggleRestoresPreviousState() {
+        let spotify = context(target: "spotify", revision: 1)
+        var status = PlaybackStatus()
+
+        status.reset(for: spotify)
+        observe(false, for: spotify, with: &status)
+        XCTAssertTrue(status.beginToggle(for: spotify))
+        status.finishToggle(
+            succeeded: false,
+            confirmedState: nil,
+            previousState: false,
+            for: spotify
+        )
+
         XCTAssertEqual(status.isPlaying, false)
         XCTAssertFalse(status.commandInFlight)
+    }
+
+    private func observe(
+        _ value: Bool?,
+        for context: PlaybackTargetContext,
+        with status: inout PlaybackStatus
+    ) {
+        guard let observation = status.observation(for: context) else {
+            XCTFail("Expected playback observation")
+            return
+        }
+        status.accept(value, from: observation)
     }
 
     private func context(

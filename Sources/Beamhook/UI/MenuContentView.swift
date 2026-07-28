@@ -141,11 +141,15 @@ struct MenuContentView: View {
             playback.reset(for: context)
             guard state.isMenuVisible, context.targetID != nil else { return }
             while !Task.isCancelled {
+                guard let observation = playback.observation(for: context) else {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    continue
+                }
                 let latest = await state.isTargetPlaying(in: context)
                 guard !Task.isCancelled, context == state.playbackTargetContext else {
                     return
                 }
-                playback.accept(latest, for: context)
+                playback.accept(latest, from: observation)
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
             }
         }
