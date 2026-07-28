@@ -93,6 +93,7 @@ final class AppState: ObservableObject {
     @Published var selectedTargetID: String? {
         didSet {
             if selectedTargetID != oldValue { playbackContextRevision &+= 1 }
+            updateMenuBarGlyph()
         }
     }
     @Published var availableApps: [AppDefinition]
@@ -110,10 +111,13 @@ final class AppState: ObservableObject {
     @Published var volumeByBundle: [String: Int] = [:]
     @Published var browserMediaInjectionAvailable: Bool?
     @Published var browserTargetRunning: Bool?
-    @Published var browserMediaCandidates: [BrowserMediaCandidate] = []
+    @Published var browserMediaCandidates: [BrowserMediaCandidate] = [] {
+        didSet { updateMenuBarGlyph() }
+    }
     @Published var selectedBrowserMediaID: String? {
         didSet {
             if selectedBrowserMediaID != oldValue { playbackContextRevision &+= 1 }
+            updateMenuBarGlyph()
         }
     }
     /// Volume-controllable browser tabs for browsers whose Core Audio process
@@ -122,6 +126,9 @@ final class AppState: ObservableObject {
     /// Whether the current output device's volume is adjustable. Informational only
     /// (drives a UI hint); it does NOT auto-enable the volume-key hijack.
     @Published private(set) var outputVolumeControllable: Bool = true
+    /// Which template image the status item should show. Derived state — see
+    /// `updateMenuBarGlyph()` for the inputs that keep it current.
+    @Published private(set) var menuBarGlyph: MenuBarGlyph = .hook
 
     let outputMonitor = AudioOutputMonitor()
     private var cancellables = Set<AnyCancellable>()
@@ -136,6 +143,7 @@ final class AppState: ObservableObject {
         let store = AppDefinitionStore()
         let registry = AppRegistry(store: store,
                                    executor: AppleScriptExecutor(),
+                                   presser: AXMenuItemPresser(),
                                    presence: WorkspacePresenceChecker())
         let targetManager = TargetManager(defaults: .standard, resolver: registry, runner: scripting)
 
@@ -179,6 +187,10 @@ final class AppState: ObservableObject {
 
         handlerBox.state = self
         configureBrowserTransportForPendingScan()
+        // Explicit rather than left to the didSet above: property observers don't
+        // fire for assignments made before `self` is fully initialized, so the
+        // launch target would otherwise never reach the status item.
+        updateMenuBarGlyph()
     }
 
     /// Entry point for a media key from the tap (already on the main queue). Volume
@@ -241,6 +253,8 @@ final class AppState: ObservableObject {
 
     func startInput() {
         hasAccessibility = permissions.hasAccessibility
+        // Developer-only, and inert unless the BHProbeBundleID default is set.
+        MenuProbe.runIfRequested(accessibilityGranted: hasAccessibility)
         if hasAccessibility {
             activateInput()
         } else {
@@ -399,6 +413,16 @@ final class AppState: ObservableObject {
     private var selectedBrowserMediaCandidate: BrowserMediaCandidate? {
         guard let id = selectedBrowserMediaID else { return nil }
         return browserMediaCandidates.first { $0.id == id }
+    }
+
+    /// Recompute the status-item glyph from the hooked target and, for a browser,
+    /// the tab it is pointed at. Tabs are only scanned at launch, while the menu is
+    /// open, and on an explicit tab choice — so a browser badge can lag a tab the
+    /// user switched away from until the menu is next opened. Polling Apple events
+    /// on a timer to close that gap would cost battery for a glanceable icon.
+    private func updateMenuBarGlyph() {
+        let host = selectedTargetIsBrowser ? selectedBrowserMediaCandidate?.host : nil
+        menuBarGlyph = MenuBarGlyph.forTarget(id: selectedTargetID, browserHost: host)
     }
 
     /// Whether the hooked browser source can act on the transport keys. A call

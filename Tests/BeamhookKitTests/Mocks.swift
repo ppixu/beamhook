@@ -12,6 +12,22 @@ final class MockScriptExecutor: ScriptExecuting {
     }
 }
 
+/// Stands in for the Accessibility API so menu-driven apps are testable without
+/// a running target app or an Accessibility grant.
+final class MockMenuPresser: MenuItemPressing {
+    var pressed: [(path: MenuItemPath, bundleID: String)] = []
+    var succeed = true
+    /// Title the fake reports for any queried item; nil models "couldn't read it".
+    var cannedTitle: String?
+
+    func press(_ path: MenuItemPath, bundleID: String) -> Bool {
+        pressed.append((path, bundleID))
+        return succeed
+    }
+
+    func title(of path: MenuItemPath, bundleID: String) -> String? { cannedTitle }
+}
+
 final class MockPresence: AppPresenceChecking {
     var runningBundleIDs: Set<String> = []
     /// nil → "ready" tracks "running"; set to model a running-but-still-launching app.

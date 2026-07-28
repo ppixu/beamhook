@@ -42,6 +42,11 @@ requires macOS 14.2. Tested on macOS Tahoe 26.5.
 - Hold Command while pressing a volume key to adjust the Mac's system volume instead.
 - Built in: Spotify, Apple Music, Apple TV, Safari, Chrome, Brave, Arc,
   Vivaldi, VLC, VOX, QuickTime Player, and Downcast.
+- Also built in, driven through their menus rather than AppleScript: IINA,
+  Amazon Music, TIDAL, Plexamp, and Deezer. IINA is tested; the other four are
+  not yet — if one does nothing when you press play,
+  [tell us](https://github.com/ppixu/beamhook/issues) and it can be fixed.
+  These targets have no volume slider, because menus only step the volume.
 - Add another app with your own AppleScript commands.
 
 Some apps do not expose suitable AppleScript controls and cannot be controlled

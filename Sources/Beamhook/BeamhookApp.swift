@@ -1,5 +1,7 @@
 import SwiftUI
 import AppKit
+import Combine
+import BeamhookKit
 
 @main
 struct BeamhookApp: App {
@@ -19,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     let updater = UpdaterModel()
     private var statusItem: NSStatusItem?
     private let popover = NSPopover()
+    private var glyphObserver: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         updater.start()
@@ -37,15 +40,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            let image = NSImage(named: "MenuBarIcon")
-            image?.isTemplate = true          // let macOS tint it for light/dark menu bars
-            button.image = image
             button.imageScaling = .scaleProportionallyDown
             button.action = #selector(togglePopover)
             button.target = self
             button.toolTip = "Beamhook"
         }
         statusItem = item
+
+        // The glyph badges the hook with the current target's mark. `@Published`
+        // delivers its current value on subscribe, so this also sets the launch icon.
+        glyphObserver = state.$menuBarGlyph
+            .removeDuplicates()
+            .sink { [weak self] glyph in self?.applyStatusIcon(glyph) }
 
         // Let the hook HUD anchor itself just below this status item, and give
         // the icon a little fishing bob whenever the HUD appears.
@@ -66,6 +72,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         NotificationCenter.default.addObserver(
             forName: .closeBeamhookMenu, object: nil, queue: .main
         ) { [weak self] _ in self?.popover.performClose(nil) }
+    }
+
+    /// Swap the status-item image. A badged glyph that fails to load falls back to
+    /// the plain hook rather than leaving an empty, unclickable status item.
+    private func applyStatusIcon(_ glyph: MenuBarGlyph) {
+        guard let button = statusItem?.button else { return }
+        let image = NSImage(named: glyph.rawValue) ?? NSImage(named: MenuBarGlyph.hook.rawValue)
+        image?.isTemplate = true          // let macOS tint it for light/dark menu bars
+        button.image = image
     }
 
     @objc private func togglePopover() {

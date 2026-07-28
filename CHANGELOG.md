@@ -4,6 +4,22 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.1.4] — 2026-07-28
+
+### Added
+
+- Five new targets that have no AppleScript at all: IINA, Amazon Music, TIDAL,
+  Plexamp, and Deezer. Beamhook drives them by pressing their own menu items in
+  the background — the app never comes forward and nothing is typed into it. Only
+  IINA has been tested so far; if one of the others does nothing when you press
+  play, please open an issue. These targets have no volume slider, because a menu
+  can only step the volume rather than set it.
+- The menu bar icon now shows what you have hooked, with a badge for Safari,
+  Chrome, YouTube, Spotify, and Apple Music. Anything else keeps the plain hook.
+- A help page at [beamhook.app/help](https://beamhook.app/help) walks through
+  enabling "Allow JavaScript from Apple Events" in Safari and Chrome, with
+  pictures. The browser notice in the menu links straight to it.
+
 ## [1.1.3] — 2026-07-27
 
 ### Changed

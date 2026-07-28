@@ -199,6 +199,33 @@ final class BrowserMediaControllerTests: XCTestCase {
                        true)
     }
 
+    func testScanCarriesTheTabHostname() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        executor.output = scanOutput(window: 1, tab: 1,
+                                     sourceID: "550e8400-e29b-41d4-a716-446655440000",
+                                     host: "music.youtube.com")
+
+        // The hostname is what badges the menu-bar icon; the title can't stand in
+        // for it, since a page is free to call itself anything.
+        XCTAssertEqual(controller.scan(.chrome).candidates.first?.host, "music.youtube.com")
+    }
+
+    func testTabWithoutAHostStillYieldsACandidate() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        executor.output = """
+        OK
+        1\t1\t{"sourceID":"550e8400-e29b-41d4-a716-446655440000","title":"Local file","artist":"","playing":true,"selected":false,"live":false,"volume":50}
+        """
+
+        // A file:// or about: tab reports no host. That costs the icon its badge,
+        // never the tab its row.
+        let candidates = controller.scan(.safari).candidates
+        XCTAssertEqual(candidates.count, 1)
+        XCTAssertEqual(candidates.first?.host, "")
+    }
+
     func testTransportScriptsDeclineALiveStream() {
         let executor = RecordingScriptExecutor()
         let controller = BrowserMediaController(executor: executor)
@@ -224,6 +251,7 @@ final class BrowserMediaControllerTests: XCTestCase {
             tabIndex: 9,
             title: "Test video",
             artist: "Test artist",
+            host: "www.youtube.com",
             isPlaying: true,
             isSelected: false,
             supportsTransport: true,
@@ -232,19 +260,20 @@ final class BrowserMediaControllerTests: XCTestCase {
     }
 
     private func scanOutput(window: Int, tab: Int, sourceID: String,
-                            live: Bool = false) -> String {
+                            live: Bool = false, host: String = "www.youtube.com") -> String {
         """
         OK
-        \(row(window: window, tab: tab, sourceID: sourceID, live: live))
+        \(row(window: window, tab: tab, sourceID: sourceID, live: live, host: host))
         """
     }
 
-    private func row(window: Int, tab: Int, sourceID: String, live: Bool) -> String {
+    private func row(window: Int, tab: Int, sourceID: String, live: Bool,
+                     host: String = "www.youtube.com") -> String {
         let escapedID = sourceID
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
         return """
-        \(window)\t\(tab)\t{"sourceID":"\(escapedID)","title":"Test","artist":"","playing":true,"selected":false,"live":\(live),"volume":50}
+        \(window)\t\(tab)\t{"sourceID":"\(escapedID)","title":"Test","artist":"","host":"\(host)","playing":true,"selected":false,"live":\(live),"volume":50}
         """
     }
 }

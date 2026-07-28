@@ -80,6 +80,9 @@ struct BrowserMediaCandidate: Identifiable, Hashable, Sendable {
     let tabIndex: Int
     let title: String
     let artist: String
+    /// Hostname of the page, used to badge the menu-bar icon. Empty when the scan
+    /// predates this field or the page has no host (a `file://` or `about:` tab).
+    let host: String
     let isPlaying: Bool
     let isSelected: Bool
     /// False for a call/conference tab, whose only media is a live `MediaStream`.
@@ -106,6 +109,9 @@ final class BrowserMediaController: @unchecked Sendable {
         let sourceID: String
         let title: String
         let artist: String
+        /// Optional so a page that answers without it still yields a usable
+        /// candidate — a missing host only costs the icon its badge.
+        let host: String?
         let playing: Bool
         let selected: Bool
         let live: Bool
@@ -137,6 +143,7 @@ final class BrowserMediaController: @unchecked Sendable {
                 browser: browser, sourceID: payload.sourceID,
                 windowIndex: window, tabIndex: tab,
                 title: payload.title, artist: payload.artist,
+                host: payload.host ?? "",
                 isPlaying: payload.playing, isSelected: payload.selected,
                 supportsTransport: !payload.live,
                 volume: payload.volume.map { min(max($0, 0), 100) })
@@ -180,7 +187,7 @@ final class BrowserMediaController: @unchecked Sendable {
 
     private func scanScript(_ browser: BrowserKind) -> String {
         let js = """
-        (() => { \(BrowserJS.pick) const p = bhPick(); const md = navigator.mediaSession && navigator.mediaSession.metadata; if (!p && !md) return null; const key = '__beamhookSourceID_v1'; const makeID = () => globalThis.crypto && globalThis.crypto.randomUUID ? globalThis.crypto.randomUUID() : [Date.now().toString(36), Math.random().toString(36).slice(2)].join('-'); const sourceID = globalThis[key] || (globalThis[key] = makeID()); return JSON.stringify({sourceID,title:(md && md.title) || document.title || location.hostname,artist:(md && md.artist) || '',playing:p ? (!p.el.paused && !p.el.ended) : navigator.mediaSession.playbackState === 'playing',live:p ? p.live : false,selected:sessionStorage.getItem('beamhook-selected') === '1',volume:p ? Math.round(p.el.volume * 100) : null}); })()
+        (() => { \(BrowserJS.pick) const p = bhPick(); const md = navigator.mediaSession && navigator.mediaSession.metadata; if (!p && !md) return null; const key = '__beamhookSourceID_v1'; const makeID = () => globalThis.crypto && globalThis.crypto.randomUUID ? globalThis.crypto.randomUUID() : [Date.now().toString(36), Math.random().toString(36).slice(2)].join('-'); const sourceID = globalThis[key] || (globalThis[key] = makeID()); return JSON.stringify({sourceID,title:(md && md.title) || document.title || location.hostname,artist:(md && md.artist) || '',host:location.hostname || '',playing:p ? (!p.el.paused && !p.el.ended) : navigator.mediaSession.playbackState === 'playing',live:p ? p.live : false,selected:sessionStorage.getItem('beamhook-selected') === '1',volume:p ? Math.round(p.el.volume * 100) : null}); })()
         """
         let evaluate = browser == .safari
             ? "do JavaScript javascriptSource in candidateTab"

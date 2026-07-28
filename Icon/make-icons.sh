@@ -2,13 +2,16 @@
 #
 # make-icons.sh
 #
-# Regenerates every asset-catalog PNG from the two editable master images:
-#   Icon/master-1024.png    — the 1024x1024 app-icon master
-#   Icon/menubar-master.png — the monochrome menubar template glyph
+# Regenerates every asset-catalog PNG from the editable master images:
+#   Icon/master-1024.png     — the 1024x1024 app-icon master
+#   Icon/menubar-plain.png   — the monochrome menubar template glyph (optional,
+#                              see the note on the plain hook below)
+#   Icon/menubar-<slug>.png  — one per badged source (Spotify, Safari, …)
 #
 # It resizes them with `sips` into:
-#   Sources/Beamhook/Assets.xcassets/AppIcon.appiconset/    (full macOS icon set)
-#   Sources/Beamhook/Assets.xcassets/MenuBarIcon.imageset/  (18pt template @1x/@2x)
+#   Sources/Beamhook/Assets.xcassets/AppIcon.appiconset/          (full macOS icon set)
+#   Sources/Beamhook/Assets.xcassets/MenuBarIcon.imageset/        (18pt template @1x/@2x)
+#   Sources/Beamhook/Assets.xcassets/MenuBarIcon-<Name>.imageset/ (ditto, per source)
 #
 # After running this, run `xcodegen generate` so Xcode picks up any new files.
 #
@@ -19,19 +22,68 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 APP_MASTER="$SCRIPT_DIR/master-1024.png"
-MENU_MASTER="$SCRIPT_DIR/menubar-master.png"
+# The plain hook is deliberately NOT derived from menubar-master.png: that file
+# has an opaque off-white background, and a menubar template keeps only the alpha
+# channel — regenerating from it would turn the hook into a solid black tile.
+MENU_MASTER="$SCRIPT_DIR/menubar-plain.png"
 
-APPICON_DIR="$REPO_ROOT/Sources/Beamhook/Assets.xcassets/AppIcon.appiconset"
-MENUBAR_DIR="$REPO_ROOT/Sources/Beamhook/Assets.xcassets/MenuBarIcon.imageset"
+ASSETS_DIR="$REPO_ROOT/Sources/Beamhook/Assets.xcassets"
+APPICON_DIR="$ASSETS_DIR/AppIcon.appiconset"
+MENUBAR_DIR="$ASSETS_DIR/MenuBarIcon.imageset"
 
-for f in "$APP_MASTER" "$MENU_MASTER"; do
-  if [[ ! -f "$f" ]]; then
-    echo "error: missing master image: $f" >&2
+# Badged menubar glyphs: (source-slug  asset-catalog-name) pairs. The asset names
+# are the raw values of MenuBarGlyph in BeamhookKit — keep the two in step.
+# menubar-podcasts.png is intentionally absent: Apple Podcasts has no AppleScript
+# dictionary, so it cannot be a Beamhook target.
+menubar_targets=(
+  "safari:MenuBarIcon-Safari"
+  "chrome:MenuBarIcon-Chrome"
+  "youtube:MenuBarIcon-YouTube"
+  "spotify:MenuBarIcon-Spotify"
+  "applemusic:MenuBarIcon-AppleMusic"
+)
+
+if [[ ! -f "$APP_MASTER" ]]; then
+  echo "error: missing master image: $APP_MASTER" >&2
+  exit 1
+fi
+
+for entry in "${menubar_targets[@]}"; do
+  slug="${entry%%:*}"
+  if [[ ! -f "$SCRIPT_DIR/menubar-$slug.png" ]]; then
+    echo "error: missing master image: $SCRIPT_DIR/menubar-$slug.png" >&2
     exit 1
   fi
 done
 
 mkdir -p "$APPICON_DIR" "$MENUBAR_DIR"
+
+# Every menubar imageset is an 18pt template; only the pixels differ.
+write_imageset_contents() {
+  cat > "$1/Contents.json" <<'JSON'
+{
+  "images" : [
+    {
+      "idiom" : "universal",
+      "scale" : "1x",
+      "filename" : "menubar.png"
+    },
+    {
+      "idiom" : "universal",
+      "scale" : "2x",
+      "filename" : "menubar@2x.png"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  },
+  "properties" : {
+    "template-rendering-intent" : "template"
+  }
+}
+JSON
+}
 
 # App icon: (pixel-dimension  output-filename) pairs for every (size, scale).
 #   16x16   @1x ->  16    @2x ->  32
@@ -61,10 +113,26 @@ for entry in "${app_targets[@]}"; do
 done
 
 # Menubar: 18pt template @1x (18px) and @2x (36px).
-echo "Generating menubar icons -> $MENUBAR_DIR"
-sips -z 18 18 "$MENU_MASTER" --out "$MENUBAR_DIR/menubar.png" >/dev/null
-echo "  menubar.png (18x18)"
-sips -z 36 36 "$MENU_MASTER" --out "$MENUBAR_DIR/menubar@2x.png" >/dev/null
-echo "  menubar@2x.png (36x36)"
+echo "Generating menubar icons -> $ASSETS_DIR"
+
+if [[ -f "$MENU_MASTER" ]]; then
+  sips -z 18 18 "$MENU_MASTER" --out "$MENUBAR_DIR/menubar.png" >/dev/null
+  sips -z 36 36 "$MENU_MASTER" --out "$MENUBAR_DIR/menubar@2x.png" >/dev/null
+  write_imageset_contents "$MENUBAR_DIR"
+  echo "  MenuBarIcon (18x18, 36x36)"
+else
+  echo "  MenuBarIcon: skipped — no $MENU_MASTER, keeping the committed asset."
+fi
+
+for entry in "${menubar_targets[@]}"; do
+  slug="${entry%%:*}"
+  name="${entry##*:}"
+  dir="$ASSETS_DIR/$name.imageset"
+  mkdir -p "$dir"
+  sips -z 18 18 "$SCRIPT_DIR/menubar-$slug.png" --out "$dir/menubar.png" >/dev/null
+  sips -z 36 36 "$SCRIPT_DIR/menubar-$slug.png" --out "$dir/menubar@2x.png" >/dev/null
+  write_imageset_contents "$dir"
+  echo "  $name (18x18, 36x36)"
+done
 
 echo "Done."

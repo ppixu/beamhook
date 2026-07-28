@@ -4,7 +4,89 @@ public enum BuiltInApps {
     public static let all: [AppDefinition] = [
         spotify, music, appleTV, safariYouTube, chromeYouTube, braveYouTube,
         arcYouTube, vivaldiYouTube, vlc, vox, quickTime, downcast,
+        iina, amazonMusic, tidal, plexamp, deezer,
     ]
+
+    // MARK: - Menu-driven targets
+    //
+    // Apps with no AppleScript dictionary at all, driven by pressing their own menu
+    // items over the Accessibility API. Menu indices are 0-based and the Apple menu
+    // is index 0, so an app's first own menu is 1. Titles are matched before
+    // indices; see `MenuItemPath` for why both are carried.
+
+    /// IINA has no scripting dictionary — the AppleScript request has been open
+    /// upstream since 2017 (iina/iina#316) — but its Playback menu gives us
+    /// everything the transport keys need.
+    ///
+    /// Verified against IINA 1.4.4 on macOS 26.5: pressing the item toggles
+    /// playback, and its title tracks state ("Pause" while playing, "Resume" while
+    /// paused, per MenuController). The title can lag right after a press, so treat
+    /// a single stale read as normal rather than as a failed press.
+    ///
+    /// Menu positions observed live: Playback is menu 4, play/pause item 0, with
+    /// Next Media at 27 and Previous Media at 28 — but titles resolve it first, so
+    /// the indices only matter for a localized IINA.
+    public static let iina = AppDefinition.menuDriven(
+        id: "iina", displayName: "IINA", bundleID: "com.colliderli.iina",
+        control: MenuControl(
+            playPause: MenuItemPath(menuIndex: 4, menuTitles: ["Playback"],
+                                    itemIndex: 0, itemTitles: ["Pause", "Resume"]),
+            next: MenuItemPath(menuIndex: 4, menuTitles: ["Playback"],
+                               itemIndex: 27, itemTitles: ["Next Media"]),
+            previous: MenuItemPath(menuIndex: 4, menuTitles: ["Playback"],
+                                   itemIndex: 28, itemTitles: ["Previous Media"]),
+            playingTitles: ["Pause"], pausedTitles: ["Resume"]))
+
+    /// Amazon Music. Indices come from BeardedSpice's shipping adapter, which drives
+    /// this exact menu: menu 4, play/pause at 0, next at 1, previous at 2. Its
+    /// author notes the app is English-only, so the titles are safe to match on.
+    /// Not exercised against a running copy here.
+    public static let amazonMusic = AppDefinition.menuDriven(
+        id: "amazon-music", displayName: "Amazon Music", bundleID: "com.amazon.music",
+        control: MenuControl(
+            playPause: MenuItemPath(menuIndex: 4, menuTitles: [],
+                                    itemIndex: 0, itemTitles: ["Pause", "Play"]),
+            next: MenuItemPath(menuIndex: 4, menuTitles: [], itemIndex: 1, itemTitles: ["Next"]),
+            previous: MenuItemPath(menuIndex: 4, menuTitles: [], itemIndex: 2, itemTitles: ["Previous"]),
+            playingTitles: ["Pause"], pausedTitles: ["Play"]))
+
+    /// TIDAL. Menu layout confirmed live on this Mac: Playback is menu 4, with
+    /// Play at 0, Previous at 2 and Next at 3 — matching BeardedSpice's older
+    /// indices exactly. What is NOT confirmed is the press firing: the test ran
+    /// with no track queued, and Play with an empty queue does nothing either way.
+    /// (TIDAL also exposes Volume up/down items, if per-app volume is ever wanted.)
+    public static let tidal = AppDefinition.menuDriven(
+        id: "tidal", displayName: "TIDAL", bundleID: "com.tidal.desktop",
+        control: MenuControl(
+            playPause: MenuItemPath(menuIndex: 4, menuTitles: [],
+                                    itemIndex: 0, itemTitles: ["Pause", "Play"]),
+            next: MenuItemPath(menuIndex: 4, menuTitles: [], itemIndex: 3, itemTitles: ["Next"]),
+            previous: MenuItemPath(menuIndex: 4, menuTitles: [], itemIndex: 2, itemTitles: ["Previous"]),
+            playingTitles: ["Pause"], pausedTitles: ["Play"]))
+
+    /// Plexamp. Nobody has mapped its menu bar, so this searches for the titles
+    /// instead of claiming positions: it works if those items exist and does
+    /// nothing if they do not. Replace with indices once someone runs the menu
+    /// probe against it (see CLAUDE.md).
+    public static let plexamp = AppDefinition.menuDriven(
+        id: "plexamp", displayName: "Plexamp", bundleID: "tv.plex.plexamp",
+        control: MenuControl(
+            playPause: .search(itemTitles: ["Play/Pause", "Pause", "Play", "Resume"]),
+            next: .search(itemTitles: ["Next", "Next Track", "Play Next"]),
+            previous: .search(itemTitles: ["Previous", "Previous Track", "Play Previous"]),
+            playingTitles: ["Pause"], pausedTitles: ["Play", "Resume"]))
+
+    /// Deezer. Unmapped like Plexamp, and the weaker bet of the two: its public
+    /// playback controls live in Deezer's own status-bar popup, and there is no
+    /// evidence its app menu carries transport items at all. Bundle id from the
+    /// Homebrew cask's zap stanza, as for Plexamp.
+    public static let deezer = AppDefinition.menuDriven(
+        id: "deezer", displayName: "Deezer", bundleID: "com.deezer.deezer-desktop",
+        control: MenuControl(
+            playPause: .search(itemTitles: ["Play/Pause", "Pause", "Play", "Resume"]),
+            next: .search(itemTitles: ["Next", "Next Track", "Next Song"]),
+            previous: .search(itemTitles: ["Previous", "Previous Track", "Previous Song"]),
+            playingTitles: ["Pause"], pausedTitles: ["Play", "Resume"]))
 
     public static let spotify = AppDefinition(
         id: "spotify", displayName: "Spotify", bundleID: "com.spotify.client", isBuiltIn: true,
