@@ -17,4 +17,13 @@ final class PermissionsManager {
             NSWorkspace.shared.open(url)
         }
     }
+
+    /// The Automation list, where Apple-event permission per controlled app lives.
+    /// This is a different grant from Accessibility: denying it costs the volume
+    /// sliders and play state, while the media keys themselves keep working.
+    func openAutomationSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {
+            NSWorkspace.shared.open(url)
+        }
+    }
 }

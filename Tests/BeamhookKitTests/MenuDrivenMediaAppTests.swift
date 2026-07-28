@@ -142,7 +142,7 @@ final class MenuDrivenMediaAppTests: XCTestCase {
 
     func testShippedMenuDrivenTargets() {
         let menuDriven = BuiltInApps.all.filter { $0.menuControl != nil }.map(\.id)
-        XCTAssertEqual(menuDriven, ["iina", "amazon-music", "tidal", "plexamp", "deezer"])
+        XCTAssertEqual(menuDriven, ["iina", "amazon-music", "plexamp", "deezer"])
     }
 
     func testRegistryResolvesMenuDrivenDefinitionsToMenuDrivenApps() {

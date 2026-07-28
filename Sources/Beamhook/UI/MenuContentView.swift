@@ -326,9 +326,11 @@ private struct AppVolumeRow: View {
     @EnvironmentObject var state: AppState
     let playing: PlayingApp
     @State private var volume: Double = 50
-    @State private var scriptable = false
+    @State private var availability: VolumeAvailability = .systemVolumeOnly
     @State private var appIsPlaying: Bool?
     @State private var playPauseInFlight = false
+
+    private var scriptable: Bool { availability == .slider }
 
     private var isTarget: Bool {
         guard let id = state.selectedTargetID,
@@ -349,6 +351,23 @@ private struct AppVolumeRow: View {
     private var supportsDirectPlayPause: Bool {
         !isBrowser && state.availableApps.contains {
             $0.bundleID == playing.bundleID && !$0.playPauseScript.isEmpty
+        }
+    }
+
+    /// Shown when macOS is blocking the Apple events this app's volume needs —
+    /// otherwise a denied permission is indistinguishable from an app that simply
+    /// has no volume control, and the fix is two panes deep in System Settings.
+    private var permissionHint: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Beamhook isn't allowed to control \(playing.displayName), so its volume is unavailable. The media keys still work.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Allow in System Settings…") {
+                state.permissions.openAutomationSettings()
+            }
+            .buttonStyle(.link)
+            .font(.caption2)
         }
     }
 
@@ -386,7 +405,11 @@ private struct AppVolumeRow: View {
                 }
                 volumeKeyControls
             } else if isTarget && !isBrowser && browserSources.isEmpty {
-                Text("system volume only").font(.caption2).foregroundStyle(.secondary)
+                if availability == .permissionDenied {
+                    permissionHint
+                } else {
+                    Text("system volume only").font(.caption2).foregroundStyle(.secondary)
+                }
             }
             ForEach(browserSources) { candidate in
                 BrowserVolumeRow(candidate: candidate)
@@ -400,17 +423,20 @@ private struct AppVolumeRow: View {
             if isBrowser {
                 // Browser volume is source-specific. We only need the capability
                 // flag here; BrowserVolumeRow obtains each source's live volume.
-                scriptable = state.volumeScriptable(bundleID: playing.bundleID)
+                availability = state.volumeScriptable(bundleID: playing.bundleID)
+                    ? .slider : .systemVolumeOnly
                 return
             }
             if let cached = state.volumeByBundle[playing.bundleID] {
-                volume = Double(cached); scriptable = true
+                volume = Double(cached); availability = .slider
             } else {
                 if let v = await state.volume(for: playing.bundleID) {
-                    volume = Double(v); scriptable = true
+                    volume = Double(v); availability = .slider
                     state.volumeByBundle[playing.bundleID] = v
                 } else {
-                    scriptable = false
+                    // The read failed. Find out whether that is the app's nature or
+                    // a permission the user can give back.
+                    availability = await state.volumeAvailability(for: playing.bundleID)
                 }
             }
         }

@@ -691,6 +691,18 @@ final class AppState: ObservableObject {
         registry.allApps().contains { $0.bundleID == bundleID && $0.supportsVolume }
     }
 
+    /// Why a volume read came back empty. Only called after one has failed, so it
+    /// can afford the extra permission check — and that check is what separates an
+    /// app with no volume control from one macOS is blocking us from reaching.
+    func volumeAvailability(for bundleID: String) async -> VolumeAvailability {
+        let supportsVolume = volumeScriptable(bundleID: bundleID)
+        guard supportsVolume else { return .systemVolumeOnly }
+        let allowed = await pollRunner.run { AutomationPermission.isAllowed(bundleID: bundleID) }
+        return VolumeAvailability.resolve(definitionSupportsVolume: true,
+                                          readSucceeded: false,
+                                          automationAllowed: allowed)
+    }
+
     /// Is an app with this bundle id currently running?
     func isRunning(bundleID: String) -> Bool {
         NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == bundleID }

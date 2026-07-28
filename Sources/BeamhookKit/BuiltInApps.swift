@@ -4,7 +4,7 @@ public enum BuiltInApps {
     public static let all: [AppDefinition] = [
         spotify, music, appleTV, safariYouTube, chromeYouTube, braveYouTube,
         arcYouTube, vivaldiYouTube, vlc, vox, quickTime, downcast,
-        iina, amazonMusic, tidal, plexamp, deezer,
+        iina, amazonMusic, plexamp, deezer,
     ]
 
     // MARK: - Menu-driven targets
@@ -50,19 +50,14 @@ public enum BuiltInApps {
             previous: MenuItemPath(menuIndex: 4, menuTitles: [], itemIndex: 2, itemTitles: ["Previous"]),
             playingTitles: ["Pause"], pausedTitles: ["Play"]))
 
-    /// TIDAL. Menu layout confirmed live on this Mac: Playback is menu 4, with
-    /// Play at 0, Previous at 2 and Next at 3 — matching BeardedSpice's older
-    /// indices exactly. What is NOT confirmed is the press firing: the test ran
-    /// with no track queued, and Play with an empty queue does nothing either way.
-    /// (TIDAL also exposes Volume up/down items, if per-app volume is ever wanted.)
-    public static let tidal = AppDefinition.menuDriven(
-        id: "tidal", displayName: "TIDAL", bundleID: "com.tidal.desktop",
-        control: MenuControl(
-            playPause: MenuItemPath(menuIndex: 4, menuTitles: [],
-                                    itemIndex: 0, itemTitles: ["Pause", "Play"]),
-            next: MenuItemPath(menuIndex: 4, menuTitles: [], itemIndex: 3, itemTitles: ["Next"]),
-            previous: MenuItemPath(menuIndex: 4, menuTitles: [], itemIndex: 2, itemTitles: ["Previous"]),
-            playingTitles: ["Pause"], pausedTitles: ["Play"]))
+    // TIDAL was here and was REMOVED after testing on a real install: pressing its
+    // Playback items does nothing, even with a track queued. The menu itself reads
+    // fine over Accessibility — Playback is menu 4, with Play at 0, Previous at 2
+    // and Next at 3, matching BeardedSpice's old indices — so a future attempt
+    // should not start by re-deriving the layout. The press is what fails. Whatever
+    // TIDAL's Electron menu does with an Accessibility press, it is not invoking
+    // the handler, and shipping a target that silently ignores the keys is worse
+    // than not offering it.
 
     /// Plexamp. Nobody has mapped its menu bar, so this searches for the titles
     /// instead of claiming positions: it works if those items exist and does

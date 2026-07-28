@@ -4,6 +4,21 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.1.5] — 2026-07-28
+
+### Added
+
+- When macOS is blocking Beamhook from controlling an app, the menu now says so
+  and offers a button to the right Settings pane, instead of quietly showing
+  "system volume only" as though the app had no volume control. Denying that
+  permission only costs the volume slider — the media keys keep working.
+
+### Removed
+
+- TIDAL, which was added in 1.1.4 but does not actually respond. Its menu is
+  readable, but pressing its playback items has no effect, and a target that
+  ignores the keys is worse than one that isn't offered.
+
 ## [1.1.4] — 2026-07-28
 
 ### Added
