@@ -4,6 +4,14 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.1.6] — 2026-07-28
+
+### Fixed
+
+- Spotify's play/pause button no longer flickers back to its old state while
+  Spotify catches up after a click. Playback checks that began before the click
+  can no longer overwrite the immediate button response either.
+
 ## [1.1.5] — 2026-07-28
 
 ### Added
