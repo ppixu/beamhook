@@ -26,3 +26,10 @@ Beamhook-*.zip
 Beamhook-*.dmg
 # A built .app can also land in the repo root as a signing/staging leftover.
 /Beamhook.app/
+
+# Release tooling stays out of the public repo. Both scripts still live here on
+# disk and are still how a release is cut; a copy is kept in
+# ~/Dropbox/Apps/Beamhook/release-scripts/ so they survive a fresh clone.
+# Note they were public until 1.1.5, so they remain readable in git history.
+/ship.sh
+/release.sh
