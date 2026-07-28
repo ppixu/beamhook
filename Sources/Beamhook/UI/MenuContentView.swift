@@ -89,10 +89,15 @@ struct MenuContentView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else if state.browserMediaInjectionAvailable == false {
-                    Text("macOS is choosing the browser player. Enable JavaScript from Apple Events to pick a specific tab in Beamhook.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("macOS is choosing the browser player. Enable JavaScript from Apple Events to pick a specific tab in Beamhook.")
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let helpURL = appleEventsHelpURL {
+                            Link("How to enable it", destination: helpURL)
+                        }
+                    }
+                    .font(.caption2)
                 }
             }
 
@@ -159,6 +164,13 @@ struct MenuContentView: View {
     private var targetName: String {
         let id = state.selectedTargetID
         return state.availableApps.first { $0.id == id }?.displayName ?? "Nothing"
+    }
+
+    /// Deep-links to the section for the selected browser: the guide covers Safari
+    /// separately from the Chromium browsers, which all share one menu path.
+    private var appleEventsHelpURL: URL? {
+        let anchor = BrowserKind.target(id: state.selectedTargetID) == .safari ? "safari" : "chrome"
+        return URL(string: "https://beamhook.app/help/#\(anchor)")
     }
 
     private var shortVersion: String {

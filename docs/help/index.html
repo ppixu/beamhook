@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enable JavaScript from Apple Events — Beamhook</title>
+<meta name="description" content="How to turn on “Allow JavaScript from Apple Events” in Safari, Chrome, Brave, Arc and Vivaldi, so Beamhook can hook your media keys to one specific browser tab.">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUAAAAFACAYAAADNkKWqAAAc7ElEQVR4nO3debAsZ3nf8e+cc+4qYUloASGxmEUQhEEQDBgMYvOCIWU7mEVxMGA52MGGwibBKUwKKYmDSYgxBYlNghcRp8AQESBBAoEEJDIIEAgMlpCCAghkkNiF7qJ7z5I/nn6q+47ucpaet3u6v5+qU3PO3GXmzHT/5nmXfl+QJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSpEImXT8BdWo97//azJ+F1BEDcBwm1ddC9fNq9bVeC41/u9b4t4aj5poBOEwZdhNghSMH1TZgCdhe3S4Q4bYCHKy+DhzlcZaoA9Ew1NwxAIejGXrLU392EnBv4FHAGcDdgLOBewKL1Vf++wy0/LoV+AJwM/At4Grghur7ZujlYxuGmhsG4PxrVnrpRODHgJ8GHg48Gjge2HmE/2Nt6nYyddt0ENgLfJ4Iw48AVwG3NP7OYnW7gtRjBuD8mg6+uwCPB54JPBW4V+PvZrN2ufq+WS0ey1rjC6LZm1Vj+g7wUeC9wAeAb1b35+MYhOolA3D+NAcyAM4CXgD8IvCg6r41ou9uhUMHP9p4v5vV4mr1f2+jDsRbiCD8c+Djjcc1CNU7BuD8mA6RRwEvIYLvuOq+/UQoZZ9eKc2R4R3UgXs58Cbg3dXP0+EtdcoAnA+L1MH3cOAVRFN3G/VobXOqSpfWiOe6SIQhwP8B/gC4pPp5EQdL1AMGYL81K6YzgN8DXkgMZtxB3QTt6/uYob2run03cCHw2ernZrBLxfX1xNGh4fB84F8T01ayb2/xCP+uj7IvcifRTP93wGuq7w1BdcYA7KcMhTOBNwK/QFR7GRjz+r6tEKPI24DPAC8GPkE9/9AmsYrqQ5+Ras2BjmcAHyPCbx9R+S0xv+EHdd/fXuARwBXAy6j7Az0eVZQHXH80r8L4PeA9RJN3LxEcQ3mvJkSQ76tuXw/8V2IkO0ewpSLmuZoYkrwGdwfwFuAfE4McQ6+KcsR4NzFn8DnA17BfUIUYgN3L8DsReCdxFUdWfWN5f5aJELwR+CVilNgQ1MyN5QTrqwy/04gpIj8B7CEGCcYmQ/CbxOTuq4gm8vTCDlJrDMDuZPidAryPuLJjrOGXVog5g98Gng58EitBzZAB2I183Y8jwu8JGH5phZgveAvwFOBaDEHNyJA72Ptq0vj6SyL89mL4pUVivuPdgYur2xU8VjUDHlTl5Vy4NwI/T4TfUqfPqH8WidflQcA7qK8ptsWiVhmAZS0SnfrnE1dB5Fw43dkSEYKPB95Afd2z1Bo/UcvJQY+/D1zZ+NmT+uhyYORXiTUG7Q9UawzAMrLPbxexNNQ51Nf16uhyMvhe4DHAF6k/PKQtsfooI0/YC4n1/PZh+K1XbvJ0AvAn1NdD++GtLfMgmr0Mv8cS+2Ys4wm8GdkUfikxgGRTWFvmSThbzQ3JryR2Z7P625xcKOE2ogvhZuptOKVNsQk8W1n9vQDDb6sWiKX/TwYuIPoG/QDXlngAzU6+tncBPkdsU3kAP3S2IkNvjehS+Aw2hbUFnoyzk+v7/TpwH2LU19d7a3JAZAfwyuo+V5HWplkBzkaz+vsbYmn73LmtL3IJ+ububJOp7zeygXoXHgd8Gvcc1ib16YQckqz+zgPuTSxu2ofXOhcgXSauPd5JLEF1XPU1/f0uYDsRkiv0p9paJp7XS3AvEW1BXz/Z51m+ptuJNe0eRj8CMHeS2179/B1iAdKPESOqB4lm+g5irt3JxMDNg4HTq3+zTF3JdnnsrBG/yx5iXuWXcXK0NsHrUNuXzbHHU1/x0WX4ZSjsIgLsMuBtwAeJ4DuWE4BzgecCTyNWrj5Ityu0TIgBpROAXwb+DQagNsEKsH05KvlW4Hl0O/UlJw9DLC31WuBTU3/nSEvvT/cPAjyAWMThRUQTucuVbHIPlS8AjyQCsdmHKR2TAdiuPAFPJQY/TqW+8qO0XGL+68TWkxdX9y9QV6nrCYscCMlAhAicNxBTUfbRXZN4lQjgJxETzZ0Sow3pul9qaPL1PJdYyDOrktIy/D5ILCBwMfXWmqvVn6+3UsqBk1y5Zgm4Gngy8MdEhdnVQMRa9Xz+YQePrQEwANuVYfd0uguFDL+3V8/jZiIkMsS2IsNzkRjYeTHwKmI0uYvfN1/vc4lRbfsAtSEGYHtyku7xRNWVI5Ul5R677yb2Fs6wantntRXi910Efp+4NG0n5QNogaiyHwI8kOHvo6yWebC0J6uR+xInY+m+v1UihD5JjIyuVo8/qz6x7BNcIpb5+jOiOVy6D26FmNrz2Opn+7W1bgZge/K1fAKzDZ7DyWrzh8ALidHZEtNCMgQXgN8EPk+MzJb+3QGeWN0agFo3A7B9D61uS/aHrRJ9YL9PbCOZfX6lHntCzHd8GeWboflY9yFeg2yeS8dkALYj+/8WgbMa95WQ8+GuB95EN9fF5lUmVwDvomwVmMtknQOcgctkaQMMwHadRFz6VvIqiay43kg0fbueDPw6yi/7tUr0P55a8DE1AAZgO7LiOJF68YAS1ohq65vAX9HtCsnZ9PwU8AnKVoEZ+A+obq0AtS4GYDvyhLs39Zy4EidhDkBcAXyb7qu/vGLkHdXPpZ5Lhn72v3pca108UNqRYXc28Zq2Pe/uSDJgLqO+ZK1L+Xz+mpgovUTZQL7r1POQjqrrE2YoMgBLnoBrxKjnXmL6SfNa3a7k730t8CWiO6BkGO2ceh7SURmA7cgTLq/8KNH8zQC8hdgsvPk8upIDMncA32vcN2v5ev9Iddv1B4HmhAHYru3H/iutO0hUgdB9ADatZ63BtuXSX06F0boYgO3qYm28vi3/lMHzjQ4eewcGnzbAAGxHVl5dvJ59C8C0r+BjZei557I2xABsR56ABzt47G0dPOZ63PXYf6U1+QF0B/3qBlDPGYDt6iIAmxsd9UEG0P07eOysOrueD6k5YQC2KwOw1MjnClFpnVnd14f3M0dgT6puS42IA9xe3fbhddAc8EBpV47Gljjpc2e0uxLXH0P372c+/n2Jq2JKr8yyp7p1IETr0vUJMxRZgdxA2eWg8nF/Yurnrkyqr0cQ+wqX3hOl5AeQBsAAbEcGz5eIjvhFyoRRvn/PoPxCpIeT+4I8s/DjZuBd13ge0jEZgO3IE+47lF0Kf4FYiPSBwFOq+7qaCpILIdwT+CnKLgmWj31t9bNXgmhdDMB2fZ/Yh7dkCGWT+6WNn7uQIfRrRPP3Dsp9EOSo7zcLPZ4GwgBsR4bQPuDTlN0TZJGoAn8a+Fmi+ildBeYq1Pck9gY5WPA55HYANwB/V91nE1jrYgC2J1/LGzt8Dq8DjqP8tbBZ/b2WqP5KdgPkniTXE5tC5XORjskAbE/2O11e3ZaswrIv8Gzg31NvV1nCEhF45wPnEVVwyd89g/aa6tZjWuvmwdK+LwLfovxioNkU/qfE7mwHq+cwy0osw+9c4A2U3wsE6t/vQ9Wt1Z/WzQBsTy5PfyvwMSKQSo9GTojBh9cT+wMvV8+p7fd5Qh1+jwLeSSxGms3RUnJHvBuBLzTuk9bFAGxXvp4f6ejxM3wOAH8G/DNicCKbxG2EUzZvl4n5h5cApxAVZ+njKfs6PwX8gHLzLzUQBmC7svp4H9EX1sX6gDkl5A6iP/Ai4G5EYK0RIbHR931S/bsc3V4AXg28h9gJb/8m/s82vQuv/tAmGIDtymbwl4iNgZbo5uqMDIP9wK8AHwdeQDRTsyJcnPpaoN5YaWHqz9aqf7cGPA24EriAqPpKTnlpWiNWwfk74MP0Y08UzRkDsH1ZgeU+vV0+j5ybeB/gz4n9el9CvVBB82uVOkRWp/7sVOA5xAj3JcBjqJee6uoYWiGC933ElqA2f7VhNhval6/pycDfAKdRdl7c4WSw5Z4Z3wWuIvoqryH6z26h3sryFGKVmfsDTwUeTYQmRFUJ3X94rhHP9Vyi2l6k+2uhNWcMwNnIk/F1wMuJVUq66A+cllXedu7cbL2VQwNweqXprPj6sOz8ChHm/xt4YnWf1Z82zACcjbwa4QHAZ4jAKT1F5Gim+8sWiMDL5vsyh1ZT2T/YF6tEf+aziSk4Vn/alK6bMUOVYXcD8A4iXPp0guaobn5NiMGMA9SrWk//eV/k3L/PEqPQExz80CYZgLM1Ia6P3UN/Ny9Kk8ZX302A11BfeWLzV5tiAM5OTom5npiU3LcqcB6tENXfx4m5f7kKjbQp8/BpP8+yOjkN+Bz1Sil+8GzOKtGf+iRiAMS+P22JJ+JsZRV4C3HlROkFEoZkmRj4eCuGn1piBTh72a+2RqxY8mT6My1mXuS1zLcSGy59q3G/tGlWgLO31rh9MTHp2EpwY3LS88uIatqRX7XCACwjr729nlihJecF6tiWiUnPb8Y5f2qZTeBy8trcFWJU+IXYFD6WvOLjGuKStz3UW29KW2YAlpX9gccBVwCPxBA8ktzs6DvAE4jqeQErZ7XIJnBZWbn8kNg8/CaiwrFJd6gcPV8jlvO6nm5W2NbAGYDlZX/gTcCziEGR7RiCKT8kthP7m3yA7tZV1MAZgN3Itew+SYTgARwYgbp/byfwO8BbqPcekVpnAHYnQ/BDRHN4H+OuBDP8dwKvIDZ2Mvw0Uw6CdC9P8icTK8eczPgGRlaIAY8l4KXAGzH8VIAB2A95sp8D/HfgfszHCjJtWAZ2A7cDLwLehuGnQgzA/sgJvmcC/42Y+tGX5ednITda2g18GXge9UZShp+KGOKJNa+yT/DrwM8QzcCdRL/g0AJhhfjw3U2M8j6eel+Pof2u6jEDsF9yz939RF/YPyIu/N9NvXPbPMvl9ndV378K+DngZrzETR2wCdxPzcvm7kVscP7s6s/20r9l6o8lm7s7qKf//DbwserPvcJDnZink2iMmlXReUTF9GAiLPbT/yDM4NtWfd1K7JT3R8TeIznB2Wt71Yk+nzwK2U2xSjSFX1p9nU4dhAv0qzsjN1fP4NsPXETs4/HV6u9Y9alzBuD8aFaDpxNrC55ffQ8RMmt0t4Vlc6vN3IB9D7GE1euJTeLBqk89YgDOl9zOMkdKTyMGSp5PzCFMB8o+LSCCLavQLxPB9xfAddV9uZiBwafeMADnU3OQhOr7pxDXFf8McA/qqSaztlY9zveJqSxvBy4lVrzJ5wY2d9VDBuB8m64IAR4EXAUcX90/6/d4lZiv+EKi4kuLHNoslnqnTx3n2ricVwfRBF0klte6g/IfbrcRx9P26rGHMG9RAzemC+6HLgcWluimsl8iAs8BDs0NK8Dh6Sp8DD3NHQNQ0mgZgJJGywCUNFoGoKTRMgAljZYBKGm0DEBJo2UAShotA1DSaBmAkkbLAJQ0WgagpNEyACWNlgEoabQMQEmjZQBKGi0DUNJoGYCSRssAlDRaBqCk0TIAJY2WAShptAxASaNlAEoaLQNQ0mgZgJJGywCUNFoGoKTRMgAljZYBKGm0DEBJo2UAShotA1DSaBmAkkbLAJQ0WgagpNEyACWNlgEoabQMQEmjZQBKGi0DUNJoGYCSRssAlDRaBqA0PzxfW+YLKs2HCbBafe952xJfSKn/FoE14Czg5dV9k+6eznAYgFK/LQIrwGnAJcCPE5Wg524LfBGl/srwOx34IHA/4LudPqOBWer6CUg6rAy/ewAfAB5CVH6esy2yApT6J8PvDOrwuw3P19b5gkr90gy/S4nw24uV30wYgFJ/NJu9lwA/huE3U76wUj80Bzzej+FXhBWg1L0Mv7sTfX6GXyEGoNSt6akuhl9BBqDUnWaf32U44FGcASh143BTXQy/wgxAqTynuvSEASiV5VSXHjEApXKaAx6XAg/F8OuUL7xUhlNdesgKUJq9ZuV3GYZfb/gGSLM1PdXlbAy/3rAClGanOdr7fgy/3jEApdloVn6XYrO3lwxAqX2G35wwAKV2OdVljvimSO1xqsucsQKU2uGqLnPIAJS2zlVd5pQBKG2Nq7rMMQNQ2jxXdZlzBqC0Oa7qMgAGoLRxTnUZCN8waWOc6jIgVoDS+jnVZWAMQGl9nOoyQAagdGzTq7oYfgNhAEpHNz3VxWbvgBiA0pE51WXgfCOlw2sOeLwfw2+QrAClO3Oqy0gYgNKhnOoyIgagVHOqy8gYgFJwqssIGYCSU11GywDU2DnVZcQMQI2Zq7qMnG+0xmoBp7qMnhWgxmgCrBLhdxmG32j5hmtsJtXtycBHgbOAPcC2zp6ROmMFqLFZI0Lwh8DF1X0L1f0aGQNQY7QGHABeCVwA7CKaxIbgyNgE1hhlFbgIXFjddwGwjygKJof/ZxoaK0CN1RoxCrxEhOCFWAmOjgGoMcsQXCQqwGYIagQMQI3dGhF4GYL/igjBFawEB88AlA6tBF+NzeHRMAClWrMSvABDcPAMQKnWbA5fiCE4eAagdKgMQUeHR8AAlO6sOUXmAgzBwTIApcNziswIeCWIdGTTU2QgRom9YmQgrACloztaJWhzeM5ZAUrr06wE16rbOzp8PmqBASitz/QUGYBXAcvYkppbvnHS+mUILhAheDWwEwdG5pYVoLQx2e83IVaS1hyzApQ2Zw3Pn7nnGyhptAxASaNlAEoaLQNQ0mgZgJJGywCUNFoGoKTRMgAljZYBKGm0DEBJo2UAShotA1DSaBmAkkbLAJQ0WgagpNEyACWNlgE4PF3tVpbHkltFam4YgMOzTIRgqSDK/TBOLfR4UmsMwOHZT4RgqQDMavMuhR5Pao0BODx3EAEIZZrCGbQnFHzMruXveEoHj32gg8ccLANwOPKkPAisFHzcDMCHV7dD3yIyf997AHejbHcDwL6p56EtMACHZxX4WsHHy2PobGAXEcRDPjkXid/vCcBpRMVd4vfND7j9BR5rNAzAYVmsbr9Y3ZaoxiZEs+xk4GHVfUM+rnKU/ZkdPf7e6nbIHzLFDPlAHaM8KW4u/LjLwE7gJ6vnMNSTc4EIv3sDTyV+71Ln0BIRvl+ofh56V0MRBuAwfbfw4+Vx9DQiIEr2QZY0IX6/84ETicq3VPN3gWhuX9e4T1tkAA5LVgVXE31FS5QbCV4Gfhx4YHXf0I6tCfH6ngC8qPq+5O+4CHwPuLX62QBswdAO0rHLk+JGYrRwqdDjZj/gXYBnMcyBkGz+/grwo0Q1Vur8ybC9Crit8Vy0RQbgMP0A+BJlT5QF4kT9ZWI0uPT0kFnKpu8pwCuIJn7Jcyffw+z/WzzSX9TGGIDDskacHMtEtQDlOsuzj+pBwHOp+62GYJF4HX8XOJNyfX/Nxwf4QHXrAEhLhnKAqpYn5ucp3xTNfrLfBY7v4PFnYYH4QHkk8FuUbfpCvIbbgP+HI8CtMwCHJ0+Oy4mrQrYVfOysAh8IvKx6LvPcXMspPbuBNwM7KN+0z+b2R4j+v0Xs/2uNATg8eXJ8DfgcccKUnJayQDQR/wXwUKJ6mtcQzNfuPwCPIEbWS/8uGbb/o/DjjoIBODxrxOjvQeCj1B34pUyI0DgOeCsxMlx6ykgblojw/m3gN4hR9dLht0pUnV8Brmzcp5bM20Gp9cnA+5/VbekTd5G4ZOthwJ827p+X4y3D73zgDynf75fyg+NS4PvY/G3dvByQ2pisEj5NXDmwnfKVwxIRgs8C/jP1NbR9PuYm1KPoLwLeQoRf/llpi0Ql/9YOHnsU+nwwavNyOswe4H3Uo7OlLRFNx18D/oL6etZSE7Q3IqurFWIU+810G34rRPP3U8AnqLsW1CIDcLiyqfQ2ooroaiBikQjB5xNhfCb1wEgfjr8JEcjZb/kW4A/oNvya/oT+V85zyxd1uLL/6LPAXxPN4K4qiOwT/CmiM/8fVM8lq8EujsNs7q4RgfzY6rmdT/eLjubgxw3AxY371DIDcNiy6fundF/JZHP4XsB7gYuA+1Nv4rTA7KvCDL1mc/cU4LXAFcA51KO9Xb5eWfH9J+KDw8GPGen6pNBs5fu7G7gGuB8xR6/LD76sZHYSI5sXAf8F+NvG35kQzzEDfI3NBcD0/9Osos4EnkdMcbkX8bqs0P2cxVWiWr+JmEd5e3W/ATgDBuDw5WTelwOvo5v5bIezQlylskRMML4CeCdxxcNXjvBvMtDy+8NZ48h7I+8EHkdcq/wM4O7V3+tigvORrBCLSfwmUQGWnsg+Kgbg8OV7fCLRH3gGZbfNPJpshm6jvmTv20Tf14eA64nrX28kmoIbqYImwI8ADwH+HrFa9U8SVTBESOb8vj68FlBXf9cR1x4fYPPVr9ahL2+8ZquvVWBqVm07ObSJfjuxEOh+4P8SiwJ8j/gdcge87D/cBZwE3JdYlWYXsXNb83ro/dR9bH07/leJ3/8XgXdj9TdzfTsANBv5Ph9HrBb9ALrvCzySrHiyv247W5s3eIC64m02ofsmm77/ixglN/wKMADHI0+o5wBvp39V4JGsNW6nm4PN7ydT3zc3Z+r7cZ7Lhh0gthW4nu4mr49K3w8MtSsX9ryM2NVsXkJw6JaJkfqXE9ceW/0VYgCOS55YDyYur9rOMBYtnWfZ9P0IMVH8aKPYallf+0M0GznP7VrgNXR7dYjqK2G+D/w6UQk66luQn/zjkwMBC8CHiXlxNoW7kdXf84C/xKZvcVaA45MVxkHgV4lN1EvtH6zaMhF+f0yEXy7IoIKsAMcrq43nEivG7McPxFKy8rsC+NnqZ5u+HfCAH68Voup4O7H8006iKtFsZfjdRGyyfrC63/DrgBXguDUnBl8M/DxxyVkfFywdgrzsbw8xDelq7PfrlAGoPAaOJ66/fRSG4CzkFqGrwNOJbUtz7xF1xCawch7gD4FfIKbI7MYTs0053WUNeDaGX28YgIK6OvkG8DTiUqzd1P1T2rxs9i4T4fdeDL/eMACVcpL0TcTI5N8Siyd4om5eTnW5nehffQ+GX68YgGrKEPwK8BRiL5FsDjtKuTF5fe/XiUvcLsPw6x0DUNMyBG8Bfo6YJrO7+jNXJzm2VeI13A18HDiX2Noy9xtWjxiAOpxcZPQ24DzgVcQuZTtwysbRZH/fLmKfk6cSC7g61aWnnAajo8k19VaJRTr/I3BPYppMXk+semn/3cAPgH9OBCDEa2Tl3FMGoNYj+65OB94APIs46fuwhWTXlqlXrf4w8FvEVKIFvLyt9/wE13osU0+TeTZxCddNRMUzYZzNu9zYfTcxh/IVxGDHtdQTng2/nhvzJ7c2Lo+XNWKzoVcD/4R6a8s1hr+sVgbbrurndwH/kgg+sMk7VwxAbUZzOsdjgFcS++xOiK0mV+nnrmtbsUL8Pjurn68E/i1wafVzLmdl1TdHhnSAqqxcSCGbv08GfoeYRJ1TPg5y6IIL8yaXp18gRsABrgL+CPir6uf83az65pABqK2aDoDHAb9BVIQnVvdl83gewrC5JedO6lHwy4E3EZeyJae3zDkDUG2Z7vg/ixgt/iXgnMbfyyYy9KeZvFp9TYgR3ezH/DoReBcBn2z8fYNvIPpw8GlYFjm0iloCHkuE4ROBhzT+7jIRJBkmzUCcxbHZ3GM4A2+RCL30beCjxODG5cQVMfl8mk1+DYABqFnJMGsGxi5iS85nAI8mBlBO5NDjMKeXLFOHFNx5s/Ojac6/y+8Xq68FDh2pXgZuJPr2LiPC7+bGn08HugbEANSsZeU04c7Xwt6daCo/CbgPsRjrmdSXk7VtL3AAuA64prr9MPBVYsWWlAHpXL6BMwBVUlZw2ZScDpcdwAnAPYCHAWcQK1WfVt13BnBS4/+a1lzc9WtEJfcNYgn6rwKfq37+Hneu6HLBUqu9ETEA1aVmdZjX0x7NAhFURxpNzvBq9iseSS75n1Weld4IGYDqk2Z/XzPgNhNSzWpz+v9hg/+XBsoA1DzZyPFqwEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmS+uP/A1wsgSAi/5uTAAAAAElFTkSuQmCC">
+</head>
+<body>
+<style>
+  :root{
+    color-scheme:light dark;
+    --paper:#ffffff; --ink:#0b0b0b; --soft:#5f5f5f; --faint:#9a9a9a; --line:#e7e7e7;
+    --panel:rgba(250,250,250,.92); --panel-line:rgba(0,0,0,.14); --panel-shadow:0 10px 30px rgba(0,0,0,.15);
+    --sel:#007aff;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --paper:#0a0a0a; --ink:#f1f1f1; --soft:#9a9a9a; --faint:#5f5f5f; --line:#232323;
+      --panel:rgba(38,38,38,.95); --panel-line:rgba(255,255,255,.12); --panel-shadow:0 10px 35px rgba(0,0,0,.5); }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;line-height:1.6}
+  @media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} }
+
+  .wrap{max-width:640px;margin:0 auto;padding:38px 22px 72px}
+  .back{display:inline-block;font-size:.92rem;color:var(--soft);text-decoration:none;margin-bottom:34px}
+  .back:hover{color:var(--ink)}
+
+  h1{font-size:2rem;font-weight:800;letter-spacing:-.03em;line-height:1.15;margin:0 0 10px;text-wrap:balance}
+  .tag{font-size:1.08rem;color:var(--soft);margin:0 0 30px}
+  h2{font-size:1.28rem;font-weight:700;letter-spacing:-.02em;margin:44px 0 6px;
+    padding-top:26px;border-top:1px solid var(--line)}
+  h2:first-of-type{border-top:none;padding-top:0}
+  h3{font-size:1rem;font-weight:700;margin:26px 0 8px}
+  p{margin:0 0 16px}
+  .lede{color:var(--soft)}
+  a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line);transition:border-color .15s}
+  a:hover{border-color:var(--ink)}
+  kbd{font-family:var(--mono);font-size:.86em;background:var(--line);border-radius:4px;padding:1px 5px}
+  .path{font-weight:600}
+  ul{margin:0 0 16px;padding-left:20px}
+  li{margin:0 0 10px}
+  .note{font-size:.92rem;color:var(--soft);border-left:2px solid var(--line);padding-left:14px;margin:0 0 16px}
+
+  /* ---- Drawn macOS menus. Illustrations, not screenshots: real text, themed, no assets. ---- */
+  figure{margin:0 0 22px}
+  .shot{overflow-x:auto;padding:2px 2px 6px}
+  .mac{font-size:13px;line-height:1.35;user-select:none}
+  .mac-bar{display:flex;align-items:center;gap:2px;padding:3px 6px;border-radius:7px 7px 0 0;
+    background:rgba(246,246,246,.9);border:.5px solid var(--panel-line);border-bottom:none;
+    color:var(--ink);white-space:nowrap;overflow:hidden}
+  @media (prefers-color-scheme:dark){ .mac-bar{background:rgba(48,48,48,.9)} }
+  .mac-bar span{padding:2px 8px;border-radius:5px}
+  .mac-bar .app{font-weight:700}
+  .mac-bar .open{background:var(--sel);color:#fff}
+  .mac-menu{background:var(--panel);border:.5px solid var(--panel-line);border-radius:8px;
+    box-shadow:var(--panel-shadow);padding:5px;width:max-content;max-width:100%}
+  .stack{display:flex;flex-direction:column;align-items:flex-start}
+  .mi{display:flex;align-items:center;gap:8px;padding:4px 12px 4px 8px;border-radius:4px;
+    color:var(--ink);white-space:nowrap}
+  .mi .tick{width:12px;flex:none;text-align:center;color:var(--ink)}
+  .mi .arrow{margin-left:auto;padding-left:24px;color:var(--soft)}
+  .mi.on{background:var(--sel);color:#fff}
+  .mi.on .tick,.mi.on .arrow{color:#fff}
+  .mi.dim{color:var(--faint)}
+  .mi-sep{border:none;height:.5px;background:var(--panel-line);margin:5px 6px}
+  /* Parent menu and its submenu sit side by side, overlapping slightly the way
+     macOS draws them. Wraps to two rows rather than overflowing on a phone. */
+  .menus{display:flex;flex-wrap:wrap;align-items:flex-start}
+  .menus .sub{margin:22px 0 0 -10px}
+  @media (max-width:560px){
+    .menus .sub{margin:6px 0 0 16px}
+    /* Drop the menu-bar and settings-tab titles that aren't part of the
+       instruction so the illustration fits a phone instead of scrolling sideways. */
+    .mac-bar .trim,.pane-tabs .trim{display:none}
+  }
+  /* Safari settings pane */
+  .pane{background:var(--panel);border:.5px solid var(--panel-line);border-radius:9px;
+    box-shadow:var(--panel-shadow);width:max-content;max-width:100%;min-width:min(320px,100%)}
+  .pane-top{display:flex;align-items:center;gap:7px;padding:8px 12px;border-bottom:.5px solid var(--panel-line)}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--panel-line);flex:none}
+  .pane-title{font-weight:600;margin-left:6px}
+  .pane-tabs{display:flex;gap:2px;padding:6px 10px;font-size:12px;color:var(--soft);
+    border-bottom:.5px solid var(--panel-line);white-space:nowrap}
+  .pane-tabs span{padding:3px 8px;border-radius:6px}
+  .pane-tabs .sel{background:rgba(0,0,0,.08);color:var(--sel);font-weight:600}
+  @media (prefers-color-scheme:dark){ .pane-tabs .sel{background:rgba(255,255,255,.14)} }
+  .pane-body{padding:14px 16px}
+  /* Safari groups its settings as a right-aligned label beside a column of controls. */
+  .setting-row{display:flex;gap:10px;align-items:flex-start}
+  .setting-label{flex:none;width:82px;text-align:right;color:var(--ink)}
+  .setting-items .check + .check{margin-top:7px}
+  @media (max-width:560px){
+    .setting-row{flex-direction:column;gap:6px}
+    .setting-label{width:auto;text-align:left}
+  }
+  .check{display:flex;align-items:flex-start;gap:9px;white-space:nowrap}
+  .box{width:15px;height:15px;flex:none;margin-top:1px;border-radius:4px;background:var(--sel);
+    color:#fff;font-size:11px;line-height:15px;text-align:center;font-weight:700}
+  .box.off{background:rgba(0,0,0,.09)}
+  @media (prefers-color-scheme:dark){ .box.off{background:rgba(255,255,255,.16)} }
+  figcaption{font-size:.85rem;color:var(--faint);margin-top:9px}
+
+  .foot{margin-top:52px;padding-top:22px;border-top:1px solid var(--line);
+    font-size:.92rem;color:var(--soft)}
+  .foot a{color:var(--soft)}
+</style>
+
+<div class="wrap">
+  <a class="back" href="/">← Beamhook</a>
+
+  <h1>Enable JavaScript from Apple Events</h1>
+  <p class="tag">A one-time switch, per browser, so Beamhook can hook your keys to one specific tab.</p>
+
+  <p class="lede">Beamhook controls a native app like Spotify with a single AppleScript command. Browsers work
+  differently: to see which tabs are playing — and to send play/pause to the one you picked — Beamhook asks the
+  browser to run a small piece of JavaScript in each tab. macOS ships with that ability turned off.</p>
+
+  <p class="lede">Without it your media keys still reach the browser; macOS just decides for itself which tab
+  hears them. That's what the notice in Beamhook is telling you. Turning it on takes about twenty seconds.</p>
+
+  <h2 id="safari">Safari</h2>
+
+  <h3>1. Reveal the developer settings</h3>
+  <p>Choose <span class="path">Safari → Settings</span> (<kbd>⌘,</kbd>), click <span class="path">Advanced</span>,
+  and tick <span class="path">Show features for web developers</span>. This is what puts the
+  <span class="path">Developer</span> tab in the toolbar you need for step 2.</p>
+
+  <figure>
+    <div class="shot">
+      <div class="mac">
+        <div class="pane">
+          <div class="pane-top">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="pane-title">Advanced</span>
+          </div>
+          <div class="pane-body">
+            <div class="check"><span class="box">✓</span><span>Show features for web developers</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption>Safari → Settings → Advanced, at the bottom of the pane.</figcaption>
+  </figure>
+
+  <h3>2. Tick the box</h3>
+  <p>A <span class="path">Developer</span> tab now sits at the right-hand end of the Settings toolbar, after
+  <span class="path">Advanced</span>. Open it and tick the third box under
+  <span class="path">Automation</span>: <span class="path">Allow JavaScript from Apple Events</span>.
+  That's it — no restart, no reload.</p>
+
+  <figure>
+    <div class="shot">
+      <div class="mac">
+        <div class="pane">
+          <div class="pane-top">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="pane-title">Developer</span>
+          </div>
+          <div class="pane-tabs">
+            <span class="trim">Websites</span><span class="trim">Profiles</span><span class="trim">Extensions</span>
+            <span>Advanced</span><span class="sel">Developer</span><span class="trim">Feature Flags</span>
+          </div>
+          <div class="pane-body">
+            <div class="setting-row">
+              <span class="setting-label">Automation:</span>
+              <div class="setting-items">
+                <div class="check"><span class="box off"></span><span>Allow remote automation</span></div>
+                <div class="check"><span class="box off"></span><span>Allow JavaScript from Smart Search field</span></div>
+                <div class="check"><span class="box">✓</span><span>Allow JavaScript from Apple Events</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption>Safari → Settings → Developer. Three boxes sit under Automation; you want the last one.</figcaption>
+  </figure>
+
+  <h3>On older versions of Safari</h3>
+  <p>Before the Developer tab existed, the same switch lived in the menu bar: step 1 added a
+  <span class="path">Develop</span> menu, and <span class="path">Allow JavaScript from Apple Events</span>
+  sat inside it. If your Settings window has no Developer tab, look there instead — it's one setting either
+  way, so ticking it in one place ticks it in the other.</p>
+
+  <figure>
+    <div class="shot">
+      <div class="mac stack">
+        <div class="mac-bar">
+          <span class="app">Safari</span><span>File</span><span>Edit</span><span>View</span>
+          <span class="trim">History</span><span class="open">Develop</span>
+          <span class="trim">Window</span><span class="trim">Help</span>
+        </div>
+        <div class="mac-menu">
+          <div class="mi"><span class="tick"></span>Open Page With<span class="arrow">›</span></div>
+          <div class="mi"><span class="tick"></span>Show Web Inspector</div>
+          <hr class="mi-sep">
+          <div class="mi on"><span class="tick">✓</span>Allow JavaScript from Apple Events</div>
+          <div class="mi"><span class="tick"></span>Allow Remote Automation</div>
+        </div>
+      </div>
+    </div>
+    <figcaption>The older route: the Develop menu in the menu bar. Neighbouring items vary by version.</figcaption>
+  </figure>
+
+  <h2 id="chrome">Chrome</h2>
+
+  <p>In the menu bar, choose <span class="path">View → Developer → Allow JavaScript from Apple Events</span>.
+  A checkmark means it's on. There's nothing to switch on first.</p>
+
+  <figure>
+    <div class="shot">
+      <div class="mac stack">
+        <div class="mac-bar">
+          <span class="app">Chrome</span><span>File</span><span>Edit</span><span class="open">View</span>
+          <span class="trim">History</span><span class="trim">Bookmarks</span>
+          <span class="trim">Window</span><span class="trim">Help</span>
+        </div>
+        <div class="menus">
+          <div class="mac-menu">
+            <div class="mi"><span class="tick"></span>Always Show Bookmarks Bar</div>
+            <div class="mi"><span class="tick"></span>Stop</div>
+            <hr class="mi-sep">
+            <div class="mi on"><span class="tick"></span>Developer<span class="arrow">›</span></div>
+          </div>
+          <div class="mac-menu sub">
+            <div class="mi"><span class="tick"></span>View Source</div>
+            <div class="mi"><span class="tick"></span>Developer Tools</div>
+            <hr class="mi-sep">
+            <div class="mi"><span class="tick">✓</span>Allow JavaScript from Apple Events</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption>Chrome's View → Developer submenu.</figcaption>
+  </figure>
+
+  <h3>The other browsers</h3>
+  <ul>
+    <li><b>Brave</b> and <b>Arc</b> — same path as Chrome: <span class="path">View → Developer →
+      Allow JavaScript from Apple Events</span>.</li>
+    <li><b>Vivaldi</b> — it lives in Vivaldi's own settings instead of a menu:
+      <span class="path">Vivaldi → Settings → Privacy</span>. Typing <i>Apple Events</i> into the search box at
+      the top of Settings jumps straight to it.</li>
+  </ul>
+
+  <h2>After you turn it on</h2>
+  <ul>
+    <li>The first time Beamhook talks to the browser, macOS asks whether Beamhook may control it. Choose
+      <span class="path">OK</span>. If you dismissed that prompt, you can grant it later under
+      <span class="path">System Settings → Privacy &amp; Security → Automation → Beamhook</span>.</li>
+    <li>Open the Beamhook menu again. Where the notice was, you'll now find a list of the tabs that are
+      playing, and the keys follow whichever one you pick.</li>
+    <li>The switch stays on until you turn it off, and it's per browser — turning it on in Safari does
+      nothing for Chrome.</li>
+    <li>It doesn't hand anything to websites. It lets applications you've already allowed under
+      <span class="path">Automation</span> run JavaScript in your tabs — Beamhook uses it to read what's
+      playing and to send play, pause and volume.</li>
+  </ul>
+
+  <p class="foot">Still stuck, or does your browser look different?
+  <a href="https://github.com/ppixu/beamhook/issues">Open an issue on GitHub</a> and tell us what you see —
+  including your macOS and browser versions. &nbsp;·&nbsp; <a href="/">beamhook.app</a></p>
+</div>
+</body>
+</html>

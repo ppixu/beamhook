@@ -36,8 +36,8 @@ requires macOS 14.2. Tested on macOS Tahoe 26.5.
 - Play/pause button that reflects what's actually playing.
 - Volume sliders for scriptable apps that are currently playing audio, whether
   or not they are hooked.
-- Per-tab volume sliders for actively playing browser sources when JavaScript
-  from Apple Events is enabled.
+- Per-tab volume sliders for actively playing browser sources when [JavaScript
+  from Apple Events](https://beamhook.app/help/) is enabled.
 - Optionally route the keyboard's volume keys to the selected app.
 - Hold Command while pressing a volume key to adjust the Mac's system volume instead.
 - Built in: Spotify, Apple Music, Apple TV, Safari, Chrome, Brave, Arc,
@@ -49,7 +49,8 @@ this way.
 
 The browser targets control the active YouTube tab. Enable **Allow JavaScript
 from Apple Events** in Safari's Develop menu or the Chromium browser's
-View → Developer menu before using them.
+View → Developer menu before using them —
+[step-by-step guide with pictures](https://beamhook.app/help/).
 
 ## Build it yourself — free
 
