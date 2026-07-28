@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/icon-dark.png">
-    <img src="docs/icon.png" width="88" height="88" alt="Beamhook">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/mark-dark.svg">
+    <img src="docs/mark.svg" width="720" alt="Previous, pause, Beamhook, play, and next symbols">
   </picture>
 </p>
 
@@ -29,6 +29,10 @@ to Apple Music, YouTube, or whichever player it remembers. It also lets you
 control the volume of apps that are currently playing audio, when the app
 supports AppleScript. Requires macOS 14.0 or later; the active-audio source list
 requires macOS 14.2. Tested on macOS Tahoe 26.5.
+
+> [!IMPORTANT]
+> Firefox is not supported. Browser control works with Safari, Chrome, Brave,
+> Arc, and Vivaldi.
 
 ## Features
 

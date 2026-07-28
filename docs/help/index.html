@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Enable JavaScript from Apple Events — Beamhook</title>
-<meta name="description" content="How to turn on “Allow JavaScript from Apple Events” in Safari, Chrome, Brave, Arc and Vivaldi, so Beamhook can hook your media keys to one specific browser tab.">
+<meta name="description" content="How to turn on “Allow JavaScript from Apple Events” in Safari, Chrome, Brave, Arc and Vivaldi, so Beamhook can hook your media keys to one specific browser tab. Firefox is not supported.">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a">
 <meta name="color-scheme" content="light dark">
@@ -48,6 +48,9 @@
   ul{margin:0 0 16px;padding-left:20px}
   li{margin:0 0 10px}
   .note{font-size:.92rem;color:var(--soft);border-left:2px solid var(--line);padding-left:14px;margin:0 0 16px}
+  .compat{font-size:.95rem;color:var(--soft);background:var(--line);border-radius:8px;
+    padding:12px 14px;margin:0 0 24px}
+  .compat strong{color:var(--ink)}
 
   /* ---- Drawn macOS menus. Illustrations, not screenshots: real text, themed, no assets. ---- */
   figure{margin:0 0 22px}
@@ -118,6 +121,9 @@
 
   <h1>Enable JavaScript from Apple Events</h1>
   <p class="tag">A one-time switch, per browser, so Beamhook can hook your keys to one specific tab.</p>
+
+  <p class="compat"><strong>Firefox is not supported.</strong> Beamhook's browser controls work with Safari,
+  Chrome, Brave, Arc and Vivaldi.</p>
 
   <p class="lede">Beamhook controls a native app like Spotify with a single AppleScript command. Browsers work
   differently: to see which tabs are playing — and to send play/pause to the one you picked — Beamhook asks the

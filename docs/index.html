@@ -380,13 +380,13 @@
     .tray-icon {
       filter: invert(1);
     }
-    /* Gumroad CTA: flip the black edge + hard shadow to white on dark */
+    /* Keep the Gumroad edge visible without a bright white outline on dark. */
     .buy {
-      border-color: #fff;
-      box-shadow: 2px 2px 0 #fff;
+      border-color: #555;
+      box-shadow: 2px 2px 0 #555;
     }
-    .buy:hover { box-shadow: 3px 3px 0 #fff; }
-    .buy:active { box-shadow: 1px 1px 0 #fff; }
+    .buy:hover { box-shadow: 3px 3px 0 #555; }
+    .buy:active { box-shadow: 1px 1px 0 #555; }
     .hover-hint {
       filter: none;
       opacity: .5;

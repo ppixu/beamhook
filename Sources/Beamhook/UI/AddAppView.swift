@@ -72,6 +72,10 @@ struct AddAppView: View {
                 Text("Add an app").font(.title2).bold()
                 Text("Beamhook controls a native macOS app via a few AppleScript commands. The easiest way to get them:")
                     .foregroundStyle(.secondary)
+                Label("Firefox is not supported and cannot be added here.",
+                      systemImage: "info.circle")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
 
                 aiHelper
                 form
