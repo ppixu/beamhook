@@ -4,16 +4,23 @@ import AppKit
 /// the activation policy is `.regular`. Windows therefore flip it on the way in —
 /// but with more than one open, whichever closes first must NOT drop the app back
 /// to `.accessory` while another is still up. This tracks them by identity, so
-/// re-showing an already-open window (AddAppWindow reuses its window) is a no-op.
+/// re-showing an already-open window (AddAppWindow reuses its window) is a no-op,
+/// and tears the observer down again on close so a window can be re-presented
+/// (closed, then shown again) without leaking an observer per presentation.
 @MainActor
 final class AgentWindowPresenter {
     static let shared = AgentWindowPresenter()
 
     private var open: Set<ObjectIdentifier> = []
-    private var observed: Set<ObjectIdentifier> = []
-    private let setPolicy: (NSApplication.ActivationPolicy) -> Void
+    private var observerTokens: [ObjectIdentifier: NSObjectProtocol] = [:]
+    private let setPolicy: @MainActor (NSApplication.ActivationPolicy) -> Void
 
-    init(setPolicy: @escaping (NSApplication.ActivationPolicy) -> Void = {
+    // The closure type is annotated `@MainActor` so this default-argument
+    // literal — which type-checks in a synchronous nonisolated context
+    // regardless of the enclosing (@MainActor) declaration — is itself
+    // main-actor-isolated, and can call `NSApp.setActivationPolicy` without a
+    // warning.
+    init(setPolicy: @escaping @MainActor (NSApplication.ActivationPolicy) -> Void = {
         NSApp.setActivationPolicy($0)
     }) {
         self.setPolicy = setPolicy
@@ -29,11 +36,11 @@ final class AgentWindowPresenter {
     /// Policy + lifecycle bookkeeping, without putting anything on screen.
     func beginPresenting(_ window: NSWindow) {
         let key = ObjectIdentifier(window)
-        if observed.insert(key).inserted {
+        if observerTokens[key] == nil {
             // queue: nil so the callback runs synchronously on the poster's
             // thread (willClose is always posted on main), which keeps the
             // bookkeeping — and its tests — free of ordering surprises.
-            NotificationCenter.default.addObserver(
+            observerTokens[key] = NotificationCenter.default.addObserver(
                 forName: NSWindow.willCloseNotification, object: window, queue: nil
             ) { [weak self] _ in
                 MainActor.assumeIsolated { self?.didClose(key) }
@@ -45,6 +52,9 @@ final class AgentWindowPresenter {
 
     private func didClose(_ key: ObjectIdentifier) {
         open.remove(key)
+        if let token = observerTokens.removeValue(forKey: key) {
+            NotificationCenter.default.removeObserver(token)
+        }
         if open.isEmpty { setPolicy(.accessory) }
     }
 }
