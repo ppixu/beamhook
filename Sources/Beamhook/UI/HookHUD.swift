@@ -14,10 +14,11 @@ final class HookHUD {
     private enum Presentation {
         case hooked(appName: String, volumeKeysHijacked: Bool)
         case volume(appName: String, percent: Int)
+        case launching(appName: String)
 
         var appName: String {
             switch self {
-            case .hooked(let appName, _), .volume(let appName, _): appName
+            case .hooked(let appName, _), .volume(let appName, _), .launching(let appName): appName
             }
         }
 
@@ -25,6 +26,7 @@ final class HookHUD {
             switch self {
             case .hooked(_, let volumeKeysHijacked): volumeKeysHijacked ? 3.0 : 2.0
             case .volume: 1.5
+            case .launching: 2.0
             }
         }
     }
@@ -89,6 +91,12 @@ final class HookHUD {
         show(.volume(appName: appName, percent: min(100, max(0, percent))))
     }
 
+    /// Flash "Starting <appName>…" while a hooked app that wasn't running
+    /// launches, so a cold start doesn't read as a dead key press.
+    func showLaunching(appName: String) {
+        show(.launching(appName: appName))
+    }
+
     private func show(_ presentation: Presentation) {
         generation += 1
         present(presentation, gen: generation, attempt: 0)
@@ -125,6 +133,11 @@ final class HookHUD {
             hookIcon?.isHidden = true
             volumeRow?.isHidden = false
             volumeBar?.percent = percent
+        case .launching(let appName):
+            label?.stringValue = "Starting \(appName)…"
+            detailLabel?.isHidden = true
+            hookIcon?.isHidden = false
+            volumeRow?.isHidden = true
         }
 
         // Size the window to the (variable-width) content, then anchor it.

@@ -4,6 +4,20 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [Unreleased]
+
+### Added
+
+- **Play/pause now launches the hooked app.** If it isn't running, pressing
+  play starts it and begins playback once it's up, instead of doing nothing.
+  On by default; turn it off in Settings → General if you'd rather the keys
+  stay silent when the target is quit.
+
+### Changed
+
+- Settings moved out of the popover into their own window, opened from the
+  gear icon in the popover's footer, with separate General and Apps tabs.
+
 ## [1.1.6] — 2026-07-28
 
 ### Fixed

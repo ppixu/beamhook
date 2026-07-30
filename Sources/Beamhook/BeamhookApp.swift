@@ -72,6 +72,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         NotificationCenter.default.addObserver(
             forName: .closeBeamhookMenu, object: nil, queue: .main
         ) { [weak self] _ in self?.popover.performClose(nil) }
+
+        // Deferred a runloop turn so SwiftUI has finished building the app menu
+        // (mirrors the startup-hook dispatch above, which needs the same delay
+        // for the same reason).
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated { self?.retargetSettingsMenuItem() }
+        }
+    }
+
+    /// The placeholder `Settings { EmptyView() }` scene in `BeamhookApp` exists only
+    /// to satisfy SwiftUI's Scene requirement, but it still makes the app menu grow
+    /// a "Settings…" (⌘,) item that opens its own — blank — window, titled exactly
+    /// like `SettingsWindow`'s real one. Point that item at our own Settings window
+    /// instead of leaving it live. The item's action selector name differs across
+    /// OS versions, so search by name rather than assume which one exists; if
+    /// neither is found (a future OS rename, or the menu not built yet) this is a
+    /// silent no-op rather than a crash — worst case ⌘, still opens the old blank
+    /// window, which is the status quo today.
+    private func retargetSettingsMenuItem() {
+        guard let appMenu = NSApp.mainMenu?.items.first?.submenu else { return }
+        let settingsSelectors: Set<Selector> = [
+            NSSelectorFromString("showSettingsWindow:"),
+            NSSelectorFromString("showPreferencesWindow:"),
+        ]
+        guard let item = appMenu.items.first(where: { menuItem in
+            menuItem.action.map(settingsSelectors.contains) ?? false
+        }) else { return }
+        item.target = self
+        item.action = #selector(openSettingsWindow(_:))
+    }
+
+    @objc private func openSettingsWindow(_ sender: Any?) {
+        SettingsWindow.shared.show(state: state)
     }
 
     /// Swap the status-item image. A badged glyph that fails to load falls back to

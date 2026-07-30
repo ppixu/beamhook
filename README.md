@@ -44,6 +44,9 @@ requires macOS 14.2. Tested on macOS Tahoe 26.5.
   from Apple Events](https://beamhook.app/help/) is enabled.
 - Optionally route the keyboard's volume keys to the selected app.
 - Hold Command while pressing a volume key to adjust the Mac's system volume instead.
+- If the hooked app isn't running, play/pause starts it and begins playback. Can
+  be turned off in Settings. (A menu-driven app launched with an empty queue —
+  TIDAL, for instance — has nothing to play.)
 - Built in: Spotify, Apple Music, Apple TV, Safari, Chrome, Brave, Arc,
   Vivaldi, VLC, VOX, QuickTime Player, and Downcast.
 - Also built in, driven through their menus rather than AppleScript: IINA,
