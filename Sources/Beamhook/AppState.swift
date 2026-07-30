@@ -105,6 +105,8 @@ final class AppState: ObservableObject {
     /// `scripting` so slow maintenance can never sit in front of a user's key press.
     private let pollRunner = ScriptRunner()
     private let browserMediaController = BrowserMediaController()
+    /// Launches the hooked app for a play/pause press it would otherwise swallow.
+    private let targetLauncher: TargetLauncher
     /// Per-browser playback recency used to keep the menu bounded to the three
     /// most relevant source tabs even when a browser has hundreds of media tabs.
     private var browserSourceRecency: [String: UInt64] = [:]
@@ -133,6 +135,8 @@ final class AppState: ObservableObject {
     /// target from causing an Automation permission prompt in the background.
     @Published private(set) var isMenuVisible: Bool = false
     @Published var loginItemEnabled: Bool = LoginItem.isEnabled
+    /// Whether play/pause may start the hooked app when it isn't running.
+    @Published var launchTargetOnPlay: Bool = LaunchOnPlayPreference.isEnabled(.standard)
     /// Per-app opt-in for volume-key control. Absent (nil) means OFF — the volume
     /// keys are never taken over unless the user explicitly turns them on for that
     /// app. There is no automatic/silent hijack.
@@ -176,6 +180,7 @@ final class AppState: ObservableObject {
                                    presser: AXMenuItemPresser(),
                                    presence: WorkspacePresenceChecker())
         let targetManager = TargetManager(defaults: .standard, resolver: registry, runner: scripting)
+        self.targetLauncher = TargetLauncher(launcher: WorkspaceAppLauncher(), runner: scripting)
 
         self.store = store
         self.registry = registry
@@ -237,9 +242,33 @@ final class AppState: ObservableObject {
                 else { return }
                 Task { _ = await performBrowserCommand(command, on: candidate) }
             } else {
-                Task { _ = await targetManager.route(key) }
+                Task {
+                    let routed = await self.targetManager.route(key)
+                    // route() returning false means nothing was delivered — no
+                    // target, or the app isn't ready. Only play/pause gets the
+                    // launch fallback: next/previous on a quit app have no
+                    // meaningful target.
+                    guard !routed, command == .playPause else { return }
+                    await self.launchTargetAndPlay()
+                }
             }
         }
+    }
+
+    /// Start the hooked app, wait for it, then play. Browser targets are
+    /// excluded: when a browser isn't running Beamhook hands the transport keys
+    /// back to macOS (`refreshBrowserMedia`), and a freshly launched browser has
+    /// no media tab to act on anyway.
+    private func launchTargetAndPlay() async {
+        guard launchTargetOnPlay,
+              !selectedTargetIsBrowser,
+              let id = selectedTargetID,
+              let app = registry.app(withID: id) else { return }
+        let displayName = availableApps.first { $0.id == id }?.displayName ?? app.displayName
+        _ = await targetLauncher.launchAndPlay(
+            app,
+            isStillHooked: { [weak self] in self?.selectedTargetID == id },
+            onLaunchStarted: { HookHUD.shared.showLaunching(appName: displayName) })
     }
 
     /// Guards the one-shot "hooked" HUD shown at launch, so re-activations
@@ -388,11 +417,16 @@ final class AppState: ObservableObject {
             guard let id = context.targetID, let app = registry.app(withID: id) else {
                 return false
             }
-            return await scripting.run {
+            let performed = await scripting.run {
                 guard app.isReady else { return false }
                 app.perform(.playPause)
                 return true
             }
+            // Nothing delivered: the app isn't running. Start it instead. The
+            // false return keeps the optimistic icon honest — the periodic poll
+            // reflects playback once the app is actually up.
+            if !performed { await launchTargetAndPlay() }
+            return performed
         }
     }
 
@@ -670,6 +704,11 @@ final class AppState: ObservableObject {
     func setLoginItem(_ enabled: Bool) {
         LoginItem.setEnabled(enabled)
         loginItemEnabled = LoginItem.isEnabled
+    }
+
+    func setLaunchTargetOnPlay(_ on: Bool) {
+        launchTargetOnPlay = on
+        LaunchOnPlayPreference.setEnabled(on, in: .standard)
     }
 
     // Volume helpers used by the sliders (AppleScript runs off the main thread).
