@@ -15,6 +15,15 @@ final class AgentWindowPresenter {
     private var observerTokens: [ObjectIdentifier: NSObjectProtocol] = [:]
     private let setPolicy: @MainActor (NSApplication.ActivationPolicy) -> Void
 
+    /// Number of windows with a live `willClose` observer registered right
+    /// now. `internal` (not `private`) so tests can assert on it directly via
+    /// `@testable import` — a pure policy-sequence test cannot distinguish
+    /// "observer removed and re-registered on close" from "observer never
+    /// removed but still happens to relay the notification", since a
+    /// NotificationCenter block observer keeps firing for its `object:`
+    /// whether or not anything downstream still considers it registered.
+    var observerTokenCount: Int { observerTokens.count }
+
     // The closure type is annotated `@MainActor` so this default-argument
     // literal — which type-checks in a synchronous nonisolated context
     // regardless of the enclosing (@MainActor) declaration — is itself
