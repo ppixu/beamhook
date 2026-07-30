@@ -8,9 +8,7 @@ extension Notification.Name {
 }
 
 /// Opens the "Add an App" form in a real window (not a sheet — a sheet would
-/// dismiss the menu-bar popover). Beamhook is an agent app (LSUIElement), so we
-/// briefly switch the activation policy to `.regular` while the window is open so
-/// it can become key and accept keyboard input, then back to `.accessory`.
+/// dismiss the menu-bar popover), presented through `AgentWindowPresenter`.
 @MainActor
 final class AddAppWindow {
     static let shared = AddAppWindow()
@@ -34,14 +32,9 @@ final class AddAppWindow {
             w.isReleasedWhenClosed = false
             w.center()
             window = w
-            NotificationCenter.default.addObserver(
-                forName: NSWindow.willCloseNotification, object: w, queue: .main
-            ) { _ in NSApp.setActivationPolicy(.accessory) }
         }
 
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        w.makeKeyAndOrderFront(nil)
+        AgentWindowPresenter.shared.present(w)
     }
 
     func hide() { window?.close() }
