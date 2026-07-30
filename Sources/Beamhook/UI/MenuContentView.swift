@@ -106,9 +106,6 @@ struct MenuContentView: View {
             PlayingAppsList()
 
             Divider()
-            SettingsSection()
-
-            Divider()
             HStack(spacing: 6) {
                 Image("MenuBarIcon")
                     .resizable()
@@ -125,6 +122,13 @@ struct MenuContentView: View {
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                 Spacer(minLength: 8)
+                Button {
+                    SettingsWindow.shared.show(state: state)
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(.borderless)
+                .help("Settings")
                 Button("Quit") { NSApplication.shared.terminate(nil) }
             }
         }
