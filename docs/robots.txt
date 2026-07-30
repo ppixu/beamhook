@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# Internal design notes that happen to sit under docs/ — not pages, not for search.
+Disallow: /superpowers/
+
+Sitemap: https://beamhook.app/sitemap.xml
