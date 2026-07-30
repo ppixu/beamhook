@@ -71,3 +71,32 @@ final class MockMediaApp: MediaApp {
     func setVolume(_ percent: Int) { setVolumeCalls.append(percent) }
     func isPlaying() -> Bool? { playingState }
 }
+
+/// Stands in for the system launcher. `onLaunch` runs inside `launch`, after the
+/// call is recorded, so a test can model what happens while a launch is in
+/// flight — including re-entering TargetLauncher to test single-flight.
+@MainActor
+final class MockAppLauncher: AppLaunching {
+    var installed = true
+    var launchedBundleIDs: [String] = []
+    var onLaunch: (() async -> Void)?
+
+    func launch(bundleID: String) async -> Bool {
+        launchedBundleIDs.append(bundleID)
+        await onLaunch?()
+        return installed
+    }
+}
+
+/// Sleeps instantly and counts. `onSleep` receives the 1-based poll number, so a
+/// test can flip an app to ready on the Nth poll with no real waiting.
+@MainActor
+final class CountingSleeper: Sleeping {
+    private(set) var sleepCount = 0
+    var onSleep: ((Int) -> Void)?
+
+    func sleep(seconds: Double) async {
+        sleepCount += 1
+        onSleep?(sleepCount)
+    }
+}
