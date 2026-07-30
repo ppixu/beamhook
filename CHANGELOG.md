@@ -4,7 +4,7 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
-## [Unreleased]
+## [1.1.7] — 2026-07-30
 
 ### Added
 
