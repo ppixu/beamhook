@@ -21,7 +21,7 @@ final class SettingsWindow {
         } else {
             w = NSWindow(contentViewController: hosting)
             w.title = "Beamhook Settings"
-            w.styleMask = [.titled, .closable]
+            w.styleMask = [.titled, .closable, .resizable]
             w.isReleasedWhenClosed = false
             w.center()
             window = w

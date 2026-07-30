@@ -34,6 +34,28 @@ final class TargetLauncherTests: XCTestCase {
         XCTAssertEqual(startedCount, 1)
     }
 
+    /// An app that's already running AND ready needs no "Starting …" HUD — there's
+    /// nothing to wait for, so announcing a launch would be misleading. Also covers
+    /// a target whose `isReady` never flips true (`WorkspacePresenceChecker.isReady`
+    /// documents that trade-off): without the guard, this same code path fires the
+    /// announcement on every press before the eventual timeout.
+    func testDoesNotAnnounceWhenAlreadyReady() async {
+        let app = MockMediaApp(id: "spotify", isRunning: true)
+        app.readyValue = true
+        let launcher = MockAppLauncher()
+        let sleeper = CountingSleeper()
+        let subject = makeSubject(launcher: launcher, sleeper: sleeper)
+        var startedCount = 0
+
+        let outcome = await subject.launchAndPlay(app,
+                                                  isStillHooked: { true },
+                                                  onLaunchStarted: { startedCount += 1 })
+
+        XCTAssertEqual(outcome, .played)
+        XCTAssertEqual(startedCount, 0)
+        XCTAssertEqual(sleeper.sleepCount, 0)
+    }
+
     /// Running but still launching: don't relaunch, just wait and play. This is
     /// the press that TargetManager.route drops today.
     func testWaitsWithoutLaunchingWhenAlreadyRunning() async {
@@ -134,6 +156,13 @@ final class TargetLauncherTests: XCTestCase {
         let subject = makeSubject(launcher: launcher, sleeper: sleeper)
         var reentrantOutcome: TargetLaunchOutcome?
         launcher.onLaunch = { [weak subject] in
+            // Clear this before re-entering: if the `isLaunching` single-flight
+            // guard this test exercises ever regressed, the reentrant call below
+            // would reach `launcher.launch` again and re-invoke `onLaunch` — an
+            // unbounded recursion that hangs or crashes the test run instead of
+            // failing it. Clearing here caps the recursion at one extra level, so
+            // a regression instead shows up as a clean assertion failure.
+            launcher.onLaunch = nil
             guard let subject else { return }
             reentrantOutcome = await subject.launchAndPlay(app,
                                                            isStillHooked: { true },

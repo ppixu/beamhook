@@ -86,7 +86,14 @@ public final class TargetLauncher {
         if !app.isRunning {
             guard await launcher.launch(bundleID: app.bundleID) else { return .notInstalled }
         }
-        onLaunchStarted()
+        // Only announce a launch when there's actually a wait ahead of it. An
+        // app that's already ready needs no "Starting …" HUD, and one that is
+        // running but will never report ready (see `WorkspacePresenceChecker
+        // .isReady`) would otherwise flash "Starting …" on every press and then
+        // silently time out `timeout` seconds later.
+        if !app.isReady {
+            onLaunchStarted()
+        }
 
         var waited = 0.0
         while !app.isReady {

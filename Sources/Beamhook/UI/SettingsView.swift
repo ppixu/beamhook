@@ -12,7 +12,11 @@ struct SettingsView: View {
                 .tabItem { Label("Apps", systemImage: "square.grid.2x2") }
         }
         .padding(20)
-        .frame(width: 440, height: 300)
+        // Min/ideal rather than a fixed size: the window's style mask now
+        // includes `.resizable`, and a hard-fixed frame here would leave it
+        // draggable but visually inert. The Apps tab's list is the one that
+        // actually benefits — it only fits ~5 rows at the original 300pt.
+        .frame(minWidth: 440, idealWidth: 440, minHeight: 300, idealHeight: 300)
     }
 }
 

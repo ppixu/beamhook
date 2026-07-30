@@ -265,10 +265,21 @@ final class AppState: ObservableObject {
               let id = selectedTargetID,
               let app = registry.app(withID: id) else { return }
         let displayName = availableApps.first { $0.id == id }?.displayName ?? app.displayName
-        _ = await targetLauncher.launchAndPlay(
+        let outcome = await targetLauncher.launchAndPlay(
             app,
             isStillHooked: { [weak self] in self?.selectedTargetID == id },
             onLaunchStarted: { HookHUD.shared.showLaunching(appName: displayName) })
+        // Only the two failure modes a user can actually report ("I pressed play
+        // and nothing happened") are worth a log line; .skipped/.alreadyPlaying/
+        // .played are all either silent by design or already visible via the HUD.
+        switch outcome {
+        case .notInstalled:
+            Self.log.error("launch-on-play: \(displayName, privacy: .public) is not installed")
+        case .timedOut:
+            Self.log.error("launch-on-play: \(displayName, privacy: .public) timed out waiting for readiness")
+        case .skipped, .alreadyPlaying, .played:
+            break
+        }
     }
 
     /// Guards the one-shot "hooked" HUD shown at launch, so re-activations
@@ -422,10 +433,14 @@ final class AppState: ObservableObject {
                 app.perform(.playPause)
                 return true
             }
-            // Nothing delivered: the app isn't running. Start it instead. The
-            // false return keeps the optimistic icon honest — the periodic poll
-            // reflects playback once the app is actually up.
-            if !performed { await launchTargetAndPlay() }
+            // Nothing delivered: the app isn't running. Kick off the launch
+            // fallback without awaiting it — awaiting here would hold
+            // commandInFlight (and the disabled button) for the whole launch
+            // timeout, and would prevent the periodic poll from ever reporting
+            // that playback started. Returning false immediately releases the
+            // button; TargetLauncher's single-flight guard stops a second press
+            // from starting a second launch.
+            if !performed { Task { await launchTargetAndPlay() } }
             return performed
         }
     }
