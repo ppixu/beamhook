@@ -112,6 +112,10 @@ struct MenuContentView: View {
                     .renderingMode(.template)
                     .frame(width: 14, height: 14)
                     .accessibilityHidden(true)
+                // Always the product name, never the running build's bundle
+                // name: "Beamhookdev" is long enough to truncate this row, and
+                // the dev build is already identifiable by its app name
+                // everywhere macOS lists it.
                 Text("Beamhook")
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
@@ -121,7 +125,7 @@ struct MenuContentView: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
-                Spacer(minLength: 8)
+                Spacer(minLength: 4)
                 Button {
                     SettingsWindow.shared.show(state: state)
                 } label: {
@@ -130,10 +134,15 @@ struct MenuContentView: View {
                 .buttonStyle(.borderless)
                 .help("Settings")
                 Button("Quit") { NSApplication.shared.terminate(nil) }
+                    .fixedSize()
             }
         }
         .padding(12)
-        .frame(width: 220)
+        // 214pt is the footer's measured floor (icon + "Beamhook" + version +
+        // gear + Quit + spacings + 12pt padding each side). Below that the Quit
+        // button starts truncating to "…", so don't narrow this further without
+        // taking something out of that row.
+        .frame(width: 214)
         .onChange(of: state.playbackTargetContext, initial: true) { _, context in
             playback.reset(for: context)
         }

@@ -4,7 +4,7 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
-## [1.1.7] — 2026-07-30
+## [1.1.7] — 2026-07-31
 
 ### Added
 
@@ -17,6 +17,10 @@ one-time, includes all 1.x updates); building from source is always free.
 
 - Settings moved out of the popover into their own window, opened from the
   gear icon in the popover's footer, with separate General and Apps tabs.
+- Builds from source now install as **Beamhookdev.app** with their own bundle
+  id, so a local build and the official one can be granted Accessibility
+  separately and coexist. Previously they shared an identity, and whichever was
+  granted last silently took the permission from the other.
 
 ## [1.1.6] — 2026-07-28
 
