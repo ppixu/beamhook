@@ -15,6 +15,25 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.1.7</title>
+            <pubDate>Fri, 31 Jul 2026 09:33:57 +0300</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.7</link>
+            <sparkle:version>13</sparkle:version>
+            <sparkle:shortVersionString>1.1.7</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Added</h3>
+<ul>
+<li>**Play/pause now launches the hooked app.** If it isn't running, pressing play starts it and begins playback once it's up, instead of doing nothing. On by default; turn it off in Settings → General if you'd rather the keys stay silent when the target is quit.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li>Settings moved out of the popover into their own window, opened from the gear icon in the popover's footer, with separate General and Apps tabs.</li>
+<li>Builds from source now install as **Beamhookdev.app** with their own bundle id, so a local build and the official one can be granted Accessibility separately and coexist. Previously they shared an identity, and whichever was granted last silently took the permission from the other.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.1.7.zip" length="2081978" type="application/octet-stream" sparkle:edSignature="eSqFE1Hv2RY7IvHz6ljSJgREqb50g3KflpoaAtsW5y1KH7ev7OhGAttoX9UNgp1OM7LjKXAjNW0e4hRGIUuGDw=="/>
+        </item>
+        <item>
             <title>1.1.6</title>
             <pubDate>Tue, 28 Jul 2026 15:49:01 +0300</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.6</link>
@@ -117,6 +136,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: z+uv7r0z1JLKFl97+UdG+oH4wqWoyfG5SPGtOWOquZk+CAxhV/d4jMxKAGcEBpkeqf9Nucz68DPK0L9KG4H6Dw==
-length: 8557
+edSignature: dI+yX+guQ3hj3LnJXhx4kQN6subkCFwz5dBjFojbVL8sYYZF6XMrqkJ6tXl7QjnLuEuqyvcCs7aJxai7ieH8BQ==
+length: 10028
 -->
