@@ -1,6 +1,12 @@
 import SwiftUI
 import BeamhookKit
 
+private enum SettingsMetrics {
+    /// Inset applied to both tabs, so a row's text and its trailing control sit
+    /// the same distance from their respective window edges.
+    static let contentInset: CGFloat = 20
+}
+
 /// Beamhook's settings. Presented in a real window by `SettingsWindow` — never a
 /// sheet, which would dismiss the menu-bar popover it was opened from.
 struct SettingsView: View {
@@ -25,24 +31,45 @@ private struct GeneralSettingsTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Toggle("Launch at login", isOn: Binding(
-                get: { state.loginItemEnabled },
-                set: { state.setLoginItem($0) }))
+            settingRow(
+                title: "Launch at login",
+                isOn: Binding(get: { state.loginItemEnabled },
+                              set: { state.setLoginItem($0) }))
 
-            VStack(alignment: .leading, spacing: 4) {
-                Toggle("Launch the hooked app on play/pause", isOn: Binding(
-                    get: { state.launchTargetOnPlay },
-                    set: { state.setLaunchTargetOnPlay($0) }))
-                Text("Starts the app if it isn't running.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            settingRow(
+                title: "Launch the hooked app on play/pause",
+                caption: "Starts the app if it isn't running.",
+                isOn: Binding(get: { state.launchTargetOnPlay },
+                              set: { state.setLaunchTargetOnPlay($0) }))
 
             Spacer()
         }
-        .toggleStyle(.switch)
         .padding(.top, 12)
+        .padding(.horizontal, SettingsMetrics.contentInset)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Label (plus optional caption) on the left, switch pinned to the trailing
+    /// edge — so every row's switch lands on the same vertical line regardless of
+    /// how long its label is. A plain `Toggle` sizes to its content instead, which
+    /// left each switch wherever its own text happened to end.
+    private func settingRow(title: String,
+                            caption: String? = nil,
+                            isOn: Binding<Bool>) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                if let caption {
+                    Text(caption)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+        }
     }
 }
 
@@ -81,6 +108,7 @@ private struct AppsSettingsTab: View {
             Spacer()
         }
         .padding(.top, 12)
+        .padding(.horizontal, SettingsMetrics.contentInset)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
