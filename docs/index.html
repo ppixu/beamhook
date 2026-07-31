@@ -36,7 +36,7 @@
   "applicationSubCategory": "Menu bar utility",
   "operatingSystem": "macOS 14.0 or later",
   "processorRequirements": "Apple Silicon or Intel",
-  "softwareVersion": "1.1.6",
+  "softwareVersion": "1.1.8",
   "license": "https://github.com/ppixu/beamhook/blob/main/LICENSE",
   "isAccessibleForFree": true,
   "image": "https://beamhook.app/og.png",
@@ -255,7 +255,7 @@
    */
   /* Hang left from the tray — a 220px panel can’t center under a near-edge icon */
   .popup{position:fixed;left:auto;right:8px;top:34px;
-    width:min(220px,calc(100vw - 16px));margin:0;padding:0;pointer-events:auto;z-index:50;text-align:left;
+    width:min(228px,calc(100vw - 16px));margin:0;padding:0;pointer-events:auto;z-index:50;text-align:left;
     visibility:hidden;transition:top .4s cubic-bezier(.34,1.45,.64,1),visibility 0s linear .28s}
   .popup-panel{position:relative;border-radius:22px;overflow:hidden;
     opacity:0;transition:opacity .28s cubic-bezier(.2,.7,.2,1);
@@ -308,7 +308,8 @@
   .glass-body{padding:11px 12px 10px;display:flex;flex-direction:column;gap:8px}
   .glass-label{font-size:10.5px;color:rgba(60,60,67,.72);margin:0;text-align:center;cursor:grab;touch-action:none;user-select:none}
   .popup.is-dragging .glass-label{cursor:grabbing}
-  .glass-select,.glass-target-menu button,.glass-play,.glass-pill,.glass-mini-play,.glass-check,.glass-add,.glass-toggle,.glass-quit{
+  .glass-select,.glass-target-menu button,.glass-play,.glass-pill,.glass-mini-play,.glass-check,.glass-add,.glass-toggle,
+  .glass-gear,.glass-quit,.settings-close{
     appearance:none;-webkit-appearance:none;border:0;font:inherit;text-align:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
   .glass-target-picker{position:relative}
   /* Borderless like the app's Menu: centred title + chevron, no chrome until hover. */
@@ -394,6 +395,11 @@
   .glass-brand{display:flex;align-items:center;gap:6px;min-width:0;flex:none;font-size:11.5px;font-weight:650}
   .glass-brand-icon{width:13px;height:13px;object-fit:contain;flex:none}
   .glass-version{flex:none;margin-right:auto;font-size:9.5px;color:rgba(60,60,67,.42)}
+  /* Borderless, like the gearshape button that replaced the inline settings rows. */
+  .glass-gear{display:grid;place-items:center;width:18px;height:18px;flex:none;padding:0;
+    background:transparent;color:rgba(60,60,67,.75)}
+  .glass-gear svg{width:13px;height:13px;display:block}
+  .glass-gear:hover{color:rgba(60,60,67,1)}
   .glass-play:hover,.glass-pill:hover,.glass-check:hover,.glass-add:hover,.glass-toggle:hover,.glass-quit:hover{
     filter:brightness(.94)}
   .glass-play:disabled:hover{filter:none}
@@ -401,7 +407,50 @@
   .glass-select:active,.glass-play:active,.glass-pill:active,.glass-add:active,.glass-quit:active{transform:scale(.98)}
   .glass-select:focus-visible,.glass-play:focus-visible,.glass-pill:focus-visible,.glass-slider:focus-visible,
   .glass-mini-play:focus-visible,.glass-check:focus-visible,.glass-add:focus-visible,.glass-toggle:focus-visible,
-  .glass-quit:focus-visible{outline:2px solid #007aff;outline-offset:2px}
+  .glass-gear:focus-visible,.glass-quit:focus-visible,.settings-close:focus-visible{
+    outline:2px solid #007aff;outline-offset:2px}
+
+  /*
+   * The gear opens a real window in the app, so this is a window and not another
+   * popover section: opening it dismisses the popover, the way a transient
+   * NSPopover gives way when Settings takes key.
+   */
+  .settings-window{position:fixed;left:auto;right:8px;top:42px;z-index:60;
+    width:min(300px,calc(100vw - 16px));border-radius:12px;overflow:hidden;
+    background:rgba(246,246,246,.98);color:#1c1c1e;
+    font-family:var(--sans);font-size:12.5px;line-height:1.3;-webkit-font-smoothing:antialiased;
+    border:1px solid rgba(0,0,0,.14);
+    box-shadow:0 24px 60px rgba(0,0,0,.22),0 6px 16px rgba(0,0,0,.1);
+    animation:settings-in .18s cubic-bezier(.2,.7,.2,1) both}
+  .settings-window[hidden]{display:none}
+  @keyframes settings-in{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.settings-window{animation:none}}
+  .settings-titlebar{display:flex;align-items:center;gap:8px;padding:7px 10px;
+    background:rgba(0,0,0,.03);border-bottom:1px solid rgba(60,60,67,.14)}
+  .settings-title{flex:1;text-align:center;font-size:11.5px;font-weight:650}
+  /* Reads as a key window's close control: red at rest, glyph on hover. */
+  .settings-close{display:grid;place-items:center;width:13px;height:13px;flex:none;padding:0;
+    border-radius:50%;background:#ff5f57;color:transparent;
+    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.12)}
+  .settings-close svg{width:6px;height:6px;display:block;fill:currentColor}
+  .settings-close:hover{color:rgba(0,0,0,.5)}
+  /* Balances the close button so the title stays optically centred. */
+  .settings-titlebar .spacer{width:13px;flex:none}
+  .settings-body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:14px}
+  .settings-row{display:flex;align-items:flex-start;gap:16px}
+  .settings-row .label{flex:1;min-width:0}
+  .settings-row .caption{display:block;margin-top:3px;font-size:10.5px;color:rgba(60,60,67,.6)}
+  .settings-hr{height:1px;flex:none;margin:0;background:rgba(60,60,67,.12);border:0}
+
+  @media (prefers-color-scheme:dark){
+    .settings-window{background:rgba(38,38,40,.98);color:#f5f5f7;border-color:rgba(255,255,255,.16);
+      box-shadow:0 24px 60px rgba(0,0,0,.55),0 6px 16px rgba(0,0,0,.3)}
+    .settings-titlebar{background:rgba(255,255,255,.04);border-bottom-color:rgba(235,235,245,.16)}
+    .settings-row .caption{color:rgba(235,235,245,.55)}
+    .settings-hr{background:rgba(235,235,245,.14)}
+    .glass-gear{color:rgba(235,235,245,.7)}
+    .glass-gear:hover{color:#f5f5f7}
+  }
 
   @media (prefers-color-scheme:dark){
     .popup-panel{background:rgba(40,40,42,.48);color:#f5f5f7;border-color:rgba(255,255,255,.18);
@@ -599,15 +648,51 @@
         </div>
       </div>
       <hr class="glass-hr">
-      <div class="glass-row"><span class="name">Launch at login</span><button class="glass-toggle" type="button" role="switch" aria-label="Launch at login" aria-checked="true"></button></div>
-      <button class="glass-add" type="button">＋ Add an app…</button>
-      <hr class="glass-hr">
       <div class="glass-brand-row">
         <span class="glass-brand"><img class="glass-brand-icon" src="icon.png" width="13" height="13" alt="">Beamhook</span>
-        <span class="glass-version">v1.1.6</span>
+        <span class="glass-version">v1.1.8</span>
+        <button class="glass-gear" type="button" aria-label="Settings" aria-haspopup="dialog" aria-controls="beamhook-settings" aria-expanded="false" title="Settings">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <g fill="currentColor">
+              <rect x="7" y="1.2" width="2" height="3.4" rx=".9"/>
+              <rect x="7" y="1.2" width="2" height="3.4" rx=".9" transform="rotate(45 8 8)"/>
+              <rect x="7" y="1.2" width="2" height="3.4" rx=".9" transform="rotate(90 8 8)"/>
+              <rect x="7" y="1.2" width="2" height="3.4" rx=".9" transform="rotate(135 8 8)"/>
+              <rect x="7" y="1.2" width="2" height="3.4" rx=".9" transform="rotate(180 8 8)"/>
+              <rect x="7" y="1.2" width="2" height="3.4" rx=".9" transform="rotate(225 8 8)"/>
+              <rect x="7" y="1.2" width="2" height="3.4" rx=".9" transform="rotate(270 8 8)"/>
+              <rect x="7" y="1.2" width="2" height="3.4" rx=".9" transform="rotate(315 8 8)"/>
+            </g>
+            <circle cx="8" cy="8" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          </svg>
+        </button>
         <button class="glass-quit" type="button" onclick="quitBeamhook()">Quit</button>
       </div>
     </div>
+  </div>
+</div>
+
+<div class="settings-window" id="beamhook-settings" role="dialog" aria-label="Beamhook Settings" aria-modal="false" hidden>
+  <div class="settings-titlebar">
+    <button class="settings-close" type="button" aria-label="Close Settings">
+      <svg viewBox="0 0 8 8" aria-hidden="true"><path d="M1.1.3 4 3.2 6.9.3l.8.8L4.8 4l2.9 2.9-.8.8L4 4.8 1.1 7.7l-.8-.8L3.2 4 .3 1.1Z"/></svg>
+    </button>
+    <span class="settings-title">Settings</span>
+    <span class="spacer"></span>
+  </div>
+  <div class="settings-body">
+    <div class="settings-row">
+      <span class="label">Launch at login</span>
+      <button class="glass-toggle" type="button" role="switch" aria-label="Launch at login" aria-checked="true"></button>
+    </div>
+    <div class="settings-row">
+      <span class="label">Launch the hooked app on play/pause
+        <span class="caption">Starts the app if it isn't running.</span>
+      </span>
+      <button class="glass-toggle" type="button" role="switch" aria-label="Launch the hooked app on play/pause" aria-checked="true"></button>
+    </div>
+    <hr class="settings-hr">
+    <button class="glass-add" type="button">＋ Add an app…</button>
   </div>
 </div>
 
@@ -682,7 +767,35 @@
     setPopupOpen(!visiblyOpen);
   });
   tray.addEventListener('pointerleave', () => {
+    if (settingsOpen) return;
     if (window.matchMedia('(hover:hover) and (pointer:fine)').matches) popup.classList.remove('is-dismissed');
+  });
+
+  const settingsWindow = document.querySelector('.settings-window');
+  const gear = popup.querySelector('.glass-gear');
+  let settingsOpen = false;
+
+  // Opening Settings dismisses the popover: the real one is transient, so it
+  // closes the moment the Settings window takes key. is-dismissed keeps a stray
+  // hover from pulling it back out while that window is up.
+  function setSettingsOpen(open) {
+    settingsOpen = open;
+    settingsWindow.hidden = !open;
+    gear.setAttribute('aria-expanded', String(open));
+    popup.classList.toggle('is-dismissed', open);
+    if (open) {
+      setPopupOpen(false);
+      settingsWindow.querySelector('.settings-close').focus();
+    }
+  }
+
+  gear.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setSettingsOpen(!settingsOpen);
+  });
+  settingsWindow.querySelector('.settings-close').addEventListener('click', () => {
+    setSettingsOpen(false);
+    gear.focus();
   });
   tray.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -691,6 +804,8 @@
   });
 
   document.addEventListener('pointerdown', (event) => {
+    // Settings is a window, not a popover — clicking it doesn't dismiss it.
+    if (settingsWindow.contains(event.target)) return;
     if (popup.contains(event.target) || tray.contains(event.target)) return;
     setPopupOpen(false);
     if (popup.contains(document.activeElement)) document.activeElement.blur();
@@ -699,6 +814,11 @@
 
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
+    if (settingsOpen) {
+      setSettingsOpen(false);
+      gear.focus();
+      return;
+    }
     if (!targetMenu.hidden) {
       closeTargetMenu();
       select.focus();
@@ -944,12 +1064,14 @@
     volumeKeys.setAttribute('aria-checked', String(enabled));
   });
 
-  const launchToggle = popup.querySelector('.glass-toggle');
-  launchToggle.addEventListener('click', () => {
-    launchToggle.setAttribute('aria-checked', String(launchToggle.getAttribute('aria-checked') !== 'true'));
+  // Launch at login and Add an app… now live in the Settings window, not the popover.
+  settingsWindow.querySelectorAll('.glass-toggle').forEach((toggle) => {
+    toggle.addEventListener('click', () => {
+      toggle.setAttribute('aria-checked', String(toggle.getAttribute('aria-checked') !== 'true'));
+    });
   });
 
-  const addButton = popup.querySelector('.glass-add');
+  const addButton = settingsWindow.querySelector('.glass-add');
   addButton.addEventListener('click', () => {
     const added = addButton.getAttribute('aria-pressed') === 'true';
     addButton.setAttribute('aria-pressed', String(!added));
@@ -991,6 +1113,7 @@
 
   function quitBeamhook() {
     setPopupOpen(false);
+    setSettingsOpen(false);
     if (popup) {
       popup.style.display = 'none';
     }
