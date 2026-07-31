@@ -19,6 +19,21 @@ settings:
     CURRENT_PROJECT_VERSION: "11"
     CODE_SIGN_STYLE: Automatic
     ARCHS: "$(ARCHS_STANDARD)"
+    # Identity of a locally built copy, defined once here because more than one
+    # target needs it (the app names itself with it; the test bundle locates its
+    # host by it). macOS keys the Accessibility grant to the bundle id and pins
+    # it to the code requirement captured when you granted it, so a local build
+    # sharing the shipping id silently invalidates the notarized build's grant
+    # and vice versa — and two identically named "Beamhook.app" rows in System
+    # Settings are impossible to tell apart. `Official` overrides both below.
+    BEAMHOOK_APP_NAME: Beamhookdev
+    BEAMHOOK_BUNDLE_ID: com.github.ppixu.beamhook.dev
+  configs:
+    Official:
+      # The shipping identity. Never change these: macOS would orphan every
+      # user's Accessibility grant and Sparkle would lose update continuity.
+      BEAMHOOK_APP_NAME: Beamhook
+      BEAMHOOK_BUNDLE_ID: com.github.ppixu.beamhook
 targets:
   BeamhookKit:
     type: framework
@@ -38,7 +53,16 @@ targets:
       - package: Sparkle
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.github.ppixu.beamhook
+        # Both follow the per-configuration identity defined in the project's
+        # own settings block. Info.plist's CFBundleName/CFBundleDisplayName
+        # track PRODUCT_NAME, so the app names itself correctly too.
+        PRODUCT_BUNDLE_IDENTIFIER: $(BEAMHOOK_BUNDLE_ID)
+        PRODUCT_NAME: $(BEAMHOOK_APP_NAME)
+        # The Swift module name defaults to PRODUCT_NAME. Pin it so it stays the
+        # same in every configuration — otherwise `@testable import Beamhook`
+        # resolves only in the configuration whose product happens to be named
+        # Beamhook, and the app-target tests stop building everywhere else.
+        PRODUCT_MODULE_NAME: Beamhook
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_FILE: Sources/Beamhook/Info.plist
         CODE_SIGN_ENTITLEMENTS: Sources/Beamhook/Beamhook.entitlements
@@ -72,6 +96,13 @@ targets:
     sources: [Tests/BeamhookTests]
     dependencies:
       - target: Beamhook
+    settings:
+      base:
+        # XcodeGen derives TEST_HOST from the host TARGET's name, which is no
+        # longer the product's name — without this the test bundle looks for a
+        # Beamhook.app that only the Official configuration produces.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/$(BEAMHOOK_APP_NAME).app/Contents/MacOS/$(BEAMHOOK_APP_NAME)"
+        BUNDLE_LOADER: "$(TEST_HOST)"
 schemes:
   BeamhookKit:
     build:

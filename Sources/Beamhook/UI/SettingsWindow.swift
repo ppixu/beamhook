@@ -20,7 +20,9 @@ final class SettingsWindow {
             w.contentViewController = hosting
         } else {
             w = NSWindow(contentViewController: hosting)
-            w.title = "Beamhook Settings"
+            let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
+                ?? "Beamhook"
+            w.title = "\(name) Settings"
             w.styleMask = [.titled, .closable, .resizable]
             w.isReleasedWhenClosed = false
             w.center()

@@ -43,7 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             button.imageScaling = .scaleProportionallyDown
             button.action = #selector(togglePopover)
             button.target = self
-            button.toolTip = "Beamhook"
+            button.toolTip = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
+                ?? "Beamhook"
         }
         statusItem = item
 

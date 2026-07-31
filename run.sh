@@ -76,7 +76,15 @@ else
     build
 fi
 
-APP="build/Build/Products/$CONFIG/Beamhook.app"
+# Ask the project for the product name rather than hardcoding it: everything
+# except `Official` builds as Beamhookdev.app (see project.yml), and a stale
+# guess here would point at the wrong bundle — or, worse, make the pkill below
+# terminate an installed Beamhook.app instead of this build.
+APP_NAME="$(xcodebuild -project Beamhook.xcodeproj -scheme Beamhook \
+  -configuration "$CONFIG" -showBuildSettings 2>/dev/null \
+  | awk -F' = ' '/ FULL_PRODUCT_NAME = /{print $2; exit}')"
+APP_NAME="${APP_NAME:-Beamhookdev.app}"
+APP="build/Build/Products/$CONFIG/$APP_NAME"
 
 echo "==> Signature:"
 codesign -dv "$APP" 2>&1 | grep -E 'Authority=Apple Development|Authority=Developer ID|Signature=|TeamIdentifier=' | sed 's/^/    /' || true
@@ -90,8 +98,9 @@ LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/F
 [ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$APP" >/dev/null 2>&1 || true
 killall Dock >/dev/null 2>&1 || true
 
-# Replace any already-running instance with the fresh build.
-pkill -x Beamhook >/dev/null 2>&1 || true
+# Replace any already-running instance with the fresh build. Matched on this
+# build's own executable name so an installed Beamhook.app is left alone.
+pkill -x "${APP_NAME%.app}" >/dev/null 2>&1 || true
 echo "==> Launching $APP"
 open "$APP"
 echo "Done. (If Finder still shows an old icon, run: killall Finder)"

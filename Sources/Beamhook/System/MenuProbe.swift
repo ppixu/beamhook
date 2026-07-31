@@ -7,11 +7,15 @@ import BeamhookKit
 /// the app actually exposes — and so a target that silently does nothing can be
 /// told apart from one whose press is refused. Inert unless asked for:
 ///
-///     defaults write com.github.ppixu.beamhook BHProbeBundleID com.colliderli.iina
+///     defaults write com.github.ppixu.beamhook.dev BHProbeBundleID com.colliderli.iina
+///
+/// Note the `.dev` domain: every configuration except `Official` builds under
+/// `com.github.ppixu.beamhook.dev`, so a locally built copy reads its defaults
+/// from there. Writing the shipping domain instead would leave the probe inert.
 ///
 /// Output goes to the unified log:
 ///
-///     log stream --predicate 'process == "Beamhook"' --info
+///     log stream --predicate 'process == "Beamhookdev"' --info
 enum MenuProbe {
     /// Writes to a file as well as the log, since the unified log swallows NSLog
     /// from a sandbox-free app inconsistently.
