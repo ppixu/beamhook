@@ -52,6 +52,10 @@ struct MenuContentView: View {
                         }
                         .foregroundStyle(state.isRunning(bundleID: app.bundleID) ? .primary : .secondary)
                     }
+                    // An app that isn't on this Mac can't be hooked to anything,
+                    // and disabling is also the only styling a menu item honours
+                    // here — the foregroundStyle above has no effect on macOS 26.
+                    .disabled(!state.isInstalled(bundleID: app.bundleID))
                 }
             } label: {
                 Text(targetName)
@@ -61,7 +65,15 @@ struct MenuContentView: View {
                     .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
             }
             .menuStyle(.borderlessButton)
-            .frame(maxWidth: .infinity)
+            // 21pt is the play/pause button's measured height. The borderless
+            // menu style adds no padding of its own, leaving the row 16pt, so the
+            // hover pill came out visibly shorter than the button below it. Grow
+            // the control rather than just the wash, so the highlight and the
+            // area that responds to the pointer stay the same shape.
+            .frame(maxWidth: .infinity, minHeight: 21)
+            // Behind, not over: this is bare text, and a wash on top would tint
+            // the label along with the background.
+            .hoverHighlight(cornerRadius: 7, behind: true)
             .accessibilityLabel("Hook media keys to \(targetName)")
 
             playPauseButton
@@ -138,11 +150,15 @@ struct MenuContentView: View {
             }
         }
         .padding(12)
-        // 214pt is the footer's measured floor (icon + "Beamhook" + version +
-        // gear + Quit + spacings + 12pt padding each side). Below that the Quit
-        // button starts truncating to "…", so don't narrow this further without
-        // taking something out of that row.
-        .frame(width: 214)
+        // Wide enough for the footer to fit rather than overflow. That row's
+        // ideal width is 199pt (icon + "Beamhook" + version + gear + fixedSize
+        // Quit + spacings), so 12pt of padding each side puts the floor at
+        // 223pt. Narrower and the row draws outside the frame, which is what
+        // pushed Quit past the right margin every other control lines up on —
+        // Quit is fixedSize, so it overflows instead of truncating. The few
+        // points of slack land in the footer's Spacer, keeping the alignment
+        // stable if the version string grows a digit.
+        .frame(width: 228)
         .onChange(of: state.playbackTargetContext, initial: true) { _, context in
             playback.reset(for: context)
         }
@@ -398,6 +414,12 @@ private struct AppVolumeRow: View {
                 Text(playing.displayName).font(.subheadline)
                     .opacity(isTarget ? 1 : 0.55)
                     .lineLimit(1)
+                    // The name is the "go there" control, and covers only the
+                    // glyphs — a stray click in the gap beside it does nothing.
+                    .overlay(ClickableName { state.activate(bundleID: playing.bundleID) })
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { state.activate(bundleID: playing.bundleID) }
+                    .help("Show \(playing.displayName)")
                 Spacer(minLength: 2)
                 // Browsers expose multiple independently controllable media sources,
                 // so their volume always lives in the named child rows below.
@@ -413,6 +435,7 @@ private struct AppVolumeRow: View {
                 }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .hoverHighlight(cornerRadius: 5)
                     .help(isTarget ? "Return media-key control to macOS"
                                    : "Send the media keys to this app")
             }
@@ -563,6 +586,10 @@ private struct BrowserVolumeRow: View {
         BrowserKind.target(id: state.selectedTargetID) == candidate.browser
     }
 
+    private func focus() {
+        Task { await state.focusBrowserSource(candidate) }
+    }
+
     var body: some View {
         HStack(spacing: 6) {
             // A call tab keeps its slider but never gets a play/pause button:
@@ -574,7 +601,12 @@ private struct BrowserVolumeRow: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .help(candidate.label)
+                .overlay(ClickableName { focus() })
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { focus() }
+                // Titles truncate here, so the tooltip still has to carry the full
+                // one — it gains the action rather than being replaced by it.
+                .help("Switch to this tab: \(candidate.label)")
             Spacer(minLength: 2)
             Slider(value: $volume, in: 0...100) { editing in
                 isEditing = editing

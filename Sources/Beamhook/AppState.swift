@@ -129,6 +129,9 @@ final class AppState: ObservableObject {
         }
     }
     @Published var availableApps: [AppDefinition]
+    /// Bundle ids from `availableApps` that resolve to something on disk.
+    /// Refreshed when the popover opens; see `refreshInstalledApps`.
+    @Published private(set) var installedBundleIDs: Set<String> = []
     @Published var hasAccessibility: Bool = false
     /// Passive AppleScript reads are useful only while the user can see their
     /// results. Keeping the real popover lifecycle here prevents a newly launched
@@ -221,6 +224,10 @@ final class AppState: ObservableObject {
             .store(in: &cancellables)
 
         handlerBox.state = self
+        // Seed this now rather than waiting for the first popover: the target menu
+        // disables uninstalled apps, and an empty set would disable every one of
+        // them if the menu were ever built before `setMenuVisible(true)` lands.
+        refreshInstalledApps()
         configureBrowserTransportForPendingScan()
         // Explicit rather than left to the didSet above: property observers don't
         // fire for assignments made before `self` is fully initialized, so the
@@ -340,6 +347,25 @@ final class AppState: ObservableObject {
 
     func setMenuVisible(_ visible: Bool) {
         isMenuVisible = visible
+        if visible { refreshInstalledApps() }
+    }
+
+    /// Which of the listed apps are actually installed.
+    ///
+    /// Resolved in one pass when the popover opens rather than per menu item:
+    /// the target menu rebuilds on every state change, and a LaunchServices
+    /// lookup per app per rebuild is a lot of work to answer a question that
+    /// only changes when the user installs something.
+    private func refreshInstalledApps() {
+        installedBundleIDs = Set(
+            availableApps.map(\.bundleID).filter {
+                NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) != nil
+            }
+        )
+    }
+
+    func isInstalled(bundleID: String) -> Bool {
+        installedBundleIDs.contains(bundleID)
     }
 
     /// Polls the Accessibility permission so the UI flips automatically once the
@@ -714,6 +740,7 @@ final class AppState: ObservableObject {
 
     func reloadApps() {
         availableApps = store.allDefinitions()
+        refreshInstalledApps()
     }
 
     func setLoginItem(_ enabled: Bool) {
@@ -790,6 +817,30 @@ final class AppState: ObservableObject {
     /// Is an app with this bundle id currently running?
     func isRunning(bundleID: String) -> Bool {
         NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == bundleID }
+    }
+
+    /// Bring a listed app to the front. Deliberately unlike `TargetLauncher`,
+    /// which starts a quit app *without* stealing focus because a media key must
+    /// never move the user: this is a click asking to go there. Every row in the
+    /// popover names a running app, so a miss here means it quit since the last
+    /// refresh — the row is about to disappear anyway, so do nothing.
+    func activate(bundleID: String) {
+        NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleID)
+            .first?
+            .activate()
+    }
+
+    /// Land the user on one exact browser tab. The tab is raised on the script
+    /// queue, off main like every other AppleScript, and then the browser is
+    /// activated whether or not that succeeded — someone who asked for Safari's
+    /// YouTube tab is better served by arriving in Safari than by nothing
+    /// happening when the tab has since closed.
+    func focusBrowserSource(_ candidate: BrowserMediaCandidate) async {
+        await scripting.run { [browserMediaController] in
+            _ = browserMediaController.focus(candidate)
+        }
+        activate(bundleID: candidate.browser.bundleID)
     }
 
     // MARK: - Volume-key hijacking

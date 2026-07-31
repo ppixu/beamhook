@@ -155,6 +155,16 @@ final class BrowserMediaController: @unchecked Sendable {
         executor.run(selectionScript(candidate)).succeeded
     }
 
+    /// Make one exact browser source the frontmost tab of the frontmost window.
+    /// The caller activates the browser afterwards; this only arranges what the
+    /// user will land on. Unlike `select`, which marks a tab in the page and
+    /// deliberately leaves ordering alone, this is the one action that moves the
+    /// browser's own selection — so it is aimed by the page-owned source ID and
+    /// never by the scan's cached position.
+    func focus(_ candidate: BrowserMediaCandidate) -> Bool {
+        executor.run(focusScript(candidate)).succeeded
+    }
+
     func setVolume(_ percent: Int, for candidate: BrowserMediaCandidate) -> Bool {
         executor.run(volumeScript(percent, candidate: candidate)).succeeded
     }
@@ -355,6 +365,54 @@ final class BrowserMediaController: @unchecked Sendable {
                         if actionResult is "MATCH" then set targetFound to true
                     end try
                 end repeat
+            end repeat
+        end tell
+        if targetFound is false then error "Selected browser media source is no longer available"
+        return true
+        """
+    }
+
+    /// Walk every window and tab, identify the tab from inside the page, and raise
+    /// it. The loop is index-based rather than `for tab in tabs` because the
+    /// Chromium browsers address their selection by index (`active tab index`)
+    /// while Safari addresses it by object (`current tab`) — this needs both.
+    ///
+    /// Raising happens in its own `try` so a window that refuses to come forward
+    /// (minimized, in another Space, a browser that dislikes the property) still
+    /// counts as found. The user gets the browser either way, which beats
+    /// reporting failure over a tab we located successfully.
+    private func focusScript(_ candidate: BrowserMediaCandidate) -> String {
+        let evaluate = candidate.browser == .safari
+            ? "do JavaScript javascriptSource in candidateTab"
+            : "execute candidateTab javascript javascriptSource"
+        let raise = candidate.browser == .safari
+            ? "set current tab of browserWindow to candidateTab"
+            : "set active tab index of browserWindow to tabIndex"
+        let js = """
+        (() => { const key = '__beamhookSourceID_v1'; return globalThis[key] === '\(candidate.sourceID)' ? 'MATCH' : 'NO'; })()
+        """
+        return """
+        set javascriptSource to "\(js)"
+        set targetFound to false
+        tell application "\(candidate.browser.applicationName)"
+            repeat with browserWindow in windows
+                repeat with tabIndex from 1 to (count of tabs of browserWindow)
+                    try
+                        set candidateTab to tab tabIndex of browserWindow
+                        set actionResult to \(evaluate)
+                        if actionResult is "MATCH" then set targetFound to true
+                    end try
+                    if targetFound then
+                        try
+                            \(raise)
+                            set index of browserWindow to 1
+                        end try
+                        exit repeat
+                    end if
+                end repeat
+                if targetFound then
+                    exit repeat
+                end if
             end repeat
         end tell
         if targetFound is false then error "Selected browser media source is no longer available"

@@ -124,16 +124,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         } else {
             NSApp.activate(ignoringOtherApps: true)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            settleBackdrop()
+        }
+    }
+
+    /// Give the popover the appearance it will settle on *before* it animates in.
+    ///
+    /// The backdrop is the popover's frame view (`NSPopoverFrame`), which is an
+    /// `NSVisualEffectView` left in `.followsWindowActiveState`. The window only
+    /// became key in `popoverDidShow` — which fires once the show animation has
+    /// finished — so the popover animated in wearing the material's flat, more
+    /// transparent inactive form and then visibly brightened just as it landed.
+    ///
+    /// `show(relativeTo:…)` has already created the window by the time it
+    /// returns, so promote it here instead, and pin the vibrancy so the backdrop
+    /// no longer depends on key state at all. `.active` is the right constant to
+    /// pin: a `.transient` popover closes as soon as the app deactivates, so it
+    /// is never on screen while genuinely inactive.
+    ///
+    /// Note the frame view is the content view's *superview*. Walking down from
+    /// `contentView` finds no effect view at all.
+    private func settleBackdrop() {
+        guard let window = popover.contentViewController?.view.window else { return }
+        window.makeKey()
+        func pin(_ view: NSView) {
+            (view as? NSVisualEffectView)?.state = .active
+            view.subviews.forEach(pin)
+        }
+        if let frameView = window.contentView?.superview ?? window.contentView {
+            pin(frameView)
         }
     }
 
     /// `NSApp.activate` can complete before NSPopover has created its window,
     /// especially on the first click after login. Promote the actual popover
     /// window once it exists so its controls never inherit the inactive state.
+    /// `settleBackdrop()` already did this at show time; this is the backstop for
+    /// a first click where activation hadn't landed yet.
     func popoverDidShow(_ notification: Notification) {
         state.setMenuVisible(true)
         NSApp.activate(ignoringOtherApps: true)
         popover.contentViewController?.view.window?.makeKey()
+        settleBackdrop()
     }
 
     func popoverDidClose(_ notification: Notification) {

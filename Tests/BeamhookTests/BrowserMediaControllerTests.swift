@@ -155,6 +155,61 @@ final class BrowserMediaControllerTests: XCTestCase {
         XCTAssertTrue(script.compileAndReturnError(&error), "\(error ?? [:])")
     }
 
+    func testFocusResolvesSourceIdentityInsideBrowser() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        let candidate = makeCandidate()
+
+        XCTAssertTrue(controller.focus(candidate))
+
+        let script = try? XCTUnwrap(executor.scripts.last)
+        // Focus must be aimed by the page-owned identity, never by the cached
+        // position alone: raising the wrong tab is a visible, focus-stealing
+        // mistake, and the cache is stale the moment a tab moves.
+        XCTAssertTrue(script?.contains(candidate.sourceID) == true)
+        XCTAssertTrue(script?.contains("repeat with browserWindow in windows") == true)
+        XCTAssertTrue(script?.contains("targetFound is false") == true)
+    }
+
+    func testFocusRaisesTheMatchingTabAndItsWindow() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+
+        XCTAssertTrue(controller.focus(makeCandidate(browser: .safari)))
+        let safari = try? XCTUnwrap(executor.scripts.last)
+        XCTAssertTrue(safari?.contains("set current tab of browserWindow") == true)
+        XCTAssertTrue(safari?.contains("set index of browserWindow to 1") == true)
+
+        XCTAssertTrue(controller.focus(makeCandidate(browser: .chrome)))
+        let chrome = try? XCTUnwrap(executor.scripts.last)
+        XCTAssertTrue(chrome?.contains("set active tab index of browserWindow") == true)
+        XCTAssertTrue(chrome?.contains("set index of browserWindow to 1") == true)
+    }
+
+    func testSafariFocusAppleScriptCompiles() throws {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+
+        XCTAssertTrue(controller.focus(makeCandidate(browser: .safari)))
+
+        let source = try XCTUnwrap(executor.scripts.last)
+        let script = try XCTUnwrap(NSAppleScript(source: source))
+        var error: NSDictionary?
+        XCTAssertTrue(script.compileAndReturnError(&error), "\(error ?? [:])")
+    }
+
+    func testChromiumFocusAppleScriptCompiles() throws {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+
+        XCTAssertTrue(controller.focus(makeCandidate(browser: .brave)))
+
+        let source = try XCTUnwrap(executor.scripts.last)
+        let script = try XCTUnwrap(NSAppleScript(source: source))
+        var error: NSDictionary?
+        XCTAssertTrue(script.compileAndReturnError(&error), "\(error ?? [:])")
+    }
+
     func testCallTabIsListedButCannotBeDrivenByTransport() {
         let executor = RecordingScriptExecutor()
         let controller = BrowserMediaController(executor: executor)
