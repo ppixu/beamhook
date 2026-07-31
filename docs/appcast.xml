@@ -15,6 +15,30 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.1.8</title>
+            <pubDate>Fri, 31 Jul 2026 11:00:19 +0300</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.8</link>
+            <sparkle:version>14</sparkle:version>
+            <sparkle:shortVersionString>1.1.8</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Added</h3>
+<ul>
+<li>**Click an app's name in the popover to go to it.** Clicking a listed app brings it to the front; clicking one of a browser's media tabs brings you to that exact tab, not just to the browser. The tab is found by the page's own identity, so reordering or replacing tabs can never land you on the wrong one.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li>The Hook/Unhook buttons and the target menu now highlight under the pointer, and a clickable name shows a pointing-hand cursor. macOS gives a small bordered button inside a popover no hover feedback of its own, which left the rows looking inert.</li>
+<li>Apps that aren't installed are greyed out in the target menu instead of being offered as targets the media keys could never reach.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li>The popover no longer changes shade partway through opening. Its backdrop followed the window's active state, and the window only became key after the show animation finished — so it animated in wearing the material's flat, transparent inactive form and brightened just as it landed.</li>
+<li>The Quit button no longer sticks out past the right edge every other control lines up on. The footer's ideal width exceeded the popover's fixed width, and because Quit can't truncate, the whole row drew outside the frame.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.1.8.zip" length="2117921" type="application/octet-stream" sparkle:edSignature="YJ35whdIiMrKH0vWpljiTewRQXKXTF+taEv1KKFQemzpnU6fYiK3nZIcplQHWW3yR1IE98Gaf1yj7lvM40XqCw=="/>
+        </item>
+        <item>
             <title>1.1.7</title>
             <pubDate>Fri, 31 Jul 2026 09:33:57 +0300</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.7</link>
@@ -136,6 +160,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: dI+yX+guQ3hj3LnJXhx4kQN6subkCFwz5dBjFojbVL8sYYZF6XMrqkJ6tXl7QjnLuEuqyvcCs7aJxai7ieH8BQ==
-length: 10028
+edSignature: /KKgGBchXGdXH2p6upEdPusHz1vygzgEeE6Jp7x6GXgXc4uS6MShIbUNOl9oDzTW+kBWkRVxaRTnTbdwd86aAw==
+length: 12044
 -->

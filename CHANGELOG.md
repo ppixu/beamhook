@@ -4,6 +4,34 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.1.8] — 2026-07-31
+
+### Added
+
+- **Click an app's name in the popover to go to it.** Clicking a listed app
+  brings it to the front; clicking one of a browser's media tabs brings you to
+  that exact tab, not just to the browser. The tab is found by the page's own
+  identity, so reordering or replacing tabs can never land you on the wrong one.
+
+### Changed
+
+- The Hook/Unhook buttons and the target menu now highlight under the pointer,
+  and a clickable name shows a pointing-hand cursor. macOS gives a small
+  bordered button inside a popover no hover feedback of its own, which left the
+  rows looking inert.
+- Apps that aren't installed are greyed out in the target menu instead of being
+  offered as targets the media keys could never reach.
+
+### Fixed
+
+- The popover no longer changes shade partway through opening. Its backdrop
+  followed the window's active state, and the window only became key after the
+  show animation finished — so it animated in wearing the material's flat,
+  transparent inactive form and brightened just as it landed.
+- The Quit button no longer sticks out past the right edge every other control
+  lines up on. The footer's ideal width exceeded the popover's fixed width, and
+  because Quit can't truncate, the whole row drew outside the frame.
+
 ## [1.1.7] — 2026-07-31
 
 ### Added
