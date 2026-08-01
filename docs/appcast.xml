@@ -15,6 +15,30 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.1.9</title>
+            <pubDate>Sat, 01 Aug 2026 17:14:49 +0300</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.9</link>
+            <sparkle:version>15</sparkle:version>
+            <sparkle:shortVersionString>1.1.9</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Added</h3>
+<ul>
+<li>**Play/pause now flashes the overlay too.** Pressing play or pause shows the hooked app under a play or pause glyph, so a press that goes somewhere invisible still confirms where it landed. The glyph reflects the state the app reports back, not the direction of the press; an app that reports none gets a neutral mark. On by default; turn it off in Settings → General.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li>The overlay's "⌘ + volume for system volume" hint draws the real speaker symbol instead of an emoji, matching the popover's hint and the menu bar.</li>
+<li>Adding your own app is marked experimental in Settings → Apps, since a hand-written definition can only be as good as the app's own AppleScript.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li>The overlay's title now sits beside its glyph instead of a few points above it. Its label column stretched to the height of the glyph next to it and hung the text off the top, which showed up in every one-line overlay — the new play/pause one, and "Starting …" since 1.1.7.</li>
+<li>Running the app-target tests no longer asks for Accessibility. The tests run the app as their host process, and that host is built unsigned, so it could never hold the grant the real build has — every test run popped the system prompt, and an unsigned process claiming the same bundle id could leave the granted build's own entry stale. A test host now starts no input at all.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.1.9.zip" length="2129193" type="application/octet-stream" sparkle:edSignature="YI/MXfRv/2W8lVMbujNbEM8cB23oeokkRdp0zSEW8tZR8hceiD1aaJ8o7G0KyKp8wuhM8+f2kjBAbsOpCuh2AA=="/>
+        </item>
+        <item>
             <title>1.1.8</title>
             <pubDate>Fri, 31 Jul 2026 11:00:19 +0300</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.8</link>
@@ -160,6 +184,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: /KKgGBchXGdXH2p6upEdPusHz1vygzgEeE6Jp7x6GXgXc4uS6MShIbUNOl9oDzTW+kBWkRVxaRTnTbdwd86aAw==
-length: 12044
+edSignature: Csck9HCkBD0+91Q8UTONsfkFTdPl3hsm5MS3j/vV5ltKp6S/jQeZvX+18mWW/I5Siz4sH1AVNsT+pggRK+c1Bw==
+length: 14193
 -->

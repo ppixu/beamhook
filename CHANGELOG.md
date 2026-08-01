@@ -4,7 +4,7 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
-## [Unreleased]
+## [1.1.9] — 2026-08-01
 
 ### Added
 
@@ -18,6 +18,8 @@ one-time, includes all 1.x updates); building from source is always free.
 
 - The overlay's "⌘ + volume for system volume" hint draws the real speaker
   symbol instead of an emoji, matching the popover's hint and the menu bar.
+- Adding your own app is marked experimental in Settings → Apps, since a
+  hand-written definition can only be as good as the app's own AppleScript.
 
 ### Fixed
 
