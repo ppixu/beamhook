@@ -42,6 +42,12 @@ private struct GeneralSettingsTab: View {
                 isOn: Binding(get: { state.launchTargetOnPlay },
                               set: { state.setLaunchTargetOnPlay($0) }))
 
+            settingRow(
+                title: "Show an overlay on play/pause",
+                caption: "Flashes the app the keys reached, like the volume overlay.",
+                isOn: Binding(get: { state.showPlayPauseHUD },
+                              set: { state.setShowPlayPauseHUD($0) }))
+
             Spacer()
         }
         .padding(.top, 12)
@@ -78,10 +84,15 @@ private struct AppsSettingsTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Button {
-                AddAppWindow.shared.show(state: state)
-            } label: {
-                Label("Add an app…", systemImage: "plus")
+            HStack(spacing: 8) {
+                Button {
+                    AddAppWindow.shared.show(state: state)
+                } label: {
+                    Label("Add an app…", systemImage: "plus")
+                }
+                Text("(experimental)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             let custom = state.availableApps.filter { !$0.isBuiltIn }

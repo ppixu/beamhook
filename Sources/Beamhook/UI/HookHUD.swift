@@ -9,16 +9,18 @@ final class HookHUD {
     static let shared = HookHUD()
     private init() {}
 
-    private static let systemVolumeHint = "⌘ + 🔊 for system volume"
-
     private enum Presentation {
         case hooked(appName: String, volumeKeysHijacked: Bool)
         case volume(appName: String, percent: Int)
         case launching(appName: String)
+        /// `isPlaying` is nil when the app reports no play state — the glyph then
+        /// stays neutral rather than claiming a direction it doesn't know.
+        case playback(appName: String, isPlaying: Bool?)
 
         var appName: String {
             switch self {
-            case .hooked(let appName, _), .volume(let appName, _), .launching(let appName): appName
+            case .hooked(let appName, _), .volume(let appName, _),
+                 .launching(let appName), .playback(let appName, _): appName
             }
         }
 
@@ -27,6 +29,7 @@ final class HookHUD {
             case .hooked(_, let volumeKeysHijacked): volumeKeysHijacked ? 3.0 : 2.0
             case .volume: 1.5
             case .launching: 2.0
+            case .playback: 1.4
             }
         }
     }
@@ -45,8 +48,11 @@ final class HookHUD {
 
     private var panel: NSPanel?
     private var label: NSTextField?
-    private var detailLabel: NSTextField?
+    /// "⌘ + <speaker> for system volume" — a row rather than a label, so the
+    /// speaker is the same SF Symbol the popover and the menu bar draw.
+    private var hintRow: NSView?
     private var hookIcon: NSImageView?
+    private var transportIcon: NSImageView?
     private var volumeRow: NSView?
     private var volumeBar: VolumeBarView?
     private var box: NSView?
@@ -97,6 +103,12 @@ final class HookHUD {
         show(.launching(appName: appName))
     }
 
+    /// Confirm a play/pause press: the hooked app's name under a play or pause
+    /// glyph. Pass `isPlaying: nil` when the app doesn't report its state.
+    func showPlayback(appName: String, isPlaying: Bool?) {
+        show(.playback(appName: appName, isPlaying: isPlaying))
+    }
+
     private func show(_ presentation: Presentation) {
         generation += 1
         present(presentation, gen: generation, attempt: 0)
@@ -122,21 +134,29 @@ final class HookHUD {
         switch presentation {
         case .hooked(let appName, let volumeKeysHijacked):
             label?.stringValue = "\(appName) hooked"
-            detailLabel?.stringValue = Self.systemVolumeHint
-            detailLabel?.isHidden = !volumeKeysHijacked
+            hintRow?.isHidden = !volumeKeysHijacked
             hookIcon?.isHidden = false
+            transportIcon?.isHidden = true
             volumeRow?.isHidden = true
         case .volume(let appName, let percent):
             label?.stringValue = appName
-            detailLabel?.stringValue = Self.systemVolumeHint
-            detailLabel?.isHidden = false
+            hintRow?.isHidden = false
             hookIcon?.isHidden = true
+            transportIcon?.isHidden = true
             volumeRow?.isHidden = false
             volumeBar?.percent = percent
         case .launching(let appName):
             label?.stringValue = "Starting \(appName)…"
-            detailLabel?.isHidden = true
+            hintRow?.isHidden = true
             hookIcon?.isHidden = false
+            transportIcon?.isHidden = true
+            volumeRow?.isHidden = true
+        case .playback(let appName, let isPlaying):
+            label?.stringValue = appName
+            hintRow?.isHidden = true
+            hookIcon?.isHidden = true
+            transportIcon?.isHidden = false
+            transportIcon?.image = Self.transportSymbol(isPlaying: isPlaying)
             volumeRow?.isHidden = true
         }
 
@@ -288,20 +308,29 @@ final class HookHUD {
         text.lineBreakMode = .byTruncatingTail
         text.translatesAutoresizingMaskIntoConstraints = false
 
-        let detail = NSTextField(labelWithString: "")
-        detail.font = .systemFont(ofSize: 11, weight: .regular)
-        detail.textColor = .secondaryLabelColor
-        detail.lineBreakMode = .byTruncatingTail
-        detail.isHidden = true
-        detail.translatesAutoresizingMaskIntoConstraints = false
+        let transport = NSImageView()
+        transport.symbolConfiguration = .init(pointSize: 22, weight: .medium)
+        transport.contentTintColor = .labelColor
+        transport.imageScaling = .scaleProportionallyDown
+        transport.isHidden = true
+        transport.translatesAutoresizingMaskIntoConstraints = false
+        transport.setContentHuggingPriority(.required, for: .horizontal)
 
-        let labels = NSStackView(views: [text, detail])
+        let hint = Self.makeSystemVolumeHint()
+        hint.isHidden = true
+
+        let labels = NSStackView(views: [text, hint])
         labels.orientation = .vertical
         labels.alignment = .leading
         labels.spacing = 2
         labels.translatesAutoresizingMaskIntoConstraints = false
+        // Hug the lines vertically. Left to its default, this column stretches to
+        // the height of the taller glyph beside it and then hangs its content off
+        // the top — so with the hint hidden the title sat a line above the glyph
+        // it is supposed to sit beside, in every one-line presentation.
+        labels.setHuggingPriority(.defaultHigh, for: .vertical)
 
-        let header = NSStackView(views: [icon, labels])
+        let header = NSStackView(views: [icon, transport, labels])
         header.orientation = .horizontal
         header.alignment = .centerY
         header.spacing = 11
@@ -339,6 +368,10 @@ final class HookHUD {
         NSLayoutConstraint.activate([
             icon.widthAnchor.constraint(equalToConstant: 26 * iconScale),
             icon.heightAnchor.constraint(equalToConstant: 30 * iconScale),
+            // Same box as the hook glyph, so the title starts on one x whichever
+            // of the two leads the row.
+            transport.widthAnchor.constraint(equalToConstant: 26 * iconScale),
+            transport.heightAnchor.constraint(equalToConstant: 30 * iconScale),
             quietSpeaker.widthAnchor.constraint(equalToConstant: 18),
             quietSpeaker.heightAnchor.constraint(equalToConstant: 18),
             bar.widthAnchor.constraint(equalToConstant: 172),
@@ -379,13 +412,60 @@ final class HookHUD {
         applyContrastingAppearance(to: panel)
         self.panel = panel
         self.label = text
-        self.detailLabel = detail
+        self.hintRow = hint
         self.hookIcon = icon
+        self.transportIcon = transport
         self.volumeRow = volumeStack
         self.volumeBar = bar
         self.box = chrome
         self.content = content
         return panel
+    }
+
+    /// "⌘ + <speaker> for system volume", built as a row so the speaker can be
+    /// the real `speaker.wave.2.fill` symbol — the same mark the popover's hint
+    /// and the menu bar itself use. An emoji speaker sat here before; it drew in
+    /// its own colours and at its own weight, ignoring both the HUD's tint and
+    /// the surrounding text.
+    private static func makeSystemVolumeHint() -> NSStackView {
+        func caption(_ string: String) -> NSTextField {
+            let field = NSTextField(labelWithString: string)
+            field.font = .systemFont(ofSize: 11, weight: .regular)
+            field.textColor = .secondaryLabelColor
+            field.setAccessibilityElement(false)   // the row speaks for them all
+            return field
+        }
+
+        let speaker = NSImageView()
+        speaker.image = NSImage(systemSymbolName: "speaker.wave.2.fill",
+                                accessibilityDescription: "Volume")
+        speaker.symbolConfiguration = .init(pointSize: 11, weight: .regular)
+        speaker.contentTintColor = .secondaryLabelColor
+        speaker.imageScaling = .scaleNone
+        speaker.setContentHuggingPriority(.required, for: .horizontal)
+        speaker.setAccessibilityElement(false)
+
+        let row = NSStackView(views: [caption("⌘ +"), speaker, caption("for system volume")])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 3
+        row.setAccessibilityElement(true)
+        row.setAccessibilityRole(.staticText)
+        row.setAccessibilityLabel("Command plus Volume for system volume")
+        return row
+    }
+
+    /// The glyph for a play/pause press. `nil` — an app that reports no state —
+    /// gets the neutral combined mark rather than a guess in either direction.
+    private static func transportSymbol(isPlaying: Bool?) -> NSImage? {
+        switch isPlaying {
+        case true?:
+            return NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Playing")
+        case false?:
+            return NSImage(systemSymbolName: "pause.fill", accessibilityDescription: "Paused")
+        case nil:
+            return NSImage(systemSymbolName: "playpause.fill", accessibilityDescription: "Play or pause")
+        }
     }
 
     /// A stretchable rounded-rect alpha mask (the corners are fixed via

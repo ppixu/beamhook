@@ -4,6 +4,33 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [Unreleased]
+
+### Added
+
+- **Play/pause now flashes the overlay too.** Pressing play or pause shows the
+  hooked app under a play or pause glyph, so a press that goes somewhere
+  invisible still confirms where it landed. The glyph reflects the state the app
+  reports back, not the direction of the press; an app that reports none gets a
+  neutral mark. On by default; turn it off in Settings → General.
+
+### Changed
+
+- The overlay's "⌘ + volume for system volume" hint draws the real speaker
+  symbol instead of an emoji, matching the popover's hint and the menu bar.
+
+### Fixed
+
+- The overlay's title now sits beside its glyph instead of a few points above
+  it. Its label column stretched to the height of the glyph next to it and hung
+  the text off the top, which showed up in every one-line overlay — the new
+  play/pause one, and "Starting …" since 1.1.7.
+- Running the app-target tests no longer asks for Accessibility. The tests run
+  the app as their host process, and that host is built unsigned, so it could
+  never hold the grant the real build has — every test run popped the system
+  prompt, and an unsigned process claiming the same bundle id could leave the
+  granted build's own entry stale. A test host now starts no input at all.
+
 ## [1.1.8] — 2026-07-31
 
 ### Added

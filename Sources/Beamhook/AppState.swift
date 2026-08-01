@@ -140,6 +140,8 @@ final class AppState: ObservableObject {
     @Published var loginItemEnabled: Bool = LoginItem.isEnabled
     /// Whether play/pause may start the hooked app when it isn't running.
     @Published var launchTargetOnPlay: Bool = LaunchOnPlayPreference.isEnabled(.standard)
+    /// Whether a hooked play/pause press flashes the overlay.
+    @Published var showPlayPauseHUD: Bool = PlayPauseHUDPreference.isEnabled(.standard)
     /// Per-app opt-in for volume-key control. Absent (nil) means OFF — the volume
     /// keys are never taken over unless the user explicitly turns them on for that
     /// app. There is no automatic/silent hijack.
@@ -247,19 +249,52 @@ final class AppState: ObservableObject {
                 guard let candidate = selectedBrowserMediaCandidate,
                       candidate.supportsTransport
                 else { return }
-                Task { _ = await performBrowserCommand(command, on: candidate) }
+                Task {
+                    let performed = await self.performBrowserCommand(command, on: candidate)
+                    guard performed, command == .playPause else { return }
+                    await self.announcePlayPause()
+                }
             } else {
                 Task {
                     let routed = await self.targetManager.route(key)
+                    guard command == .playPause else { return }
                     // route() returning false means nothing was delivered — no
                     // target, or the app isn't ready. Only play/pause gets the
                     // launch fallback: next/previous on a quit app have no
                     // meaningful target.
-                    guard !routed, command == .playPause else { return }
-                    await self.launchTargetAndPlay()
+                    if routed {
+                        await self.announcePlayPause()
+                    } else {
+                        await self.launchTargetAndPlay()
+                    }
                 }
             }
         }
+    }
+
+    /// Flash the overlay for a play/pause press that reached the hooked app —
+    /// the only feedback that the key went where the user hooked it rather than
+    /// to whatever macOS would have picked.
+    ///
+    /// The resulting state is read on the command lane, queued directly behind
+    /// the toggle that just ran, so the glyph shows what actually happened
+    /// instead of a guess. That costs one round-trip before the overlay appears
+    /// (the volume overlay already waits the same way); an app that reports no
+    /// state at all still gets an overlay, just a direction-neutral one.
+    private func announcePlayPause() async {
+        guard showPlayPauseHUD, let def = currentTargetDefinition() else { return }
+        let context = playbackTargetContext
+        // A menu-driven target reports its state through the play/pause menu
+        // item's own title, and that title can lag the press that changed it.
+        // Reading it right away would sometimes draw the state we just left, so
+        // let it settle first; scripted targets answer for themselves at once.
+        if def.menuControl != nil {
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard context == playbackTargetContext else { return }
+        }
+        let isPlaying = await confirmTargetPlaying(in: context)
+        guard context == playbackTargetContext else { return }   // hook changed meanwhile
+        HookHUD.shared.showPlayback(appName: def.displayName, isPlaying: isPlaying)
     }
 
     /// Start the hooked app, wait for it, then play. Browser targets are
@@ -284,7 +319,14 @@ final class AppState: ObservableObject {
             Self.log.error("launch-on-play: \(displayName, privacy: .public) is not installed")
         case .timedOut:
             Self.log.error("launch-on-play: \(displayName, privacy: .public) timed out waiting for readiness")
-        case .skipped, .alreadyPlaying, .played:
+        case .played:
+            // Close the loop opened by the "Starting …" overlay: the app is up
+            // and playing. No state read needed — the launcher only reports
+            // .played once it has sent play to a ready app.
+            if showPlayPauseHUD, selectedTargetID == id {
+                HookHUD.shared.showPlayback(appName: displayName, isPlaying: true)
+            }
+        case .skipped, .alreadyPlaying:
             break
         }
     }
@@ -329,6 +371,15 @@ final class AppState: ObservableObject {
     }
 
     func startInput() {
+        // The app-target tests run the app as their host process, and that host
+        // is built unsigned (`CODE_SIGNING_ALLOWED=NO`), so it can never hold the
+        // Accessibility grant the real build has: every test run would call
+        // `requestAccessibility()` and pop the system prompt at whoever is
+        // running the suite. Worse, an unsigned process asking for the same
+        // bundle id can leave the granted build's own entry stale. A test host
+        // has nobody to serve, so it starts no input at all.
+        guard !AppEnvironment.isRunningTests else { return }
+
         hasAccessibility = permissions.hasAccessibility
         // Developer-only, and inert unless the BHProbeBundleID default is set.
         MenuProbe.runIfRequested(accessibilityGranted: hasAccessibility)
@@ -751,6 +802,11 @@ final class AppState: ObservableObject {
     func setLaunchTargetOnPlay(_ on: Bool) {
         launchTargetOnPlay = on
         LaunchOnPlayPreference.setEnabled(on, in: .standard)
+    }
+
+    func setShowPlayPauseHUD(_ on: Bool) {
+        showPlayPauseHUD = on
+        PlayPauseHUDPreference.setEnabled(on, in: .standard)
     }
 
     // Volume helpers used by the sliders (AppleScript runs off the main thread).
