@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why your Mac's media keys control the wrong app — and how to fix it</title>
+<meta name="description" content="You press play and a forgotten YouTube tab starts instead of Spotify. Here's why macOS routes the media keys the way it does, the fixes that need no extra software, and how to pin the keys to one app for good.">
+<link rel="canonical" href="https://beamhook.app/media-keys-wrong-app/">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Beamhook">
+<meta property="og:url" content="https://beamhook.app/media-keys-wrong-app/">
+<meta property="og:title" content="Why your Mac's media keys control the wrong app — and how to fix it">
+<meta property="og:description" content="You press play and a forgotten YouTube tab starts instead of Spotify. Why macOS does this, the fixes that need no extra software, and how to pin the keys to one app for good.">
+<meta property="og:image" content="https://beamhook.app/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Why your Mac's media keys control the wrong app — and how to fix it">
+<meta name="twitter:description" content="You press play and a forgotten YouTube tab starts instead of Spotify. Why macOS does this, and how to pin the keys to one app for good.">
+<meta name="twitter:image" content="https://beamhook.app/og.png">
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/png;base64,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">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Why do my Mac's media keys control the wrong app?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "macOS sends the hardware media keys to whichever app most recently registered itself as the system's \"now playing\" source. That is usually the last thing that played audio — often a browser tab you have forgotten about — rather than the app you are looking at. There is no built-in setting that pins the keys to a chosen app."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I stop a YouTube tab from stealing the play/pause key?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Closing the tab releases the keys. In Chrome and other Chromium browsers you can also turn off hardware media key handling entirely at chrome://flags/#hardware-media-key-handling, which stops the browser answering the keys at all. Safari has no equivalent switch."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Is there a macOS setting to choose which app the media keys control?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. macOS exposes no preference for pinning the media keys to a specific app. System Settings only lets you change whether the top row acts as media keys or as standard function keys, which changes how the keys are pressed, not where they are sent. Pinning requires a third-party utility."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Why does Apple Music open when I press play?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "When no app is currently registered as the now-playing source, the play key falls through to the system default, which launches Apple Music. Keeping your intended player registered — or pinning the keys to it — prevents this."
+      }
+    }
+  ]
+}
+</script>
+</head>
+<body>
+<style>
+  :root{
+    color-scheme:light dark;
+    --paper:#ffffff; --ink:#0b0b0b; --soft:#5f5f5f; --faint:#9a9a9a; --line:#e7e7e7;
+    --sel:#007aff;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --paper:#0a0a0a; --ink:#f1f1f1; --soft:#9a9a9a; --faint:#5f5f5f; --line:#232323; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;line-height:1.6}
+  @media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} }
+
+  .wrap{max-width:640px;margin:0 auto;padding:38px 22px 72px}
+  .back{display:inline-block;font-size:.92rem;color:var(--soft);text-decoration:none;margin-bottom:34px}
+  .back:hover{color:var(--ink)}
+
+  h1{font-size:2rem;font-weight:800;letter-spacing:-.03em;line-height:1.15;margin:0 0 10px;text-wrap:balance}
+  .tag{font-size:1.08rem;color:var(--soft);margin:0 0 30px}
+  h2{font-size:1.28rem;font-weight:700;letter-spacing:-.02em;margin:44px 0 6px;
+    padding-top:26px;border-top:1px solid var(--line)}
+  h2:first-of-type{border-top:none;padding-top:0}
+  h3{font-size:1rem;font-weight:700;margin:26px 0 8px}
+  p{margin:0 0 16px}
+  a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line);transition:border-color .15s}
+  a:hover{border-color:var(--ink)}
+  kbd{font-family:var(--mono);font-size:.86em;background:var(--line);border-radius:4px;padding:1px 5px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--line);border-radius:4px;padding:1px 5px;
+    overflow-wrap:anywhere}
+  .path{font-weight:600}
+  ul{margin:0 0 16px;padding-left:20px}
+  li{margin:0 0 10px}
+  .note{font-size:.92rem;color:var(--soft);border-left:2px solid var(--line);padding-left:14px;margin:0 0 16px}
+  .answer{font-size:1.05rem;background:var(--line);border-radius:10px;padding:16px 18px;margin:0 0 28px}
+  .answer p:last-child{margin-bottom:0}
+  .cta{margin:30px 0 0;padding-top:26px;border-top:1px solid var(--line)}
+  .cta a.primary{display:inline-block;background:var(--ink);color:var(--paper);border:none;
+    border-radius:9px;padding:11px 18px;font-weight:600;font-size:.98rem;margin:0 8px 10px 0}
+  .cta a.primary:hover{opacity:.85}
+  .foot{margin-top:52px;padding-top:22px;border-top:1px solid var(--line);
+    font-size:.9rem;color:var(--soft)}
+  .foot a{margin-right:16px}
+</style>
+
+<div class="wrap">
+  <a class="back" href="/">← Beamhook</a>
+
+  <h1>Why your Mac's media keys control the wrong app</h1>
+  <p class="tag">You press play expecting Spotify, and a YouTube tab you forgot about starts blasting instead. Here's what's actually happening, and every way to fix it.</p>
+
+  <div class="answer">
+    <p><strong>The short answer:</strong> macOS sends the media keys to whichever app most recently registered itself as the system's “now playing” source — not to the app you're looking at, and not to the app you'd expect. There is no built-in setting to pin them.</p>
+  </div>
+
+  <h2>Why macOS does this</h2>
+
+  <p>The play/pause, next and previous keys on a Mac keyboard aren't wired to any particular application. When you press one, macOS decides where to deliver it, and the rule it uses is roughly “the most recent thing that played audio.”</p>
+
+  <p>That rule works fine when one app is playing. It falls apart the moment two things can play, which on a modern Mac is nearly always. A video in a background tab, a podcast you paused an hour ago, an autoplaying clip on a page you've already scrolled past — any of them can claim the keys, and none of them announce that they have.</p>
+
+  <p>Browsers make it worse, because a browser doesn't register as one source. Individual pages register, so “Safari has the keys” really means “one particular tab in one particular window has the keys,” and you may have no idea which.</p>
+
+  <p>If nothing is registered at all, the play key falls through to the system default and launches Apple Music — which is why pressing play on a freshly booted Mac so often opens a music library you didn't ask for.</p>
+
+  <h2>Fixes that don't need extra software</h2>
+
+  <p>These are worth trying first, and for some people they're enough.</p>
+
+  <h3>Close whatever is holding the keys</h3>
+  <p>Closing the offending tab or quitting the app releases its claim, and the keys fall back to whatever registered before it. This works reliably. It's also the fix you have to perform again every time it happens, which is the real problem with it.</p>
+
+  <p>Finding the culprit is the hard part. In Chrome and other Chromium browsers, tabs playing audio show a speaker icon you can click through. In Safari, the speaker icon in the address bar lists the tabs currently making sound.</p>
+
+  <h3>Stop your browser answering the keys at all</h3>
+  <p>Chromium browsers have a hidden switch for this. Open <code>chrome://flags/#hardware-media-key-handling</code>, set it to <strong>Disabled</strong>, and relaunch. The browser then ignores the media keys entirely, so they go to your music app instead.</p>
+
+  <p class="note">This is all-or-nothing: with it disabled, the keys will no longer control video in that browser either, which is a real loss if you use the keys to pause YouTube. Safari has no equivalent setting.</p>
+
+  <h3>Make the keys harder to press by accident</h3>
+  <p>In <span class="path">System Settings → Keyboard</span>, turning on “Use F1, F2, etc. keys as standard function keys” means the top row sends function keys unless you hold <kbd>fn</kbd>. This doesn't change <em>where</em> a media key goes — only how you press it — but if your complaint is mostly accidental presses, it helps.</p>
+
+  <h3>What isn't available</h3>
+  <p>There's no macOS preference that says “send the media keys to this app.” People look for it in Keyboard settings, in Sound, in the Shortcuts app; it isn't in any of them. Choosing a target requires software that intercepts the keys before macOS routes them.</p>
+
+  <h2>Pinning the keys to one app</h2>
+
+  <p>That's the gap <a href="/">Beamhook</a> fills. It's a small open-source menu-bar app: you pick one target, and play/pause, next and previous go there until you change your mind. Nothing can steal them in the meantime — not a background tab, not Apple Music, not the app you happen to be looking at.</p>
+
+  <p>It captures the keys with an event tap before macOS gets to route them, so the “most recent player wins” rule never applies. Browsers are hooked to <em>one specific tab</em> rather than to the whole browser, so it's that YouTube tab that answers rather than whichever page most recently made noise. It'll take the volume keys too if you want, with <kbd>⌘</kbd> + volume still adjusting system volume.</p>
+
+  <p>Built-in targets include Spotify, Apple Music, Apple TV, VLC, VOX, QuickTime Player, Downcast, IINA, Amazon Music, Plexamp and Deezer, plus Safari, Chrome, Brave, Arc and Vivaldi. You can add your own with AppleScript. It needs macOS 14 or later.</p>
+
+  <div class="cta">
+    <a class="primary" href="https://github.com/ppixu/beamhook">Build it free from source</a>
+    <a class="primary" href="https://ppixu.gumroad.com/l/beamhook">Get the signed build — €5</a>
+    <p class="note" style="margin-top:12px">Beamhook is GPL-3.0. Building it yourself costs nothing and takes one command; the €5 purchase gets you the signed, notarized, ready-to-run app and funds the work.</p>
+  </div>
+
+  <div class="foot">
+    <a href="/">Beamhook</a>
+    <a href="https://github.com/ppixu/beamhook">GitHub ↗</a>
+    <a href="/help/">Browser setup guide</a>
+  </div>
+</div>
+</body>
+</html>
