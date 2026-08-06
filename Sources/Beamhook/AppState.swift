@@ -208,9 +208,13 @@ final class AppState: ObservableObject {
         // closure until init finishes, so route through a box whose reference we set
         // at the end of init; it's only ever read/written on the main queue.
         let handlerBox = KeyHandlerBox()
-        let tap = MediaKeyTap(handler: { key in
-            MainActor.assumeIsolated { handlerBox.state?.handleKey(key) }
-        })
+        let tap = MediaKeyTap(
+            handler: { key in
+                MainActor.assumeIsolated { handlerBox.state?.handleKey(key) }
+            },
+            passthroughHandler: { key in
+                MainActor.assumeIsolated { handlerBox.state?.handlePassedThroughKey(key) }
+            })
         self.tap = tap
         self.watchdog = TapWatchdog(tap: tap)
 
@@ -269,6 +273,31 @@ final class AppState: ObservableObject {
                     }
                 }
             }
+        }
+    }
+
+    /// A transport key the tap handed back to macOS (browser hooked, no tab
+    /// control). macOS gives it to whichever app most recently owned the
+    /// now-playing session — often not the hooked browser — so without feedback
+    /// the press looks like Beamhook controlling the wrong app. Only play/pause
+    /// gets the notice, matching the routed-press overlay, and the same
+    /// preference governs both.
+    func handlePassedThroughKey(_ key: MediaKey) {
+        guard key == .playPause, showPlayPauseHUD,
+              let browser = BrowserKind.target(id: selectedTargetID) else { return }
+        let runningNow = isRunning(bundleID: browser.bundleID)
+        let notice = PassthroughNotice.resolve(
+            browserRunningNow: runningNow,
+            scanSawBrowserRunning: browserTargetRunning,
+            injectionAvailable: browserMediaInjectionAvailable)
+        let name = currentTargetDefinition()?.displayName ?? browser.applicationName
+        HookHUD.shared.showPassthrough(notice, appName: name)
+        // A press against a stale picture (browser launched since the last
+        // scan, or no scan yet) is also the moment to refresh it, so a browser
+        // with tab JavaScript enabled converges to real tab control without
+        // the menu ever being opened.
+        if runningNow, browserTargetRunning != true {
+            Task { await refreshBrowserMedia() }
         }
     }
 
@@ -557,6 +586,14 @@ final class AppState: ObservableObject {
         targetManager.selectedTargetID = id
         configureBrowserTransportForPendingScan()
         updateVolumeHijack()
+        // Scan the hooked browser now instead of leaving it to the menu's
+        // visible-poll loop: the popover can close before that loop fires,
+        // which would strand a JS-enabled browser in macOS passthrough until
+        // the menu is next opened. User-initiated, so a first-time Automation
+        // prompt lands while the user is still looking at their choice.
+        if selectedTargetIsBrowser {
+            Task { await refreshBrowserMedia() }
+        }
         // Confirm the new hook with a centre-screen HUD (user-initiated, so always).
         if let def = currentTargetDefinition() {
             HookHUD.shared.show(appName: def.displayName,

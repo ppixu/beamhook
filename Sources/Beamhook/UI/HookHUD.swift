@@ -1,5 +1,6 @@
 import AppKit
 import os
+import BeamhookKit
 
 /// A transient, click-through overlay for hook confirmations and app-specific
 /// volume changes. Styled like the modern macOS volume HUD, it drops down below
@@ -16,11 +17,16 @@ final class HookHUD {
         /// `isPlaying` is nil when the app reports no play state — the glyph then
         /// stays neutral rather than claiming a direction it doesn't know.
         case playback(appName: String, isPlaying: Bool?)
+        /// A play/pause press the tap handed back to macOS while a browser was
+        /// hooked. The notice names why, so the key controlling another app
+        /// reads as the system routing it — not as Beamhook misfiring.
+        case passthrough(appName: String, notice: PassthroughNotice)
 
         var appName: String {
             switch self {
             case .hooked(let appName, _), .volume(let appName, _),
-                 .launching(let appName), .playback(let appName, _): appName
+                 .launching(let appName), .playback(let appName, _),
+                 .passthrough(let appName, _): appName
             }
         }
 
@@ -30,6 +36,9 @@ final class HookHUD {
             case .volume: 1.5
             case .launching: 2.0
             case .playback: 1.4
+            // The remediation line is a sentence; leave time to read it.
+            case .passthrough(let appName, let notice):
+                HookHUD.noticeText(notice, appName: appName) == nil ? 1.8 : 4.0
             }
         }
     }
@@ -51,6 +60,9 @@ final class HookHUD {
     /// "⌘ + <speaker> for system volume" — a row rather than a label, so the
     /// speaker is the same SF Symbol the popover and the menu bar draw.
     private var hintRow: NSView?
+    /// Free-text caption under the title, used by the passthrough presentation
+    /// for its remediation line ("Enable JavaScript from Apple Events …").
+    private var noticeLabel: NSTextField?
     private var hookIcon: NSImageView?
     private var transportIcon: NSImageView?
     private var volumeRow: NSView?
@@ -109,6 +121,24 @@ final class HookHUD {
         show(.playback(appName: appName, isPlaying: isPlaying))
     }
 
+    /// Explain a play/pause press that macOS routed instead of Beamhook.
+    func showPassthrough(_ notice: PassthroughNotice, appName: String) {
+        show(.passthrough(appName: appName, notice: notice))
+    }
+
+    /// The one-line remediation under the passthrough title; nil when there is
+    /// nothing actionable to add.
+    nonisolated private static func noticeText(_ notice: PassthroughNotice, appName: String) -> String? {
+        switch notice {
+        case .handledByMacOS:
+            return nil
+        case .browserNotRunning:
+            return "\(appName) isn't running"
+        case .enableBrowserJavaScript:
+            return "Enable JavaScript from Apple Events to control \(appName)"
+        }
+    }
+
     private func show(_ presentation: Presentation) {
         generation += 1
         present(presentation, gen: generation, attempt: 0)
@@ -131,6 +161,9 @@ final class HookHUD {
         }
 
         let panel = ensurePanel()
+        // Only the passthrough presentation uses the notice line; hide it here
+        // so the cases below stay a checklist of what they *do* show.
+        noticeLabel?.isHidden = true
         switch presentation {
         case .hooked(let appName, let volumeKeysHijacked):
             label?.stringValue = "\(appName) hooked"
@@ -157,6 +190,17 @@ final class HookHUD {
             hookIcon?.isHidden = true
             transportIcon?.isHidden = false
             transportIcon?.image = Self.transportSymbol(isPlaying: isPlaying)
+            volumeRow?.isHidden = true
+        case .passthrough(let appName, let notice):
+            label?.stringValue = "macOS handled Play/Pause"
+            if let text = Self.noticeText(notice, appName: appName) {
+                noticeLabel?.stringValue = text
+                noticeLabel?.isHidden = false
+            }
+            hintRow?.isHidden = true
+            hookIcon?.isHidden = true
+            transportIcon?.isHidden = false
+            transportIcon?.image = Self.transportSymbol(isPlaying: nil)
             volumeRow?.isHidden = true
         }
 
@@ -319,7 +363,14 @@ final class HookHUD {
         let hint = Self.makeSystemVolumeHint()
         hint.isHidden = true
 
-        let labels = NSStackView(views: [text, hint])
+        let notice = NSTextField(labelWithString: "")
+        notice.font = .systemFont(ofSize: 11, weight: .regular)
+        notice.textColor = .secondaryLabelColor
+        notice.lineBreakMode = .byTruncatingTail
+        notice.isHidden = true
+        notice.translatesAutoresizingMaskIntoConstraints = false
+
+        let labels = NSStackView(views: [text, hint, notice])
         labels.orientation = .vertical
         labels.alignment = .leading
         labels.spacing = 2
@@ -413,6 +464,7 @@ final class HookHUD {
         self.panel = panel
         self.label = text
         self.hintRow = hint
+        self.noticeLabel = notice
         self.hookIcon = icon
         self.transportIcon = transport
         self.volumeRow = volumeStack

@@ -4,6 +4,30 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [Unreleased]
+
+### Added
+
+- **The overlay now says when macOS handled a press.** With a browser hooked
+  but tab control unavailable — JavaScript from Apple Events off, or the
+  browser not running — Beamhook deliberately leaves the transport keys to
+  macOS, which gives them to whichever app most recently played (often the app
+  you just hooked away from). That silent hand-off made a hooked Brave appear
+  to keep controlling Spotify. Play/pause now flashes "macOS handled
+  Play/Pause" with the reason, so the degraded mode is visible and fixable at
+  the moment it bites. Governed by the same Settings toggle as the play/pause
+  overlay.
+
+### Fixed
+
+- Hooking a browser now scans it for media tabs immediately instead of waiting
+  for the popover's refresh loop. Closing the popover right after choosing a
+  browser could leave a fully set-up browser passed through to macOS until the
+  menu was next opened.
+- A play/pause press while Beamhook's picture of the hooked browser is stale
+  (say the browser started after it was hooked) now triggers a rescan, so tab
+  control recovers without reopening the menu.
+
 ## [1.1.9] — 2026-08-01
 
 ### Added

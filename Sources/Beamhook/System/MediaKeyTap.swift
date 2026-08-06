@@ -20,6 +20,11 @@ final class MediaKeyTap: @unchecked Sendable {
     }
 
     private let handler: Handler
+    /// Told about transport key-downs the tap deliberately let macOS keep
+    /// (browser target without tab control). Purely informational — the event
+    /// has already been passed through by the time this runs — so the app can
+    /// explain where the key actually went instead of appearing to drop it.
+    private let passthroughHandler: Handler?
     private let stateLock = NSLock()
     private var routingState = RoutingState()
 
@@ -42,9 +47,12 @@ final class MediaKeyTap: @unchecked Sendable {
     private var thread: Thread?
     private var threadRunLoop: CFRunLoop?
 
-    /// `handler` is always invoked on the main thread, for key-down transport keys only.
-    init(handler: @escaping Handler) {
+    /// Both handlers are always invoked on the main thread, for fresh (non-repeat)
+    /// key-downs only: `handler` for transport keys the tap swallowed and routed,
+    /// `passthroughHandler` for transport keys it handed back to macOS.
+    init(handler: @escaping Handler, passthroughHandler: Handler? = nil) {
         self.handler = handler
+        self.passthroughHandler = passthroughHandler
     }
 
     func start() {
@@ -89,7 +97,9 @@ final class MediaKeyTap: @unchecked Sendable {
         CGEvent.tapEnable(tap: tap, enable: true)
     }
 
-    private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+    /// Internal rather than private so the unit tests can drive it with
+    /// synthetic events; only the tap callback calls it in production.
+    func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         // System disabled the tap — re-enable and keep the event.
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let tap = withStateLock({ eventTap }) {
@@ -111,6 +121,13 @@ final class MediaKeyTap: @unchecked Sendable {
 
         if key.isHandledTransport {
             if !transportKeysHijacked {
+                // macOS keeps the key. Say so (fresh key-downs only, matching
+                // the routed branch below) — otherwise a hooked-but-degraded
+                // browser target looks identical to a working hook while the
+                // key controls whatever app macOS's now-playing picks.
+                if decoded.isDown && !decoded.isRepeat {
+                    DispatchQueue.main.async { [weak self] in self?.passthroughHandler?(key) }
+                }
                 return Unmanaged.passUnretained(event)
             }
             // Act on key-down only; swallow both down and up to stop other apps /
