@@ -16,6 +16,11 @@ docs/implementation-plan.md
 
 # Claude Code guidance — kept local, not tracked
 CLAUDE.md
+.claude/
+
+# Agent skills installed locally (Higgsfield CLI companion skills, etc.)
+.agents/
+skills-lock.json
 
 # Local release copy/launch notes
 launch-copy.md
