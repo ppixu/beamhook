@@ -15,6 +15,25 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.1.10</title>
+            <pubDate>Sun, 09 Aug 2026 22:00:30 +0300</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.10</link>
+            <sparkle:version>16</sparkle:version>
+            <sparkle:shortVersionString>1.1.10</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Added</h3>
+<ul>
+<li>**The overlay now says when macOS handled a press.** With a browser hooked but tab control unavailable — JavaScript from Apple Events off, or the browser not running — Beamhook deliberately leaves the transport keys to macOS, which gives them to whichever app most recently played (often the app you just hooked away from). That silent hand-off made a hooked Brave appear to keep controlling Spotify. Play/pause now flashes "macOS handled Play/Pause" with the reason, so the degraded mode is visible and fixable at the moment it bites. Governed by the same Settings toggle as the play/pause overlay.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li>Hooking a browser now scans it for media tabs immediately instead of waiting for the popover's refresh loop. Closing the popover right after choosing a browser could leave a fully set-up browser passed through to macOS until the menu was next opened.</li>
+<li>A play/pause press while Beamhook's picture of the hooked browser is stale (say the browser started after it was hooked) now triggers a rescan, so tab control recovers without reopening the menu.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.1.10.zip" length="2135690" type="application/octet-stream" sparkle:edSignature="vswKcDWRMwFJGxSPmy93pPUh0+V23FcdRaXV1lF5IpN+qwhPw4KlJIHiyzZcC8vJa7knBFninhhErhbvzW5OBg=="/>
+        </item>
+        <item>
             <title>1.1.9</title>
             <pubDate>Sat, 01 Aug 2026 17:14:49 +0300</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.9</link>
@@ -184,6 +203,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: Csck9HCkBD0+91Q8UTONsfkFTdPl3hsm5MS3j/vV5ltKp6S/jQeZvX+18mWW/I5Siz4sH1AVNsT+pggRK+c1Bw==
-length: 14193
+edSignature: QX70mFb2eLuFvS+5yfj0wvKFGFj2IX4aFTMJUdiCYtKKAt+y4lv9RGmhHnrSHNUju63T9YxEVtBKQ0z09c7VDw==
+length: 16027
 -->
