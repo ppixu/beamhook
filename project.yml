@@ -15,8 +15,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.1.10"
-    CURRENT_PROJECT_VERSION: "16"
+    MARKETING_VERSION: "1.1.11"
+    CURRENT_PROJECT_VERSION: "17"
     CODE_SIGN_STYLE: Automatic
     ARCHS: "$(ARCHS_STANDARD)"
     # Identity of a locally built copy, defined once here because more than one
