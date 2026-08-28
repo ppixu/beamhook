@@ -142,6 +142,8 @@ final class AppState: ObservableObject {
     @Published var launchTargetOnPlay: Bool = LaunchOnPlayPreference.isEnabled(.standard)
     /// Whether a hooked play/pause press flashes the overlay.
     @Published var showPlayPauseHUD: Bool = PlayPauseHUDPreference.isEnabled(.standard)
+    /// Whether ⌘ + a volume key reaches the hooked app when the plain keys don't.
+    @Published var commandVolumeRouting: Bool = CommandVolumePreference.isEnabled(.standard)
     /// Per-app opt-in for volume-key control. Absent (nil) means OFF — the volume
     /// keys are never taken over unless the user explicitly turns them on for that
     /// app. There is no automatic/silent hijack.
@@ -171,6 +173,8 @@ final class AppState: ObservableObject {
 
     let outputMonitor = AudioOutputMonitor()
     private var cancellables = Set<AnyCancellable>()
+    /// Workspace launch/terminate observers; see `observeTargetPresence()`.
+    private var workspaceObservers: [NSObjectProtocol] = []
     private static let volumeOverrideKey = "volumeKeyOverride"
     private static let legacyVolumeHookKey = "volumeHookBundleIDs"
     private static let log = Logger(subsystem: "com.github.ppixu.beamhook", category: "HUD")
@@ -230,6 +234,7 @@ final class AppState: ObservableObject {
             .store(in: &cancellables)
 
         handlerBox.state = self
+        observeTargetPresence()
         // Seed this now rather than waiting for the first popover: the target menu
         // disables uninstalled apps, and an empty set would disable every one of
         // them if the menu were ever built before `setMenuVisible(true)` lands.
@@ -368,7 +373,7 @@ final class AppState: ObservableObject {
         tap.start()
         watchdog.start()
         outputMonitor.start()
-        updateVolumeHijack()
+        updateVolumeRouting()
         if selectedTargetIsBrowser {
             Task { await refreshBrowserMedia() }
         }
@@ -387,7 +392,7 @@ final class AppState: ObservableObject {
                     Self.log.info("startup hook: target=\(def?.displayName ?? "nil", privacy: .public) running=\(running)")
                     if let def, running {
                         HookHUD.shared.show(appName: def.displayName,
-                                            volumeKeysHijacked: self.tap.volumeKeysHijacked)
+                                            commandHint: self.commandVolumeHint)
                     }
                 }
             }
@@ -585,7 +590,7 @@ final class AppState: ObservableObject {
         selectedTargetID = id
         targetManager.selectedTargetID = id
         configureBrowserTransportForPendingScan()
-        updateVolumeHijack()
+        updateVolumeRouting()
         // Scan the hooked browser now instead of leaving it to the menu's
         // visible-poll loop: the popover can close before that loop fires,
         // which would strand a JS-enabled browser in macOS passthrough until
@@ -597,7 +602,7 @@ final class AppState: ObservableObject {
         // Confirm the new hook with a centre-screen HUD (user-initiated, so always).
         if let def = currentTargetDefinition() {
             HookHUD.shared.show(appName: def.displayName,
-                                volumeKeysHijacked: tap.volumeKeysHijacked)
+                                commandHint: commandVolumeHint)
         }
     }
 
@@ -846,6 +851,12 @@ final class AppState: ObservableObject {
         PlayPauseHUDPreference.setEnabled(on, in: .standard)
     }
 
+    func setCommandVolumeRouting(_ on: Bool) {
+        commandVolumeRouting = on
+        CommandVolumePreference.setEnabled(on, in: .standard)
+        updateVolumeRouting()
+    }
+
     // Volume helpers used by the sliders (AppleScript runs off the main thread).
     // The initial read uses the poll runner (best-effort); the write uses the command
     // runner since it's a user action.
@@ -884,7 +895,11 @@ final class AppState: ObservableObject {
                 volumeByBundle[result.bundleID] = result.volume
                 let appName = availableApps.first { $0.bundleID == result.bundleID }?.displayName
                     ?? result.bundleID
-                HookHUD.shared.showVolume(appName: appName, percent: result.volume)
+                // With the plain keys hooked, the overlay teaches the escape hatch.
+                // Reached by ⌘ instead, it would only echo the chord just pressed.
+                HookHUD.shared.showVolume(appName: appName,
+                                          percent: result.volume,
+                                          commandHint: tap.volumeKeysHijacked ? .system : nil)
             }
         }
     }
@@ -956,23 +971,64 @@ final class AppState: ObservableObject {
     func setVolumeKeysEnabled(_ on: Bool, bundleID: String) {
         volumeKeyOverride[bundleID] = on
         UserDefaults.standard.set(volumeKeyOverride, forKey: Self.volumeOverrideKey)
-        updateVolumeHijack()
+        updateVolumeRouting()
         if on,
            tap.volumeKeysHijacked,
            let def = currentTargetDefinition(),
            def.bundleID == bundleID {
-            HookHUD.shared.show(appName: def.displayName, volumeKeysHijacked: true)
+            HookHUD.shared.show(appName: def.displayName, commandHint: commandVolumeHint)
         }
     }
 
     /// The volume keys are hijacked for the target only when it exposes a scriptable
-    /// volume AND the user has explicitly enabled it for that app.
-    private func updateVolumeHijack() {
+    /// volume AND the user has explicitly enabled it for that app. `targetCanTakeVolume`
+    /// gates both routings on the app actually running, so a quit target hands the
+    /// keys back to macOS instead of swallowing presses that could do nothing.
+    private func updateVolumeRouting() {
         tap.volumeKeysHijacked = VolumeKeyRouting.shouldHijack(
             targetBundleID: targetManager.targetBundleID,
             targetSupportsVolume: targetManager.targetSupportsVolume,
             preferences: volumeKeyOverride
         )
+        tap.commandVolumeRouting = commandVolumeRouting
+        tap.targetCanTakeVolume = targetCanTakeVolume
+        objectWillChange.send()   // the ⌘ hint in the menu row derives from these
+    }
+
+    /// The hooked target exposes a volume Beamhook can drive and is running right
+    /// now — the precondition for either routing to swallow a volume key.
+    var targetCanTakeVolume: Bool {
+        guard targetManager.targetSupportsVolume,
+              let bundleID = targetManager.targetBundleID else { return false }
+        return isRunning(bundleID: bundleID)
+    }
+
+    /// What ⌘ + a volume key reaches right now, or nil when ⌘ changes nothing.
+    /// Drives the hint in the menu row and on the overlay from one source.
+    var commandVolumeHint: VolumeKeyDestination? {
+        VolumeKeyRouting.commandHintDestination(
+            hijacked: tap.volumeKeysHijacked,
+            commandRoutingEnabled: commandVolumeRouting,
+            targetCanTakeVolume: targetCanTakeVolume)
+    }
+
+    /// Volume routing depends on whether the target is running, and nothing else
+    /// tells us that: the popover's refresh only runs while it's open, and a key
+    /// press can't afford to ask NSWorkspace on the tap thread.
+    private func observeTargetPresence() {
+        let center = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didLaunchApplicationNotification,
+                     NSWorkspace.didTerminateApplicationNotification] {
+            let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateVolumeRouting() }
+            }
+            workspaceObservers.append(token)
+        }
+    }
+
+    deinit {
+        let center = NSWorkspace.shared.notificationCenter
+        for token in workspaceObservers { center.removeObserver(token) }
     }
 }
 

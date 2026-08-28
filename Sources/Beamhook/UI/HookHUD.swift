@@ -11,8 +11,10 @@ final class HookHUD {
     private init() {}
 
     private enum Presentation {
-        case hooked(appName: String, volumeKeysHijacked: Bool)
-        case volume(appName: String, percent: Int)
+        /// `commandHint` is what ⌘ + a volume key reaches from here, or nil when
+        /// ⌘ changes nothing and the hint line stays hidden.
+        case hooked(appName: String, commandHint: VolumeKeyDestination?)
+        case volume(appName: String, percent: Int, commandHint: VolumeKeyDestination?)
         case launching(appName: String)
         /// `isPlaying` is nil when the app reports no play state — the glyph then
         /// stays neutral rather than claiming a direction it doesn't know.
@@ -24,7 +26,7 @@ final class HookHUD {
 
         var appName: String {
             switch self {
-            case .hooked(let appName, _), .volume(let appName, _),
+            case .hooked(let appName, _), .volume(let appName, _, _),
                  .launching(let appName), .playback(let appName, _),
                  .passthrough(let appName, _): appName
             }
@@ -32,7 +34,7 @@ final class HookHUD {
 
         var hideDelay: TimeInterval {
             switch self {
-            case .hooked(_, let volumeKeysHijacked): volumeKeysHijacked ? 3.0 : 2.0
+            case .hooked(_, let commandHint): commandHint == nil ? 2.0 : 3.0
             case .volume: 1.5
             case .launching: 2.0
             case .playback: 1.4
@@ -58,8 +60,11 @@ final class HookHUD {
     private var panel: NSPanel?
     private var label: NSTextField?
     /// "⌘ + <speaker> for system volume" — a row rather than a label, so the
-    /// speaker is the same SF Symbol the popover and the menu bar draw.
-    private var hintRow: NSView?
+    /// speaker is the same SF Symbol the popover and the menu bar draw. Its
+    /// trailing caption names whichever side ⌘ leads to, so the two directions
+    /// of the chord can't be advertised the wrong way round.
+    private var hintRow: NSStackView?
+    private var hintSuffix: NSTextField?
     /// Free-text caption under the title, used by the passthrough presentation
     /// for its remediation line ("Enable JavaScript from Apple Events …").
     private var noticeLabel: NSTextField?
@@ -100,13 +105,15 @@ final class HookHUD {
     }
 
     /// Flash "<appName> hooked" just below the menu bar, under the status item.
-    func show(appName: String, volumeKeysHijacked: Bool = false) {
-        show(.hooked(appName: appName, volumeKeysHijacked: volumeKeysHijacked))
+    func show(appName: String, commandHint: VolumeKeyDestination? = nil) {
+        show(.hooked(appName: appName, commandHint: commandHint))
     }
 
     /// Show an app-specific volume HUD after a hooked volume-key command succeeds.
-    func showVolume(appName: String, percent: Int) {
-        show(.volume(appName: appName, percent: min(100, max(0, percent))))
+    func showVolume(appName: String, percent: Int, commandHint: VolumeKeyDestination? = nil) {
+        show(.volume(appName: appName,
+                     percent: min(100, max(0, percent)),
+                     commandHint: commandHint))
     }
 
     /// Flash "Starting <appName>…" while a hooked app that wasn't running
@@ -124,6 +131,19 @@ final class HookHUD {
     /// Explain a play/pause press that macOS routed instead of Beamhook.
     func showPassthrough(_ notice: PassthroughNotice, appName: String) {
         show(.passthrough(appName: appName, notice: notice))
+    }
+
+    /// Point the "⌘ + <speaker> for …" line at whichever volume the chord reaches,
+    /// or hide it when ⌘ changes nothing from here.
+    private func applyCommandHint(_ destination: VolumeKeyDestination?, appName: String) {
+        guard let destination else {
+            hintRow?.isHidden = true
+            return
+        }
+        let target = destination == .system ? "system" : appName
+        hintSuffix?.stringValue = "for \(target) volume"
+        hintRow?.setAccessibilityLabel("Command plus Volume for \(target) volume")
+        hintRow?.isHidden = false
     }
 
     /// The one-line remediation under the passthrough title; nil when there is
@@ -165,15 +185,15 @@ final class HookHUD {
         // so the cases below stay a checklist of what they *do* show.
         noticeLabel?.isHidden = true
         switch presentation {
-        case .hooked(let appName, let volumeKeysHijacked):
+        case .hooked(let appName, let commandHint):
             label?.stringValue = "\(appName) hooked"
-            hintRow?.isHidden = !volumeKeysHijacked
+            applyCommandHint(commandHint, appName: appName)
             hookIcon?.isHidden = false
             transportIcon?.isHidden = true
             volumeRow?.isHidden = true
-        case .volume(let appName, let percent):
+        case .volume(let appName, let percent, let commandHint):
             label?.stringValue = appName
-            hintRow?.isHidden = false
+            applyCommandHint(commandHint, appName: appName)
             hookIcon?.isHidden = true
             transportIcon?.isHidden = true
             volumeRow?.isHidden = false
@@ -360,7 +380,7 @@ final class HookHUD {
         transport.translatesAutoresizingMaskIntoConstraints = false
         transport.setContentHuggingPriority(.required, for: .horizontal)
 
-        let hint = Self.makeSystemVolumeHint()
+        let (hint, hintSuffix) = Self.makeCommandVolumeHint()
         hint.isHidden = true
 
         let notice = NSTextField(labelWithString: "")
@@ -464,6 +484,7 @@ final class HookHUD {
         self.panel = panel
         self.label = text
         self.hintRow = hint
+        self.hintSuffix = hintSuffix
         self.noticeLabel = notice
         self.hookIcon = icon
         self.transportIcon = transport
@@ -474,12 +495,13 @@ final class HookHUD {
         return panel
     }
 
-    /// "⌘ + <speaker> for system volume", built as a row so the speaker can be
+    /// "⌘ + <speaker> for … volume", built as a row so the speaker can be
     /// the real `speaker.wave.2.fill` symbol — the same mark the popover's hint
     /// and the menu bar itself use. An emoji speaker sat here before; it drew in
     /// its own colours and at its own weight, ignoring both the HUD's tint and
-    /// the surrounding text.
-    private static func makeSystemVolumeHint() -> NSStackView {
+    /// the surrounding text. The trailing caption is returned alongside the row
+    /// because `applyCommandHint` retargets it per presentation.
+    private static func makeCommandVolumeHint() -> (row: NSStackView, suffix: NSTextField) {
         func caption(_ string: String) -> NSTextField {
             let field = NSTextField(labelWithString: string)
             field.font = .systemFont(ofSize: 11, weight: .regular)
@@ -497,14 +519,15 @@ final class HookHUD {
         speaker.setContentHuggingPriority(.required, for: .horizontal)
         speaker.setAccessibilityElement(false)
 
-        let row = NSStackView(views: [caption("⌘ +"), speaker, caption("for system volume")])
+        let suffix = caption("for system volume")
+        let row = NSStackView(views: [caption("⌘ +"), speaker, suffix])
         row.orientation = .horizontal
         row.alignment = .centerY
         row.spacing = 3
         row.setAccessibilityElement(true)
         row.setAccessibilityRole(.staticText)
         row.setAccessibilityLabel("Command plus Volume for system volume")
-        return row
+        return (row, suffix)
     }
 
     /// The glyph for a play/pause press. `nil` — an app that reports no state —

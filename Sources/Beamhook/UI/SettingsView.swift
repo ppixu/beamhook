@@ -43,6 +43,12 @@ private struct GeneralSettingsTab: View {
                               set: { state.setLaunchTargetOnPlay($0) }))
 
             settingRow(
+                title: "⌘ + volume keys control the hooked app",
+                caption: "When the volume keys aren't hooked, hold ⌘ to change the hooked app's volume instead of the system's.",
+                isOn: Binding(get: { state.commandVolumeRouting },
+                              set: { state.setCommandVolumeRouting($0) }))
+
+            settingRow(
                 title: "Show an overlay on play/pause",
                 caption: "Flashes the app the keys reached, like the volume overlay.",
                 isOn: Binding(get: { state.showPlayPauseHUD },

@@ -545,17 +545,19 @@ private struct AppVolumeRow: View {
                 .controlSize(.small)
                 .font(.caption)
                 .help("Route the hardware volume keys to this app while it's the hooked target")
-            if state.volumeKeysEnabled(bundleID: playing.bundleID) {
+            // ⌘ always leads to the volume the plain keys don't: the system
+            // while this app is hooked, this app while it isn't.
+            if let hint = state.commandVolumeHint {
+                let target = hint == .system ? "system" : playing.displayName
                 HStack(spacing: 2) {
-                    Text("⌘ +")
-                    Image(systemName: "speaker.wave.2.fill")
-                    Text("for system")
+                    Text("⌘ +").fixedSize()
+                    Image(systemName: "speaker.wave.2.fill").fixedSize()
+                    Text("for \(target)").lineLimit(1).truncationMode(.tail)
                 }
                 .font(.system(size: 9))
                 .foregroundStyle(.tertiary)
-                .fixedSize()
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Command plus Volume for system")
+                .accessibilityLabel("Command plus Volume for \(target)")
             }
         }
     }

@@ -4,6 +4,35 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.2.0] — 2026-08-28
+
+### Added
+
+- **⌘ now flips which volume the hardware keys control.** The volume keys are
+  routed to the hooked app only if you tick "Volume keys" for it, and that has
+  always left the other direction unreachable: with the box unticked there was
+  no way to change the hooked app's volume from the keyboard, and no reason to
+  hold ⌘. Now the modifier means the same thing in both states — whichever
+  volume the plain keys don't control.
+
+  | "Volume keys" | volume key | ⌘ + volume key |
+  |---|---|---|
+  | off (default) | system | the hooked app |
+  | on | the hooked app | system |
+
+  The plain keys keep their existing behaviour exactly, macOS gives ⌘ + a
+  volume key no meaning of its own, and the whole chord can be turned off under
+  Settings → General. The hint beside the "Volume keys" checkbox and the one on
+  the overlay now name whichever side ⌘ leads to, instead of only appearing
+  when the keys were hooked.
+
+### Fixed
+
+- The volume keys are no longer swallowed while the hooked app isn't running.
+  With "Volume keys" ticked for an app you had since quit, every press
+  disappeared into a target that could not act on it; they now fall back to the
+  system volume until the app is running again.
+
 ## [1.1.10] — 2026-08-09
 
 ### Added

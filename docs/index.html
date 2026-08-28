@@ -381,7 +381,6 @@
   .glass-vk-hint{display:inline-flex;align-items:center;gap:2px;flex:none;
     font-size:9px;color:rgba(60,60,67,.45);white-space:nowrap}
   .glass-vk-hint svg{width:11px;height:9px;display:block}
-  .glass-check[aria-checked="false"] + .glass-vk-hint{display:none}
   .glass-add{display:inline-flex;align-items:center;gap:4px;align-self:flex-start;font-size:11.5px;
     padding:4px 9px;border-radius:6px;background:rgba(120,120,128,.16);color:rgba(60,60,67,.9)}
   .glass-toggle{width:32px;height:19px;border-radius:99px;background:#007aff;position:relative;flex:none}
@@ -627,7 +626,7 @@
                   <path d="M5.6 1.3 3.1 3.5H1.5a.5.5 0 0 0-.5.5v4a.5.5 0 0 0 .5.5h1.6l2.5 2.2a.45.45 0 0 0 .75-.35V1.65a.45.45 0 0 0-.75-.35Z" fill="currentColor"/>
                   <path d="M8.4 4.2a3.6 3.6 0 0 1 0 3.6M10.6 2.6a6.2 6.2 0 0 1 0 6.8" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
                 </svg>
-                for system</span>
+                <span class="vk-target">for system</span></span>
             </div>
           </div>
         </div>
@@ -692,6 +691,12 @@
         <span class="caption">Starts the app if it isn't running.</span>
       </span>
       <button class="glass-toggle" type="button" role="switch" aria-label="Launch the hooked app on play/pause" aria-checked="true"></button>
+    </div>
+    <div class="settings-row">
+      <span class="label">⌘ + volume keys control the hooked app
+        <span class="caption">When the volume keys aren't hooked, hold ⌘ to change the hooked app's volume instead of the system's.</span>
+      </span>
+      <button class="glass-toggle" type="button" role="switch" aria-label="Command plus volume keys control the hooked app" aria-checked="true"></button>
     </div>
     <div class="settings-row">
       <span class="label">Show an overlay on play/pause
@@ -846,6 +851,8 @@
   const appList = popup.querySelector('.glass-apps');
   const targetSplit = appList.querySelector('.target-split');
   const volumeControls = popup.querySelector('.glass-volume-controls');
+  const vkHint = volumeControls.querySelector('.glass-vk-hint');
+  const vkHintTarget = vkHint.querySelector('.vk-target');
   const play = popup.querySelector('.glass-play');
   let selectedApp = 'Spotify';
   let isPlaying = true;
@@ -994,6 +1001,7 @@
       }
       volumeKeys.setAttribute('aria-label', `Route volume keys to ${app}`);
       volumeKeys.setAttribute('aria-checked', String(appData.volumeKeys));
+      renderVolumeKeyHint();
     }
     play.disabled = !hooked;
     renderPlayButton();
@@ -1070,10 +1078,21 @@
   });
 
   const volumeKeys = popup.querySelector('.glass-check');
+
+  // ⌘ always leads to the volume the plain keys don't, so the hint flips with
+  // the checkbox rather than disappearing with it.
+  function renderVolumeKeyHint() {
+    const hooked = volumeKeys.getAttribute('aria-checked') === 'true';
+    const target = hooked ? 'system' : selectedApp;
+    vkHintTarget.textContent = `for ${target}`;
+    vkHint.setAttribute('aria-label', `Command plus Volume for ${target}`);
+  }
+
   volumeKeys.addEventListener('click', () => {
     const enabled = volumeKeys.getAttribute('aria-checked') !== 'true';
     supportedApps[selectedApp].volumeKeys = enabled;
     volumeKeys.setAttribute('aria-checked', String(enabled));
+    renderVolumeKeyHint();
   });
 
   // Launch at login and Add an app… now live in the Settings window, not the popover.

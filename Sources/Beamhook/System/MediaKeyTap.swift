@@ -17,6 +17,8 @@ final class MediaKeyTap: @unchecked Sendable {
     private struct RoutingState {
         var transportKeysHijacked = true
         var volumeKeysHijacked = false
+        var commandVolumeRouting = true
+        var targetCanTakeVolume = false
     }
 
     private let handler: Handler
@@ -40,6 +42,21 @@ final class MediaKeyTap: @unchecked Sendable {
     var volumeKeysHijacked: Bool {
         get { withStateLock { routingState.volumeKeysHijacked } }
         set { withStateLock { routingState.volumeKeysHijacked = newValue } }
+    }
+
+    /// The global "⌘ + volume keys control the hooked app" setting. Only governs
+    /// the Command chord; the plain keys are unaffected either way.
+    var commandVolumeRouting: Bool {
+        get { withStateLock { routingState.commandVolumeRouting } }
+        set { withStateLock { routingState.commandVolumeRouting = newValue } }
+    }
+
+    /// The target exposes a volume Beamhook can drive AND is running. Kept here
+    /// rather than resolved in the callback because asking NSWorkspace on the tap
+    /// thread would put an unbounded call in front of every key press.
+    var targetCanTakeVolume: Bool {
+        get { withStateLock { routingState.targetCanTakeVolume } }
+        set { withStateLock { routingState.targetCanTakeVolume = newValue } }
     }
 
     private var eventTap: CFMachPort?
@@ -138,23 +155,31 @@ final class MediaKeyTap: @unchecked Sendable {
             return nil
         }
 
-        if key.isVolume && volumeKeysHijacked {
-            // Command-volume is an escape hatch to the normal system volume.
-            // Remove Command before passing the event through so macOS receives
-            // an ordinary volume key rather than a modified shortcut.
-            if event.flags.contains(.maskCommand) {
-                event.flags = event.flags.subtracting(.maskCommand)
+        if key.isVolume {
+            let commandHeld = event.flags.contains(.maskCommand)
+            let routing = withStateLock { routingState }
+            switch VolumeKeyRouting.destination(commandHeld: commandHeld,
+                                                hijacked: routing.volumeKeysHijacked,
+                                                commandRoutingEnabled: routing.commandVolumeRouting,
+                                                targetCanTakeVolume: routing.targetCanTakeVolume) {
+            case .app:
+                // Forward on key-down AND repeats so holding the key ramps the volume.
+                if decoded.isDown {
+                    DispatchQueue.main.async { [weak self] in self?.handler(key) }
+                }
+                return nil
+            case .system:
+                // macOS gives Command + volume no meaning of its own, so a press
+                // that reaches the system must arrive as an ordinary volume key
+                // rather than a modified shortcut.
+                if commandHeld {
+                    event.flags = event.flags.subtracting(.maskCommand)
+                }
                 return Unmanaged.passUnretained(event)
             }
-
-            // Forward on key-down AND repeats so holding the key ramps the volume.
-            if decoded.isDown {
-                DispatchQueue.main.async { [weak self] in self?.handler(key) }
-            }
-            return nil
         }
 
-        // Everything else (volume keys when not hijacked, mute, ff/rewind) passes through.
+        // Everything else (mute, ff/rewind) passes through.
         return Unmanaged.passUnretained(event)
     }
 
