@@ -36,7 +36,8 @@
   "applicationSubCategory": "Menu bar utility",
   "operatingSystem": "macOS 14.0 or later",
   "processorRequirements": "Apple Silicon or Intel",
-  "softwareVersion": "1.1.8",
+  "softwareVersion": "1.2.0",
+  "dateModified": "2026-08-28",
   "license": "https://github.com/ppixu/beamhook/blob/main/LICENSE",
   "isAccessibleForFree": true,
   "image": "https://beamhook.app/og.png",
@@ -507,6 +508,17 @@
   .buy:active{transform:translate(1px,1px);box-shadow:1px 1px 0 #111}
   .buy-wrap{text-align:center;margin:26px 0 10px}
 
+  /* Proof of life: the apps Beamhook replaces last shipped in 2017 and 2019, so
+     "is this still maintained?" is a question the visitor is actually asking.
+     Every value here is generated from CHANGELOG.md by scripts/update-site.sh. */
+  .changes{text-align:left;margin:0 0 30px;padding-top:24px;border-top:1px solid var(--line)}
+  .changes-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 12px}
+  .changes-title{font-size:1.05rem;font-weight:700;letter-spacing:-.01em;margin:0}
+  .changes-note{font-family:var(--mono);font-size:.73rem;color:var(--faint);letter-spacing:.02em;margin-left:auto}
+  .changes-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+  .changes-list li{display:flex;gap:12px;align-items:baseline;color:var(--soft);font-size:.92rem;line-height:1.45}
+  .changes-list .v{font-family:var(--mono);font-size:.73rem;color:var(--faint);
+    letter-spacing:.02em;flex:none;min-width:3.6em}
   .support{color:var(--soft);font-size:.95rem;line-height:1.5;margin:0 auto 26px;max-width:44ch}
   .support a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line);transition:border-color .15s}
   .support a:hover{border-color:var(--ink)}
@@ -751,6 +763,20 @@
       <p class="path-desc">The code’s open — you can see exactly what handles your keystrokes. Clone it and build in one step; the <a href="https://github.com/ppixu/beamhook">README</a> has the details.</p>
     </section>
   </div>
+
+  <section class="changes" aria-labelledby="changes-title">
+    <div class="changes-head">
+      <h3 class="changes-title" id="changes-title">Still being worked on</h3>
+      <span class="changes-note"><!--site:version-->1.2.0 · 28 Aug 2026<!--/site:version--></span>
+    </div>
+    <ul class="changes-list">
+<!--site:changes-->
+      <li><span class="v">1.2.0</span><span>⌘ now flips which volume the hardware keys control.</span></li>
+      <li><span class="v">1.1.10</span><span>The overlay now says when macOS handled a press.</span></li>
+      <li><span class="v">1.1.9</span><span>Play/pause now flashes the overlay too.</span></li>
+<!--/site:changes-->
+    </ul>
+  </section>
 
   <p class="support">Found a bug, or an app you'd like supported?&nbsp;<br>Please <a href="https://github.com/ppixu/beamhook/issues">open an issue on GitHub</a>.</p>
 
