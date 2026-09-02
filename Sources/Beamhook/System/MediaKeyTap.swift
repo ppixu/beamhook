@@ -19,6 +19,7 @@ final class MediaKeyTap: @unchecked Sendable {
         var volumeKeysHijacked = false
         var commandVolumeRouting = true
         var targetCanTakeVolume = false
+        var targetCanTakeMute = false
     }
 
     private let handler: Handler
@@ -57,6 +58,14 @@ final class MediaKeyTap: @unchecked Sendable {
     var targetCanTakeVolume: Bool {
         get { withStateLock { routingState.targetCanTakeVolume } }
         set { withStateLock { routingState.targetCanTakeVolume = newValue } }
+    }
+
+    /// The target can be process-tap muted right now: the per-app mute feature
+    /// is on AND the target is running. Unlike volume this needs no scripting
+    /// support, so it is a separate capability from `targetCanTakeVolume`.
+    var targetCanTakeMute: Bool {
+        get { withStateLock { routingState.targetCanTakeMute } }
+        set { withStateLock { routingState.targetCanTakeMute = newValue } }
     }
 
     private var eventTap: CFMachPort?
@@ -179,7 +188,33 @@ final class MediaKeyTap: @unchecked Sendable {
             }
         }
 
-        // Everything else (mute, ff/rewind) passes through.
+        // The mute key rides the same Command flip as the volume keys — it is
+        // part of the same physical cluster — but toggles the hooked app's
+        // process-tap mute instead of a volume step.
+        if key == .mute {
+            let commandHeld = event.flags.contains(.maskCommand)
+            let routing = withStateLock { routingState }
+            switch VolumeKeyRouting.destination(commandHeld: commandHeld,
+                                                hijacked: routing.volumeKeysHijacked,
+                                                commandRoutingEnabled: routing.commandVolumeRouting,
+                                                targetCanTakeVolume: routing.targetCanTakeMute) {
+            case .app:
+                // Mute is a toggle: act once per fresh key-down, but swallow
+                // the repeats and the key-up too, else they'd fire the
+                // system's mute alongside ours.
+                if decoded.isDown && !decoded.isRepeat {
+                    DispatchQueue.main.async { [weak self] in self?.handler(key) }
+                }
+                return nil
+            case .system:
+                if commandHeld {
+                    event.flags = event.flags.subtracting(.maskCommand)
+                }
+                return Unmanaged.passUnretained(event)
+            }
+        }
+
+        // Everything else (ff/rewind) passes through.
         return Unmanaged.passUnretained(event)
     }
 

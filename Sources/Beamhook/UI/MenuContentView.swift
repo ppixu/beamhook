@@ -217,10 +217,16 @@ struct MenuContentView: View {
             let context = state.playbackTargetContext
             let previousState = playback.isPlaying
             guard playback.beginToggle(for: context) else { return }
+            // The click is the freshest knowledge: let the speaker animation
+            // flip with it, not with the settled read that follows.
+            if let previousState,
+               let bundleID = state.availableApps.first(where: { $0.id == context.targetID })?.bundleID {
+                state.notePlayback(bundleID: bundleID, playing: !previousState)
+            }
             Task {
                 let succeeded = await state.togglePlayPauseTarget(in: context)
                 let confirmedState = succeeded
-                    ? await state.confirmTargetPlaying(in: context)
+                    ? await state.confirmTargetPlaying(in: context, after: previousState)
                     : nil
                 guard context == state.playbackTargetContext else {
                     return
@@ -310,6 +316,19 @@ private struct PlayingAppsListAvailable: View {
         for def in scriptableRunning where seen.insert(def.bundleID).inserted {
             out.append(PlayingApp(id: def.bundleID, displayName: def.displayName, bundleID: def.bundleID))
         }
+        // Muted apps stay listed while they run, even once silent — a muted app
+        // stops appearing "recently playing", and the unmute button must not
+        // vanish along with the sound it silenced.
+        if state.perAppMuteEnabled {
+            for bid in state.mutedApps.sorted()
+            where !seen.contains(bid) && state.isRunning(bundleID: bid) {
+                seen.insert(bid)
+                let name = state.availableApps.first { $0.bundleID == bid }?.displayName
+                    ?? state.runningAppName(bundleID: bid)
+                    ?? bid
+                out.append(PlayingApp(id: bid, displayName: name, bundleID: bid))
+            }
+        }
         if let targetBundleID,
            let targetIndex = out.firstIndex(where: { $0.bundleID == targetBundleID }),
            targetIndex != 0 {
@@ -323,10 +342,12 @@ private struct PlayingAppsListAvailable: View {
         // monitor to its visible lifetime instead of relying on view appearance.
         VStack(alignment: .leading, spacing: 8) {
             let list = rows
+            let emittingIDs = Set(monitor.playingApps.map(\.bundleID))
             if !list.isEmpty {
                 Divider()
                 ForEach(Array(list.enumerated()), id: \.element.id) { index, app in
-                    AppVolumeRow(playing: app)
+                    AppVolumeRow(playing: app,
+                                 isEmitting: emittingIDs.contains(app.bundleID))
                     if index == 0, app.bundleID == targetBundleID, list.count > 1 {
                         Divider()
                     }
@@ -340,6 +361,12 @@ private struct PlayingAppsListAvailable: View {
                 monitor.stop()
             }
         }
+        // Rows with no play-state source (no scripting, no tabs) get their EQ
+        // animation from the live meter; keep its watchlist matched to the
+        // rows on screen, and empty the moment the menu closes.
+        .task(id: "\(state.isMenuVisible):\(meterWatchlist.sorted().joined(separator: ","))") {
+            state.setMeterWatchlist(state.isMenuVisible ? meterWatchlist : [])
+        }
         .task(id: browserRefreshID) {
             guard state.isMenuVisible else {
                 await state.refreshActiveBrowserMedia(bundleIDs: [])
@@ -350,7 +377,23 @@ private struct PlayingAppsListAvailable: View {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
             }
         }
-        .onDisappear { monitor.stop() }
+        .onDisappear {
+            monitor.stop()
+            state.setMeterWatchlist([])
+        }
+    }
+
+    /// Apps whose sound-emission truth needs the meter: no play/pause script
+    /// (those report their own state), not muted (arcs are suppressed for
+    /// muted rows anyway). Browsers are included on purpose — their tabs
+    /// report play state, but a tab with no media element (a Web Audio chime,
+    /// a voice chat) is invisible to the scan, and only the meter hears it.
+    private var meterWatchlist: Set<String> {
+        guard state.perAppMuteEnabled else { return [] }
+        return Set(rows.map(\.bundleID).filter { bid in
+            !state.availableApps.contains { $0.bundleID == bid && !$0.playPauseScript.isEmpty }
+                && !state.mutedApps.contains(bid)
+        })
     }
 }
 
@@ -358,6 +401,11 @@ private struct PlayingAppsListAvailable: View {
 private struct AppVolumeRow: View {
     @EnvironmentObject var state: AppState
     let playing: PlayingApp
+    /// Whether Core Audio currently reports this app with a live output stream
+    /// (drives the speaker icon's radiating-arcs animation). Trails reality by
+    /// up to one 2s monitor refresh, and a paused app can keep its stream open
+    /// for a moment — both fine for an at-a-glance indicator.
+    let isEmitting: Bool
     @State private var volume: Double = 50
     @State private var availability: VolumeAvailability = .systemVolumeOnly
     @State private var appIsPlaying: Bool?
@@ -426,6 +474,9 @@ private struct AppVolumeRow: View {
                 if scriptable && !isTarget && !isBrowser {
                     compactSlider
                 }
+                if state.perAppMuteEnabled {
+                    muteButton
+                }
                 Button(isTarget ? "Unhook" : "Hook") {
                     if isTarget {
                         state.setTarget(nil)
@@ -453,6 +504,16 @@ private struct AppVolumeRow: View {
             }
             ForEach(browserSources) { candidate in
                 BrowserVolumeRow(candidate: candidate)
+            }
+            // Audible, but no scanned tab is playing: the sound comes from a
+            // page with no media element (Web Audio), which no tab row can
+            // represent. Say so rather than leave the animation unexplained.
+            if isBrowser && !isMuted && state.audibleApps.contains(playing.bundleID)
+                && !browserSources.contains(where: \.isPlaying) {
+                Text("Sound from a tab with no media player")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .padding(.leading, 8)
             }
             if scriptable && isTarget && isBrowser {
                 volumeKeyControls
@@ -484,13 +545,20 @@ private struct AppVolumeRow: View {
             if let v = newVal { volume = Double(v) }
         }
         .task(id: "\(state.isMenuVisible):\(isTarget):\(playing.bundleID)") {
-            guard state.isMenuVisible, !isTarget, supportsDirectPlayPause else {
+            // Target rows poll too (the popover polls the target separately,
+            // but that state lives in MenuContentView): the arcs need a play
+            // state for every scriptable row, hooked or not.
+            guard state.isMenuVisible, supportsDirectPlayPause else {
                 appIsPlaying = nil
                 return
             }
             while !Task.isCancelled {
                 let latest = await state.isPlaying(bundleID: playing.bundleID)
-                if !playPauseInFlight { appIsPlaying = latest }
+                if !playPauseInFlight {
+                    appIsPlaying = latest
+                    // Polls are what keep the hint truthful — it never ages out.
+                    if let latest { state.notePolledPlayback(bundleID: playing.bundleID, playing: latest) }
+                }
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
             }
         }
@@ -501,10 +569,14 @@ private struct AppVolumeRow: View {
             guard !playPauseInFlight else { return }
             let wasPlaying = appIsPlaying == true
             appIsPlaying = !wasPlaying
+            // The click is the freshest knowledge there is; without this the
+            // hint from an earlier poll would outrank it for a few seconds.
+            state.notePlayback(bundleID: playing.bundleID, playing: !wasPlaying)
             playPauseInFlight = true
             Task {
                 if !(await state.togglePlayPause(bundleID: playing.bundleID)) {
                     appIsPlaying = wasPlaying
+                    state.notePlayback(bundleID: playing.bundleID, playing: wasPlaying)
                 }
                 playPauseInFlight = false
             }
@@ -534,6 +606,69 @@ private struct AppVolumeRow: View {
         .frame(width: 52)
         .accessibilityLabel("\(playing.displayName) volume")
         .help("\(playing.displayName) volume: \(Int(volume))%")
+    }
+
+    private var isMuted: Bool { state.isAppMuted(playing.bundleID) }
+
+    /// Whether the EQ animation runs: the best available "making sound right
+    /// now" signal per kind of app. Core Audio's stream flag (`isEmitting`)
+    /// alone is too sticky — a paused player keeps its stream open, and Unity
+    /// holds a silent one for a whole play-mode session — so it only gates,
+    /// never decides by itself when something better exists:
+    ///   browser    → its scanned tabs' play state, or the meter
+    ///   scriptable → its polled play state, gated by the stream flag
+    ///   the rest   → the live audio meter (see meterWatchlist)
+    private var showsEmittingArcs: Bool {
+        guard !isMuted else { return false }
+        if isBrowser {
+            // A playing tab answers instantly and per tab. The meter catches
+            // sound from tabs the scan can't see — Web Audio chimes, voice
+            // chats — which have no media element to report.
+            return browserSources.contains { $0.isPlaying }
+                || state.audibleApps.contains(playing.bundleID)
+        }
+        if supportsDirectPlayPause {
+            // Freshest first: a state learned from a toggle or click seconds
+            // ago beats this row's own 1.5s poll.
+            if let hinted = state.playbackHint(for: playing.bundleID) { return hinted }
+            guard let playing = appIsPlaying else { return isEmitting }
+            return playing
+        }
+        return state.audibleApps.contains(playing.bundleID)
+    }
+
+    /// Process-tap mute: silences the whole app at the audio HAL, so it works on
+    /// apps with no scripting at all. Browser tabs still get their own sliders —
+    /// this button mutes the entire browser.
+    ///
+    /// Muted wins over emitting: a muted app still renders audio (into the
+    /// tap), but animating its icon would suggest the mute isn't working.
+    private var muteButton: some View {
+        Button {
+            state.setAppMuted(!isMuted, bundleID: playing.bundleID)
+        } label: {
+            Group {
+                if isMuted {
+                    Image(systemName: "speaker.slash.fill")
+                } else if showsEmittingArcs {
+                    EmittingSpeakerIcon(seed: playing.bundleID)
+                } else {
+                    Image(systemName: "speaker.fill")
+                }
+            }
+            .font(.system(size: 9, weight: .semibold))
+            .frame(width: 16, height: 16)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isMuted ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+        .hoverHighlight(cornerRadius: 4)
+        .accessibilityLabel(isMuted
+                            ? "Unmute \(playing.displayName)"
+                            : "Mute \(playing.displayName)")
+        .help(isMuted
+              ? "Unmute \(playing.displayName)"
+              : "Mute \(playing.displayName) — silences only this app")
     }
 
     private var volumeKeyControls: some View {
@@ -575,6 +710,25 @@ private struct AppVolumeRow: View {
     }
 }
 
+/// The "this is making sound" indicator: a speaker whose arcs jump like an EQ
+/// meter. SF Symbols' `variableValue` lights 0–3 arcs while keeping the
+/// symbol's geometry stable, so the flicker never shifts the row's layout.
+/// The levels are a fixed loop (cheap, deterministic); `seed` offsets each
+/// icon's position in it so neighboring rows don't pulse in lockstep.
+private struct EmittingSpeakerIcon: View {
+    let seed: String
+
+    private static let levels: [Double] = [0.67, 1.0, 0.34, 0.67, 1.0, 0.67, 0.34, 1.0, 0.67, 0.34]
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.15)) { context in
+            let tick = Int(context.date.timeIntervalSinceReferenceDate / 0.15) + abs(seed.hashValue)
+            Image(systemName: "speaker.wave.3.fill",
+                  variableValue: Self.levels[tick % Self.levels.count])
+        }
+    }
+}
+
 @available(macOS 14.2, *)
 private struct BrowserVolumeRow: View {
     @EnvironmentObject var state: AppState
@@ -609,6 +763,12 @@ private struct BrowserVolumeRow: View {
                 // Titles truncate here, so the tooltip still has to carry the full
                 // one — it gains the action rather than being replaced by it.
                 .help("Switch to this tab: \(candidate.label)")
+            if sourceIsPlaying {
+                EmittingSpeakerIcon(seed: candidate.sourceID)
+                    .font(.system(size: 8))
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Playing")
+            }
             Spacer(minLength: 2)
             Slider(value: $volume, in: 0...100) { editing in
                 isEditing = editing

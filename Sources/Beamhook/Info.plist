@@ -20,6 +20,8 @@
     <true/>
     <key>NSAppleEventsUsageDescription</key>
     <string>Beamhook controls your chosen media app (play/pause, next, previous, volume) on your behalf.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Beamhook uses a system audio tap to mute apps you choose. It never records or stores any audio.</string>
     <key>SUFeedURL</key>
     <string>https://beamhook.app/appcast.xml</string>
     <key>SUPublicEDKey</key>

@@ -23,12 +23,14 @@ final class HookHUD {
         /// hooked. The notice names why, so the key controlling another app
         /// reads as the system routing it — not as Beamhook misfiring.
         case passthrough(appName: String, notice: PassthroughNotice)
+        /// A routed mute key flipped the hooked app's process-tap mute.
+        case mute(appName: String, muted: Bool)
 
         var appName: String {
             switch self {
             case .hooked(let appName, _), .volume(let appName, _, _),
                  .launching(let appName), .playback(let appName, _),
-                 .passthrough(let appName, _): appName
+                 .passthrough(let appName, _), .mute(let appName, _): appName
             }
         }
 
@@ -38,6 +40,7 @@ final class HookHUD {
             case .volume: 1.5
             case .launching: 2.0
             case .playback: 1.4
+            case .mute: 1.4
             // The remediation line is a sentence; leave time to read it.
             case .passthrough(let appName, let notice):
                 HookHUD.noticeText(notice, appName: appName) == nil ? 1.8 : 4.0
@@ -133,6 +136,12 @@ final class HookHUD {
         show(.passthrough(appName: appName, notice: notice))
     }
 
+    /// Confirm a mute-key press: muting is otherwise only audible by its
+    /// absence, which reads as a dead key.
+    func showMute(appName: String, muted: Bool) {
+        show(.mute(appName: appName, muted: muted))
+    }
+
     /// Point the "⌘ + <speaker> for …" line at whichever volume the chord reaches,
     /// or hide it when ⌘ changes nothing from here.
     private func applyCommandHint(_ destination: VolumeKeyDestination?, appName: String) {
@@ -210,6 +219,13 @@ final class HookHUD {
             hookIcon?.isHidden = true
             transportIcon?.isHidden = false
             transportIcon?.image = Self.transportSymbol(isPlaying: isPlaying)
+            volumeRow?.isHidden = true
+        case .mute(let appName, let muted):
+            label?.stringValue = muted ? "\(appName) muted" : "\(appName) unmuted"
+            hintRow?.isHidden = true
+            hookIcon?.isHidden = true
+            transportIcon?.isHidden = false
+            transportIcon?.image = Self.muteSymbol(muted: muted)
             volumeRow?.isHidden = true
         case .passthrough(let appName, let notice):
             label?.stringValue = "macOS handled Play/Pause"
@@ -532,6 +548,12 @@ final class HookHUD {
 
     /// The glyph for a play/pause press. `nil` — an app that reports no state —
     /// gets the neutral combined mark rather than a guess in either direction.
+    private static func muteSymbol(muted: Bool) -> NSImage? {
+        muted
+            ? NSImage(systemSymbolName: "speaker.slash.fill", accessibilityDescription: "Muted")
+            : NSImage(systemSymbolName: "speaker.wave.2.fill", accessibilityDescription: "Unmuted")
+    }
+
     private static func transportSymbol(isPlaying: Bool?) -> NSImage? {
         switch isPlaying {
         case true?:

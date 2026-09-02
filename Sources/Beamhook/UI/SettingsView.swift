@@ -22,7 +22,8 @@ struct SettingsView: View {
         // includes `.resizable`, and a hard-fixed frame here would leave it
         // draggable but visually inert. The Apps tab's list is the one that
         // actually benefits — it only fits ~5 rows at the original 300pt.
-        .frame(minWidth: 440, idealWidth: 440, minHeight: 300, idealHeight: 300)
+        // 340pt fits the General tab's five rows with captions.
+        .frame(minWidth: 440, idealWidth: 440, minHeight: 340, idealHeight: 340)
     }
 }
 
@@ -44,7 +45,7 @@ private struct GeneralSettingsTab: View {
 
             settingRow(
                 title: "⌘ + volume keys control the hooked app",
-                caption: "When the volume keys aren't hooked, hold ⌘ to change the hooked app's volume instead of the system's.",
+                caption: "When the volume keys aren't hooked, hold ⌘ to change the hooked app's volume instead of the system's. With per-app mute on, ⌘ + mute toggles the hooked app's mute the same way.",
                 isOn: Binding(get: { state.commandVolumeRouting },
                               set: { state.setCommandVolumeRouting($0) }))
 
@@ -53,6 +54,19 @@ private struct GeneralSettingsTab: View {
                 caption: "Flashes the app the keys reached, like the volume overlay.",
                 isOn: Binding(get: { state.showPlayPauseHUD },
                               set: { state.setShowPlayPauseHUD($0) }))
+
+            // The tap API behind the mute buttons is macOS 14.2+; on 14.0/14.1
+            // the row is omitted rather than shown dead.
+            if #available(macOS 14.2, *) {
+                settingRow(
+                    title: "Mute buttons next to apps",
+                    caption: "Click an app's speaker in the menu to silence just that app — works even on apps Beamhook can't otherwise control. Needs the System Audio Recording permission.",
+                    isOn: Binding(get: { state.perAppMuteEnabled },
+                                  set: { state.setPerAppMute($0) }))
+                if state.perAppMuteEnabled, state.mutePermissionGranted == false {
+                    mutePermissionHint
+                }
+            }
 
             Spacer()
         }
@@ -81,6 +95,23 @@ private struct GeneralSettingsTab: View {
             Toggle("", isOn: isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
+                .controlSize(.small)
+        }
+    }
+
+    /// Shown when the mute toggle is on but macOS is blocking the audio taps —
+    /// otherwise a denied permission just looks like buttons that do nothing.
+    private var mutePermissionHint: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Beamhook isn't allowed to use system-audio taps, so the mute buttons can't work yet. Allow Beamhook under System Audio Recording.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Button("Open System Settings") { state.permissions.openAudioCaptureSettings() }
+                Button("Re-check") { state.recheckMutePermission() }
+            }
+            .controlSize(.small)
         }
     }
 }

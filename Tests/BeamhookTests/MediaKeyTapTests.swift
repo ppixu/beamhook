@@ -197,6 +197,114 @@ final class MediaKeyTapTests: XCTestCase {
         XCTAssertEqual(handled, [.volumeUp])
     }
 
+    // MARK: - Mute routing
+
+    /// NX_KEYTYPE_MUTE.
+    private let muteKeyCode = 7
+
+    func testCommandMuteIsSwallowedForTheAppWhenTheVolumeKeysAreNotHooked() {
+        var handled: [MediaKey] = []
+        let tap = MediaKeyTap(handler: { handled.append($0) })
+        tap.volumeKeysHijacked = false
+        tap.commandVolumeRouting = true
+        tap.targetCanTakeMute = true
+
+        let result = tap.handle(type: systemDefinedType,
+                                event: mediaKeyEvent(keyCode: muteKeyCode,
+                                                     isDown: true, command: true))
+
+        XCTAssertNil(result, "⌘ + mute must be swallowed and routed to the app")
+        drainMainQueue()
+        XCTAssertEqual(handled, [.mute])
+    }
+
+    func testPlainMuteStillReachesTheSystemWhenTheVolumeKeysAreNotHooked() {
+        var handled: [MediaKey] = []
+        let tap = MediaKeyTap(handler: { handled.append($0) })
+        tap.volumeKeysHijacked = false
+        tap.commandVolumeRouting = true
+        tap.targetCanTakeMute = true
+
+        let result = tap.handle(type: systemDefinedType,
+                                event: mediaKeyEvent(keyCode: muteKeyCode, isDown: true))
+
+        XCTAssertNotNil(result, "an unmodified mute key belongs to the system")
+        drainMainQueue()
+        XCTAssertTrue(handled.isEmpty)
+    }
+
+    /// The volume-keys checkbox flips the whole cluster: with it on, plain mute
+    /// mutes the hooked app and ⌘ + mute becomes the escape to the system.
+    func testPlainMuteIsSwallowedForTheAppWhenTheVolumeKeysAreHooked() {
+        var handled: [MediaKey] = []
+        let tap = MediaKeyTap(handler: { handled.append($0) })
+        tap.volumeKeysHijacked = true
+        tap.targetCanTakeMute = true
+
+        let result = tap.handle(type: systemDefinedType,
+                                event: mediaKeyEvent(keyCode: muteKeyCode, isDown: true))
+
+        XCTAssertNil(result)
+        drainMainQueue()
+        XCTAssertEqual(handled, [.mute])
+    }
+
+    func testCommandMuteEscapesToTheSystemWithTheModifierStripped() {
+        let tap = MediaKeyTap { _ in }
+        tap.volumeKeysHijacked = true
+        tap.targetCanTakeMute = true
+
+        let result = tap.handle(type: systemDefinedType,
+                                event: mediaKeyEvent(keyCode: muteKeyCode,
+                                                     isDown: true, command: true))
+
+        let passed = try? XCTUnwrap(result?.takeUnretainedValue())
+        XCTAssertNotNil(passed)
+        XCTAssertFalse(passed!.flags.contains(.maskCommand),
+                       "macOS must receive an ordinary mute key, not a modified shortcut")
+    }
+
+    /// Per-app mute off, or the target quit: every mute press belongs to macOS.
+    func testMuteReachesTheSystemWhenTheTargetCannotTakeIt() {
+        for hijacked in [true, false] {
+            for command in [true, false] {
+                var handled: [MediaKey] = []
+                let tap = MediaKeyTap(handler: { handled.append($0) })
+                tap.volumeKeysHijacked = hijacked
+                tap.commandVolumeRouting = true
+                tap.targetCanTakeMute = false
+
+                let result = tap.handle(type: systemDefinedType,
+                                        event: mediaKeyEvent(keyCode: muteKeyCode,
+                                                             isDown: true, command: command))
+
+                XCTAssertNotNil(result, "hijacked=\(hijacked) command=\(command)")
+                drainMainQueue()
+                XCTAssertTrue(handled.isEmpty, "hijacked=\(hijacked) command=\(command)")
+            }
+        }
+    }
+
+    /// Mute is a toggle: a held key must not flap it, but the repeats and the
+    /// key-up still have to be swallowed so the system's mute never fires.
+    func testHookedMuteRepeatsAndKeyUpAreSwallowedWithoutForwarding() {
+        var handled: [MediaKey] = []
+        let tap = MediaKeyTap(handler: { handled.append($0) })
+        tap.volumeKeysHijacked = true
+        tap.targetCanTakeMute = true
+
+        let repeatResult = tap.handle(type: systemDefinedType,
+                                      event: mediaKeyEvent(keyCode: muteKeyCode,
+                                                           isDown: true, isRepeat: true))
+        let upResult = tap.handle(type: systemDefinedType,
+                                  event: mediaKeyEvent(keyCode: muteKeyCode, isDown: false))
+
+        XCTAssertNil(repeatResult)
+        XCTAssertNil(upResult)
+        drainMainQueue()
+        XCTAssertTrue(handled.isEmpty)
+    }
+
     func testPassedThroughKeyUpAndRepeatDoNotNotify() {
         var passedThrough: [MediaKey] = []
         let tap = MediaKeyTap(handler: { _ in },

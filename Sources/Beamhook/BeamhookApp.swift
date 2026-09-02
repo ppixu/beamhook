@@ -51,8 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         // The glyph badges the hook with the current target's mark. `@Published`
         // delivers its current value on subscribe, so this also sets the launch icon.
         glyphObserver = state.$menuBarGlyph
-            .removeDuplicates()
-            .sink { [weak self] glyph in self?.applyStatusIcon(glyph) }
+            .combineLatest(state.$menuBarMuted)
+            .removeDuplicates { $0.0 == $1.0 && $0.1 == $1.1 }
+            .sink { [weak self] glyph, muted in self?.applyStatusIcon(glyph, muted: muted) }
 
         // Let the hook HUD anchor itself just below this status item, and give
         // the icon a little fishing bob whenever the HUD appears.
@@ -110,11 +111,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     /// Swap the status-item image. A badged glyph that fails to load falls back to
     /// the plain hook rather than leaving an empty, unclickable status item.
-    private func applyStatusIcon(_ glyph: MenuBarGlyph) {
+    private func applyStatusIcon(_ glyph: MenuBarGlyph, muted: Bool) {
         guard let button = statusItem?.button else { return }
         let image = NSImage(named: glyph.rawValue) ?? NSImage(named: MenuBarGlyph.hook.rawValue)
         image?.isTemplate = true          // let macOS tint it for light/dark menu bars
-        button.image = image
+        button.image = muted ? image.map { Self.slashed($0, badged: glyph != .hook) } : image
+    }
+
+    /// The hooked app is muted: a slash drawn over the glyph, the way SF
+    /// Symbols' .slash variants read — drawn here rather than shipped as a
+    /// second set of pre-slashed assets. A wider knockout stroke clears a gap
+    /// first so the slash stays legible over the glyph.
+    ///
+    /// Badged glyphs strike only the badge — it IS the muted app; the hook is
+    /// still doing its job. The badge sits right of the hook's shaft in every
+    /// badged asset (x ≈ 0.56–0.92, y ≈ 0.36–0.76 from the top; measured on the
+    /// catalog's menubar@2x.png files, which do NOT share the geometry of the
+    /// Icon/menubar-*.png masters — keep in step if the badge ever moves). The
+    /// plain hook has no badge, so it takes the slash across the whole glyph.
+    private static func slashed(_ base: NSImage, badged: Bool) -> NSImage {
+        let image = NSImage(size: base.size, flipped: false) { rect in
+            base.draw(in: rect)
+            let slash = NSBezierPath()
+            if badged {
+                // Through the badge's center (0.735, 0.56 from top-left),
+                // half-length 0.18 — long enough to cross the badge, short
+                // enough to never touch the hook.
+                let cx = 0.735, cy = 0.56, r = 0.18
+                slash.move(to: NSPoint(x: rect.width * (cx - r), y: rect.height * (1 - (cy - r))))
+                slash.line(to: NSPoint(x: rect.width * (cx + r), y: rect.height * (1 - (cy + r))))
+            } else {
+                let inset = rect.insetBy(dx: rect.width * 0.10, dy: rect.height * 0.10)
+                slash.move(to: NSPoint(x: inset.minX, y: inset.maxY))
+                slash.line(to: NSPoint(x: inset.maxX, y: inset.minY))
+            }
+            slash.lineCapStyle = .round
+            NSGraphicsContext.current?.compositingOperation = .destinationOut
+            slash.lineWidth = rect.width * (badged ? 0.12 : 0.20)
+            NSColor.black.setStroke()
+            slash.stroke()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            slash.lineWidth = rect.width * (badged ? 0.055 : 0.09)
+            slash.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 
     @objc private func togglePopover() {
