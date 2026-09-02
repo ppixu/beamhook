@@ -27,8 +27,9 @@ Beamhook makes your Mac's media keys predictable. It sends play/pause,
 next, and previous to **one app you choose** — so macOS can't redirect them
 to Apple Music, YouTube, or whichever player it remembers. It also lets you
 control the volume of apps that are currently playing audio, when the app
-supports AppleScript. Requires macOS 14.0 or later; the active-audio source list
-requires macOS 14.2. Tested on macOS Tahoe 26.5.
+supports AppleScript — and mute any app at all, AppleScript or not. Requires
+macOS 14.0 or later; the active-audio source list and per-app mute require
+macOS 14.2. Tested on macOS Tahoe 26.5.
 
 > [!IMPORTANT]
 > Firefox is not supported. Browser control works with Safari, Chrome, Brave,
@@ -47,6 +48,16 @@ requires macOS 14.2. Tested on macOS Tahoe 26.5.
   to the app, ⌘ + a volume key reaches the Mac's system volume; with them left
   to the system, ⌘ + a volume key reaches the hooked app. Either way the plain
   keys keep their usual meaning. Can be turned off in Settings.
+- **Mute any app.** Turn on "Mute buttons next to apps" in Settings and every
+  app in the menu gets a speaker button — including apps with no AppleScript at
+  all, such as Electron apps and chat apps with notification chimes. Works
+  through a Core Audio process tap; needs macOS 14.2 and the System Audio
+  Recording permission, which macOS asks for on the first mute. Beamhook only
+  mutes, it never records. Off by default.
+- The speaker icon animates while an app or tab is actually making sound.
+- ⌘ + mute toggles the hooked app's mute, following the same rule as the volume
+  keys. The menu-bar icon shows a slash through the hooked app's badge while it
+  is muted.
 - If the hooked app isn't running, play/pause starts it and begins playback. Can
   be turned off in Settings. (A menu-driven app launched with an empty queue —
   TIDAL, for instance — has nothing to play.)

@@ -4,6 +4,42 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.2.0] — 2026-09-02
+
+### Added
+
+- **Mute any app from the menu — even ones Beamhook can't otherwise control.**
+  Turn on "Mute buttons next to apps" under Settings → General and every app in
+  the menu gets a speaker button. It works at the audio-system level, through a
+  Core Audio process tap, so it needs no AppleScript: Electron apps, chat apps
+  with notification chimes, and whole browsers can all be silenced with one
+  click. Mutes survive Beamhook restarts; quitting Beamhook unmutes everything.
+  Muting needs macOS 14.2 and the System Audio Recording permission, which
+  macOS asks for on the first mute. Beamhook only listens for its own mute and
+  never records or stores any audio. The setting is off by default.
+- **The speaker shows what is actually making sound.** While an app or a
+  browser tab plays, its speaker icon animates like a level meter. The signal
+  is real rather than "has an audio stream open": a browser's playing tabs, a
+  player's own reported state, and a live audio meter for apps that report
+  nothing — so a paused player, or a Unity session sitting silent in play
+  mode, stays still. When a browser plays from a page with no media player (a
+  Web Audio chime, a voice chat), the row says so instead of hinting at a tab
+  that isn't there.
+- **⌘ + mute toggles the hooked app's mute.** The mute key follows the same
+  rule as the volume keys: with "Volume keys" off, ⌘ + mute mutes the hooked
+  app; with it on, the plain mute key does and ⌘ + mute reaches the system.
+  Needs the mute setting above. An overlay confirms each press.
+- The menu-bar icon draws a slash through the hooked app's badge while that
+  app is muted.
+
+### Changed
+
+- Browser playback is now detected from the browser's audio helper process.
+  Chrome, Brave, Arc and Vivaldi play audio in a helper that macOS's list of
+  running apps doesn't include, which is why the "recently playing" list could
+  miss a Chromium browser; the same fix is what lets a browser be muted.
+- The switches in Settings are smaller.
+
 ## [1.1.11] — 2026-08-28
 
 ### Added
