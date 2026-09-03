@@ -15,6 +15,28 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.2.0</title>
+            <pubDate>Thu, 03 Sep 2026 10:34:21 +0300</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.2.0</link>
+            <sparkle:version>18</sparkle:version>
+            <sparkle:shortVersionString>1.2.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Added</h3>
+<ul>
+<li>**Mute any app from the menu — even ones Beamhook can't otherwise control.** Turn on "Mute buttons next to apps" under Settings → General and every app in the menu gets a speaker button. It works at the audio-system level, through a Core Audio process tap, so it needs no AppleScript: Electron apps, chat apps with notification chimes, and whole browsers can all be silenced with one click. Mutes survive Beamhook restarts; quitting Beamhook unmutes everything. Muting needs macOS 14.2 and the System Audio Recording permission, which macOS asks for on the first mute. Beamhook only listens for its own mute and never records or stores any audio. The setting is off by default.</li>
+<li>**The speaker shows what is actually making sound.** While an app or a browser tab plays, its speaker icon animates like a level meter. The signal is real rather than "has an audio stream open": a browser's playing tabs, a player's own reported state, and a live audio meter for apps that report nothing — so a paused player, or a Unity session sitting silent in play mode, stays still. When a browser plays from a page with no media player (a Web Audio chime, a voice chat), the row says so instead of hinting at a tab that isn't there.</li>
+<li>**⌘ + mute toggles the hooked app's mute.** The mute key follows the same rule as the volume keys: with "Volume keys" off, ⌘ + mute mutes the hooked app; with it on, the plain mute key does and ⌘ + mute reaches the system. Needs the mute setting above. An overlay confirms each press.</li>
+<li>The menu-bar icon draws a slash through the hooked app's badge while that app is muted.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li>Browser playback is now detected from the browser's audio helper process. Chrome, Brave, Arc and Vivaldi play audio in a helper that macOS's list of running apps doesn't include, which is why the "recently playing" list could miss a Chromium browser; the same fix is what lets a browser be muted.</li>
+<li>The switches in Settings are smaller.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.2.0.zip" length="2286357" type="application/octet-stream" sparkle:edSignature="LsWSSVwaAgtoSrYY4PTc8nREbu8ypn6qgR538Pe6b1XYwgtNeO+C8pVoonnWcsUcmD/tLZEnrUx1sv+ahwyiAw=="/>
+        </item>
+        <item>
             <title>1.1.11</title>
             <pubDate>Fri, 28 Aug 2026 18:08:36 +0300</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.1.11</link>
@@ -221,6 +243,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: 1zhGkk3B8ZvbL1B13qBnl3D9Rbi8WGQcI9x8eSGKQfahOyNO5PkwxlnE4kGnjML6VcdfXofxLve6yDiZNnbQCA==
-length: 17493
+edSignature: E3LoTXrxHmNJeW4rFtcSiO/tnwOvnigmIalzE/b7sdthaGMQNNp02g5PkaP/6r6WBCVB50IAtdZWtJFnyJc8CA==
+length: 20237
 -->
