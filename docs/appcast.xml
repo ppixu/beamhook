@@ -15,6 +15,20 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.2.1</title>
+            <pubDate>Fri, 04 Sep 2026 10:19:21 +0300</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.2.1</link>
+            <sparkle:version>19</sparkle:version>
+            <sparkle:shortVersionString>1.2.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Changed</h3>
+<ul>
+<li>**Mute buttons are on by default.** They are the menu's answer for apps Beamhook can't otherwise control, so they no longer wait behind a setting. The System Audio Recording permission behind them is now requested the first time Beamhook starts after this update — right after Accessibility on a fresh install — instead of on the first mute. Turn the buttons off under Settings → General if you'd rather not have them.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.2.1.zip" length="2286753" type="application/octet-stream" sparkle:edSignature="6HlUVUjsaARrgQvPvjYPZwrTZYQ5rVcH43NgHWt8KYQkuqrEiGsy6Qpy7qiM02hjfxYaSWymtApAaapA8vt3Dg=="/>
+        </item>
+        <item>
             <title>1.2.0</title>
             <pubDate>Thu, 03 Sep 2026 10:34:21 +0300</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.2.0</link>
@@ -243,6 +257,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: E3LoTXrxHmNJeW4rFtcSiO/tnwOvnigmIalzE/b7sdthaGMQNNp02g5PkaP/6r6WBCVB50IAtdZWtJFnyJc8CA==
-length: 20237
+edSignature: WmevBx4EPlWXRnT0fkXZBUy5eSseKAghOmtpKpsCloVa+Hch2g1ss5uD0PQmnV2wm0EQZUuN6JYsW88eEAskBw==
+length: 21399
 -->
