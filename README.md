@@ -48,12 +48,12 @@ macOS 14.2. Tested on macOS Tahoe 26.5.
   to the app, ⌘ + a volume key reaches the Mac's system volume; with them left
   to the system, ⌘ + a volume key reaches the hooked app. Either way the plain
   keys keep their usual meaning. Can be turned off in Settings.
-- **Mute any app.** Turn on "Mute buttons next to apps" in Settings and every
-  app in the menu gets a speaker button — including apps with no AppleScript at
-  all, such as Electron apps and chat apps with notification chimes. Works
-  through a Core Audio process tap; needs macOS 14.2 and the System Audio
-  Recording permission, which macOS asks for on the first mute. Beamhook only
-  mutes, it never records. Off by default.
+- **Mute any app.** Every app in the menu has a speaker button — including
+  apps with no AppleScript at all, such as Electron apps and chat apps with
+  notification chimes. Works through a Core Audio process tap; needs macOS 14.2
+  and the System Audio Recording permission, which macOS asks for when Beamhook
+  first starts. Beamhook only mutes, it never records. Can be turned off in
+  Settings.
 - The speaker icon animates while an app or tab is actually making sound.
 - ⌘ + mute toggles the hooked app's mute, following the same rule as the volume
   keys. The menu-bar icon shows a slash through the hooked app's badge while it

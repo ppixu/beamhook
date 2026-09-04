@@ -9,14 +9,22 @@ final class PerAppMutePreferenceTests: XCTestCase {
         return d
     }
 
-    /// Absent means OFF: muting rides on a system-audio tap, which costs a
-    /// scary-sounding permission — nobody should hit that prompt uninvited.
-    func testDefaultsToDisabledWhenUnset() {
-        XCTAssertFalse(PerAppMutePreference.isEnabled(makeDefaults()))
+    /// Absent means ON: the mute buttons are the menu's whole answer for apps
+    /// Beamhook can't otherwise control, so they are there from the start (the
+    /// permission behind them is asked for once, at first launch).
+    func testDefaultsToEnabledWhenUnset() {
+        XCTAssertTrue(PerAppMutePreference.isEnabled(makeDefaults()))
+    }
+
+    func testRespectsAnExplicitOff() {
+        let defaults = makeDefaults()
+        PerAppMutePreference.setEnabled(false, in: defaults)
+        XCTAssertFalse(PerAppMutePreference.isEnabled(defaults))
     }
 
     func testRespectsAnExplicitOn() {
         let defaults = makeDefaults()
+        PerAppMutePreference.setEnabled(false, in: defaults)
         PerAppMutePreference.setEnabled(true, in: defaults)
         XCTAssertTrue(PerAppMutePreference.isEnabled(defaults))
     }

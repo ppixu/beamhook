@@ -144,8 +144,9 @@ final class AppState: ObservableObject {
     @Published var showPlayPauseHUD: Bool = PlayPauseHUDPreference.isEnabled(.standard)
     /// Whether ⌘ + a volume key reaches the hooked app when the plain keys don't.
     @Published var commandVolumeRouting: Bool = CommandVolumePreference.isEnabled(.standard)
-    /// Whether the per-app mute buttons are shown (default OFF: the taps behind
-    /// them need the System Audio Recording permission, so the feature is opt-in).
+    /// Whether the per-app mute buttons are shown. Default ON; the System Audio
+    /// Recording permission behind them is asked for once, at first activation
+    /// (see `requestMutePermissionOnce`).
     @Published var perAppMuteEnabled: Bool = PerAppMutePreference.isEnabled(.standard)
     /// Mirror of the mute controller's muted set, so rows observing AppState
     /// re-render on a mute without each observing the controller separately.
@@ -243,9 +244,10 @@ final class AppState: ObservableObject {
 
         loadVolumeOverrides()
         if PerAppMutePreference.isEnabled(.standard), #available(macOS 14.2, *) {
-            // Deliberately no permission probe here: re-tapping the persisted
-            // mutes is silent when the grant is in place, and launch/login is no
-            // moment to surface a permission prompt. Settings does the asking.
+            // No permission probe here: this runs before Accessibility is
+            // settled. `activateInput` asks once, on the first activation, so
+            // a fresh install sees Accessibility first and System Audio
+            // Recording second rather than both dialogs at once.
             muteController.start()
         }
         outputMonitor.$outputVolumeControllable
@@ -394,11 +396,27 @@ final class AppState: ObservableObject {
     /// (e.g. after wake / fast user switch) don't re-flash it.
     private var didAnnounceStartupHook = false
 
+    private static let mutePermissionRequestedKey = "perAppMutePermissionRequested"
+
+    /// With per-app mute on by default, the System Audio Recording prompt
+    /// belongs at first launch — right here, once Accessibility is in place, so
+    /// a fresh install meets the two dialogs one after the other — rather than
+    /// at some later first mute. Persisted, so it happens once per install
+    /// (macOS never re-prompts after an answer anyway; this just spares every
+    /// later launch the probe). A later toggle in Settings still probes.
+    private func requestMutePermissionOnce() {
+        guard perAppMuteEnabled, #available(macOS 14.2, *),
+              !UserDefaults.standard.bool(forKey: Self.mutePermissionRequestedKey) else { return }
+        UserDefaults.standard.set(true, forKey: Self.mutePermissionRequestedKey)
+        muteController.requestPermission()
+    }
+
     private func activateInput() {
         tap.start()
         watchdog.start()
         outputMonitor.start()
         updateVolumeRouting()
+        requestMutePermissionOnce()
         if selectedTargetIsBrowser {
             Task { await refreshBrowserMedia() }
         }

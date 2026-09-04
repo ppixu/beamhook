@@ -4,6 +4,17 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.2.1] — 2026-09-02
+
+### Changed
+
+- **Mute buttons are on by default.** They are the menu's answer for apps
+  Beamhook can't otherwise control, so they no longer wait behind a setting.
+  The System Audio Recording permission behind them is now requested the first
+  time Beamhook starts after this update — right after Accessibility on a fresh
+  install — instead of on the first mute. Turn the buttons off under
+  Settings → General if you'd rather not have them.
+
 ## [1.2.0] — 2026-09-02
 
 ### Added
