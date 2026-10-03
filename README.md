@@ -76,7 +76,13 @@ macOS 14.2. Tested on macOS Tahoe 26.5.
   Command-Play toggles playback, Command-Mute mutes, and Command-H hooks the
   selection. With the volume-key toggle on, plain volume keys open the list
   and these shortcuts work without Command; Command-volume controls system
-  volume. The legend follows the toggle.
+  volume. The legend follows the toggle. With the toggle off, releasing Command
+  dismisses the list; with it on, the list fades after inactivity.
+- **Volume and mute are independent per app and per browser tab.** App sliders
+  affect the whole app; indented tab sliders affect that tab. Raising a muted
+  source's volume unmutes it. Muting remembers its previous level. The speaker
+  arcs animate outward when sound is detected, with 1–3 active arcs based on
+  the volume setting; they are an activity indicator, not a loudness meter.
 - Lists focus on recently sounding apps, with **Show all** in the menu for
   the rest. Spotify's current artist and song appear beside its name and under
   the title in its small playback overlay.

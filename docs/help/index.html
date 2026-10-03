@@ -286,6 +286,42 @@
       playing and to send play, pause and volume.</li>
   </ul>
 
+  <h2 id="volume-controls">Volume and mute controls</h2>
+  <p>Each app has a volume slider and a speaker button for mute. A browser's
+  main row controls the whole browser; indented rows control individual tabs.
+  Raising the volume of a muted source unmutes it. Muting remembers the previous
+  level so you can restore it.</p>
+  <p>Per-app volume and mute require macOS 14.2 or later and
+  <b>System Audio Recording</b> permission. Audio is processed live and never
+  stored. Native app controls remain in use where available. Browser-tab controls
+  also require the JavaScript and Automation permissions described above.</p>
+  <h3>The expanded overlay</h3>
+  <p>With the menu's <b>Volume keys</b> toggle off, press <b>Command + Volume</b>
+  or <b>Command + Play</b> to open the app-and-tab selector. While a regular
+  Beamhook overlay is visible, Command plus an arrow opens it too.</p>
+  <ul>
+    <li><b>Command + Up/Down:</b> select a source.</li>
+    <li><b>Command + Left/Right:</b> adjust its volume.</li>
+    <li><b>Command + Play:</b> play or pause the selected source.</li>
+    <li><b>Command + Mute:</b> mute or restore it.</li>
+    <li><b>Command + H:</b> hook the selected app or tab.</li>
+  </ul>
+  <p>Turn <b>Volume keys</b> on to open the selector with plain volume keys
+  and use these shortcuts without Command while it is visible. In this mode,
+  <b>Command + Volume always controls system volume</b>. With the toggle off,
+  releasing Command closes the selector; with it on, the selector fades after
+  inactivity. Playback controls appear only for sources that support them,
+  and browsers show playback controls on their tabs.</p>
+  <h3>Which apps appear?</h3>
+  <p>The compact lists show apps producing sound or heard within the last two
+  hours, plus the hooked source. Choose <b>Show all</b> in the menu to see other
+  available apps. Recently played browser tabs remain available after pausing
+  for up to two hours, with up to three shown per browser. Closed tabs disappear
+  on the next scan; this history clears when Beamhook quits.</p>
+  <p>Animated speaker arcs indicate activity. Their number follows the volume
+  setting, with at least one animated arc when sound is detected; they are not
+  a live loudness meter.</p>
+
   <p class="foot">Still stuck, or does your browser look different?
   <a href="https://github.com/ppixu/beamhook/issues">Open an issue on GitHub</a> and tell us what you see —
   including your macOS and browser versions. &nbsp;·&nbsp; <a href="/">beamhook.app</a></p>

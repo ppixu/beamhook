@@ -254,7 +254,7 @@
    * Nested inside the bar, backdrop-filter only samples the bar’s backdrop root
    * and never blurs the page. Keep opacity/filter off ancestors of this node.
    */
-  /* Hang left from the tray — a 220px panel can’t center under a near-edge icon */
+  /* Hang left from the tray so controls stay inside the viewport. */
   .popup{position:fixed;left:auto;right:8px;top:34px;
     width:min(228px,calc(100vw - 16px));margin:0;padding:0;pointer-events:auto;z-index:50;text-align:left;
     visibility:hidden;transition:top .4s cubic-bezier(.34,1.45,.64,1),visibility 0s linear .28s}
@@ -569,6 +569,43 @@
       background: rgba(255, 255, 255, 0.2);
     }
   }
+  /* Current compact menu preview. Native range controls support touch and keys. */
+  .popup{width:min(340px,calc(100vw - 16px))}
+  .preview-header{display:flex;align-items:center;justify-content:space-between}
+  .preview-header .glass-label{text-align:left;font-weight:600;flex:1;padding:4px}
+  .preview-options{position:relative}
+  .preview-options summary{cursor:pointer;list-style:none;letter-spacing:2px;padding:2px 6px;opacity:.65}
+  .preview-options summary::-webkit-details-marker{display:none}
+  .preview-options > div{position:absolute;right:0;top:100%;z-index:20;padding:5px;min-width:150px;background:Canvas;color:CanvasText;border-radius:10px;box-shadow:0 6px 25px #0003}
+  .preview-options button{display:block;background:none;border:0;color:inherit;padding:8px;font:inherit;font-size:12px;cursor:pointer;width:100%;text-align:left}
+  .preview-options .glass-gear{height:auto;margin:0}
+  .preview-apps{display:flex;flex-direction:column;gap:3px;max-height:310px;overflow:auto}
+  .preview-row{display:grid;grid-template-columns:minmax(0,1fr) 20px 22px 68px;align-items:center;gap:5px;padding:9px 7px;border-radius:12px;min-height:40px}
+  .preview-row.hooked,.preview-row.muted{background:rgba(120,120,128,.12)}
+  .preview-row.subitem{padding-left:22px;min-height:32px;padding-top:5px;padding-bottom:5px}
+  .preview-row button{appearance:none;background:none;border:0;color:inherit;padding:0;cursor:pointer;min-width:0}
+  .preview-name{display:flex;align-items:center;gap:7px;text-align:left;height:24px}
+  .preview-title{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hooked .preview-title{font-weight:650}
+  .subitem .preview-title{font-size:11px}
+  .preview-hook{opacity:.28;flex:none;width:12px;height:18px}
+  .preview-hook svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  .hooked .preview-hook{opacity:1}
+  .preview-play{width:20px;height:22px;display:grid;place-items:center}
+  .preview-play svg{width:10px;height:10px;fill:currentColor}
+  .preview-mute svg{width:20px;height:18px}
+  .preview-row input{width:100%;min-width:0;accent-color:#999;cursor:pointer;margin:0}
+  .preview-track{flex:1;min-width:0;overflow:hidden;font-size:11px;opacity:.5;white-space:nowrap}
+  .preview-track > span{display:inline-block;animation:preview-ticker 16s linear infinite}
+  .preview-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 7px;font-size:13px}
+  .preview-footer > div{min-width:0}
+  .preview-key-hint{display:block;font-size:11px;opacity:.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:4px}
+  .preview-show-all{background:none;border:0;color:inherit;opacity:.6;text-align:left;padding:4px 7px;cursor:pointer;font-size:11px}
+  .preview-wave.sounding{animation:preview-wave .9s linear infinite;animation-delay:var(--delay)}
+  @keyframes preview-wave{0%,100%{opacity:.3}50%{opacity:1}}
+  @keyframes preview-ticker{0%,12%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+  @media(prefers-reduced-motion:reduce){.preview-wave.sounding,.preview-track > span{animation:none}.preview-wave.sounding{opacity:1!important}}
+  .preview-row button:focus-visible,.preview-show-all:focus-visible,.preview-options summary:focus-visible{outline:2px solid #007aff;outline-offset:2px}
 </style>
 
 <canvas id="bg-fx" aria-hidden="true"></canvas>
@@ -597,89 +634,22 @@
   <div class="popup-caret"></div>
   <div class="popup-panel">
     <div class="glass-body">
-      <p class="glass-label">Hook media keys to:</p>
-      <div class="glass-target-picker">
-        <button class="glass-select" type="button" aria-label="Hook media keys to Spotify" aria-haspopup="menu" aria-controls="target-app-menu" aria-expanded="false"><span>Spotify</span>
-          <svg class="chev" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1.2 5 4.8 9 1.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div class="glass-target-menu" id="target-app-menu" role="menu" aria-label="Available apps" hidden>
-          <button type="button" role="menuitemradio" data-app="Nothing" aria-checked="false"><span class="menu-check">✓</span>Nothing</button>
-          <hr>
-          <button type="button" role="menuitemradio" data-app="Spotify" aria-checked="true"><span class="menu-check">✓</span>Spotify</button>
-          <button type="button" role="menuitemradio" data-app="Apple Music" aria-checked="false"><span class="menu-check">✓</span>Apple Music</button>
-          <button type="button" role="menuitemradio" data-app="Apple TV" aria-checked="false"><span class="menu-check">✓</span>Apple TV</button>
-          <button type="button" role="menuitemradio" data-app="Safari" aria-checked="false"><span class="menu-check">✓</span>Safari</button>
-          <button type="button" role="menuitemradio" data-app="Chrome" aria-checked="false"><span class="menu-check">✓</span>Chrome</button>
-          <button type="button" role="menuitemradio" data-app="Brave" aria-checked="false"><span class="menu-check">✓</span>Brave</button>
-          <button type="button" role="menuitemradio" data-app="Arc" aria-checked="false"><span class="menu-check">✓</span>Arc</button>
-          <button type="button" role="menuitemradio" data-app="Vivaldi" aria-checked="false"><span class="menu-check">✓</span>Vivaldi</button>
-          <button type="button" role="menuitemradio" data-app="VLC" aria-checked="false"><span class="menu-check">✓</span>VLC</button>
-          <button type="button" role="menuitemradio" data-app="VOX" aria-checked="false"><span class="menu-check">✓</span>VOX</button>
-          <button type="button" role="menuitemradio" data-app="QuickTime Player" aria-checked="false"><span class="menu-check">✓</span>QuickTime Player</button>
-          <button type="button" role="menuitemradio" data-app="Downcast" aria-checked="false"><span class="menu-check">✓</span>Downcast</button>
-        </div>
-      </div>
-      <button class="glass-play" type="button" aria-label="Pause Spotify" aria-pressed="true">
-        <svg viewBox="0 0 12 12"><rect x="2" y="1" width="2.8" height="10" rx=".6"/><rect x="7.2" y="1" width="2.8" height="10" rx=".6"/></svg>
-      </button>
-      <hr class="glass-hr">
-      <div class="glass-apps" aria-label="Playing apps">
-        <div class="glass-app is-target" data-app="Spotify">
-          <div class="glass-row"><span class="name">Spotify</span><button class="glass-pill" type="button" aria-pressed="true">Unhook</button></div>
-          <div class="glass-volume-controls">
-            <div class="glass-slider" tabindex="0" role="slider" aria-label="Spotify volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62"><i></i></div>
-            <div class="glass-volume-keys">
-              <button class="glass-check" type="button" role="checkbox" aria-label="Route volume keys to Spotify" aria-checked="true">
-                <span class="box"><svg viewBox="0 0 12 12"><path d="M2.2 6.2 4.8 8.7 9.8 3.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-                Volume keys
-              </button>
-              <span class="glass-vk-hint" aria-label="Command plus Volume for system">⌘ +
-                <svg viewBox="0 0 14 12" aria-hidden="true">
-                  <path d="M5.6 1.3 3.1 3.5H1.5a.5.5 0 0 0-.5.5v4a.5.5 0 0 0 .5.5h1.6l2.5 2.2a.45.45 0 0 0 .75-.35V1.65a.45.45 0 0 0-.75-.35Z" fill="currentColor"/>
-                  <path d="M8.4 4.2a3.6 3.6 0 0 1 0 3.6M10.6 2.6a6.2 6.2 0 0 1 0 6.8" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
-                </svg>
-                <span class="vk-target">for system</span></span>
-            </div>
+      <div class="preview-header">
+        <p class="glass-label">Beamhook</p>
+        <details class="preview-options">
+          <summary aria-label="More options">•••</summary>
+          <div>
+            <button class="glass-gear" type="button" aria-label="Settings" aria-controls="beamhook-settings" aria-expanded="false">Settings…</button>
+            <button type="button" onclick="quitBeamhook()">Quit Beamhook</button>
           </div>
-        </div>
-        <hr class="glass-hr target-split">
-        <div class="glass-app" data-app="Safari" data-browser="true">
-          <div class="glass-row"><span class="name dim">Safari</span><button class="glass-pill" type="button" aria-pressed="false">Hook</button></div>
-          <div class="glass-source">
-            <button class="glass-mini-play" type="button" aria-pressed="true" aria-label="Pause Digital painting after hours">
-              <svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="1" width="2.8" height="10" rx=".6"/><rect x="7.2" y="1" width="2.8" height="10" rx=".6"/></svg>
-            </button>
-            <span class="name" title="Digital painting after hours — YouTube">Digital painting after hours — YouTube</span>
-            <div class="glass-slider mini" tabindex="0" role="slider" aria-label="Digital painting after hours volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="90"><i style="width:90%"></i></div>
-          </div>
-        </div>
-        <div class="glass-app" data-app="Brave">
-          <div class="glass-row"><span class="name dim">Brave</span><button class="glass-pill" type="button" aria-pressed="false">Hook</button></div>
-        </div>
-        <div class="glass-app" data-app="Chrome">
-          <div class="glass-row"><span class="name dim">Chrome</span><button class="glass-pill" type="button" aria-pressed="false">Hook</button></div>
-        </div>
+        </details>
       </div>
+      <div class="preview-apps" aria-label="Audio apps"></div>
+      <button class="preview-show-all" type="button" aria-expanded="false">Show all</button>
       <hr class="glass-hr">
-      <div class="glass-brand-row">
-        <span class="glass-brand"><img class="glass-brand-icon" src="icon.png" width="13" height="13" alt="">Beamhook</span>
-        <span class="glass-version">v1.1.8</span>
-        <button class="glass-gear" type="button" aria-label="Settings" aria-haspopup="dialog" aria-controls="beamhook-settings" aria-expanded="false" title="Settings">
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <g fill="currentColor">
-              <rect x="7" y="1.2" width="2" height="3.4" rx=".9"/>
-              <rect x="7" y="1.2" width="2" height="3.4" rx=".9" transform="rotate(45 8 8)"/>
-              <rect x="7" y="1.2" width="2" height="3.4" rx=".9" transform="rotate(90 8 8)"/>
-              <rect x="7" y="1.2" width="2" height="3.4" rx=".9" transform="rotate(135 8 8)"/>
-              <rect x="7" y="1.2" width="2" height="3.4" rx=".9" transform="rotate(180 8 8)"/>
-              <rect x="7" y="1.2" width="2" height="3.4" rx=".9" transform="rotate(225 8 8)"/>
-              <rect x="7" y="1.2" width="2" height="3.4" rx=".9" transform="rotate(270 8 8)"/>
-              <rect x="7" y="1.2" width="2" height="3.4" rx=".9" transform="rotate(315 8 8)"/>
-            </g>
-            <circle cx="8" cy="8" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
-          </svg>
-        </button>
-        <button class="glass-quit" type="button" onclick="quitBeamhook()">Quit</button>
+      <div class="preview-footer">
+        <div>Volume keys<small class="preview-key-hint"></small></div>
+        <button class="glass-toggle preview-routing" type="button" role="switch" aria-label="Route volume keys to Spotify" aria-checked="false"></button>
       </div>
     </div>
   </div>
@@ -743,6 +713,8 @@
   <h1>Beamhook</h1>
   <h2 class="tag">Hook your Mac's media keys to a specific app.</h2>
   <p class="desc">Press play, and a forgotten YouTube tab starts instead. Beamhook sends play/pause — and optionally volume — to the one app you choose, not whichever app macOS happens to remember. (<a href="/media-keys-wrong-app/">Why does this happen?</a>)</p>
+  <p class="desc">Adjust app and browser-tab volume, mute individual sources, and switch
+  from the keyboard. <a href="/help/#volume-controls">Volume and mute controls →</a></p>
 
   <div class="paths">
     <section class="path">
@@ -827,6 +799,7 @@
     gear.setAttribute('aria-expanded', String(open));
     popup.classList.toggle('is-dismissed', open);
     if (open) {
+      popup.querySelector(".preview-options").open = false;
       setPopupOpen(false);
       settingsWindow.querySelector('.settings-close').focus();
     }
@@ -862,264 +835,94 @@
       gear.focus();
       return;
     }
-    if (!targetMenu.hidden) {
-      closeTargetMenu();
-      select.focus();
-      return;
-    }
     if (!popup.classList.contains('is-open')) return;
     setPopupOpen(false);
     tray.focus();
   });
 
-  const select = popup.querySelector('.glass-select');
-  const targetMenu = popup.querySelector('.glass-target-menu');
-  const appList = popup.querySelector('.glass-apps');
-  const targetSplit = appList.querySelector('.target-split');
-  const volumeControls = popup.querySelector('.glass-volume-controls');
-  const vkHint = volumeControls.querySelector('.glass-vk-hint');
-  const vkHintTarget = vkHint.querySelector('.vk-target');
-  const play = popup.querySelector('.glass-play');
-  let selectedApp = 'Spotify';
-  let isPlaying = true;
-  // Browsers are hooked per tab, so they list their playable sources instead of
-  // owning a single app-level volume slider — same split as the real popover.
-  const supportedApps = {
-    Nothing: { volume: null, volumeKeys: false, scriptable: false },
-    Spotify: { volume: 62, volumeKeys: true, scriptable: true },
-    'Apple Music': { volume: 68, volumeKeys: true, scriptable: true },
-    'Apple TV': { volume: 52, volumeKeys: true, scriptable: true },
-    Safari: { volume: 48, volumeKeys: true, scriptable: true, browser: true,
-              tab: 'Digital painting after hours — YouTube', tabVolume: 90 },
-    Chrome: { volume: 44, volumeKeys: true, scriptable: true, browser: true,
-              tab: 'Lo-fi beats to code to — YouTube', tabVolume: 74 },
-    Brave: { volume: 44, volumeKeys: true, scriptable: true, browser: true,
-             tab: 'Ambient rain, 10 hours — YouTube', tabVolume: 55 },
-    Arc: { volume: 46, volumeKeys: true, scriptable: true, browser: true,
-           tab: 'Album of the week — Bandcamp', tabVolume: 68 },
-    Vivaldi: { volume: 42, volumeKeys: true, scriptable: true, browser: true,
-               tab: 'Live set replay — SoundCloud', tabVolume: 61 },
-    VLC: { volume: 72, volumeKeys: true, scriptable: true },
-    VOX: { volume: 58, volumeKeys: true, scriptable: true },
-    'QuickTime Player': { volume: null, volumeKeys: false, scriptable: false },
-    Downcast: { volume: null, volumeKeys: false, scriptable: false }
-  };
-  const PLAY_ICON = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.4 10 6 3 10.6Z"/></svg>';
-  const PAUSE_ICON = '<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="1" width="2.8" height="10" rx=".6"/><rect x="7.2" y="1" width="2.8" height="10" rx=".6"/></svg>';
-
-  select.addEventListener('click', () => {
-    const open = select.getAttribute('aria-expanded') !== 'true';
-    select.setAttribute('aria-expanded', String(open));
-    targetMenu.hidden = !open;
-  });
-
-  function closeTargetMenu() {
-    select.setAttribute('aria-expanded', 'false');
-    targetMenu.hidden = true;
+  const previewRows = [
+    {id:'spotify', name:'Spotify', track:'Porcini — This afternoon', volume:62, playing:true, transport:true, recent:true},
+    {id:'safari', name:'Safari', volume:100, recent:true},
+    {id:'tab', name:'Digital painting after hours', parent:'safari', volume:75, playing:false, transport:true, recent:true},
+    {id:'unity', name:'Unity', volume:85, playing:false},
+    {id:'brave', name:'Brave', volume:65},
+    {id:'chrome', name:'Chrome', volume:70}
+  ];
+  let hookedID = 'spotify', showAll = false;
+  const routingBySource = {};
+  const rowsElement = popup.querySelector('.preview-apps');
+  const routing = popup.querySelector('.preview-routing');
+  const showAllButton = popup.querySelector('.preview-show-all');
+  const hookIcon = '<svg viewBox="0 0 16 24" aria-hidden="true"><circle cx="6" cy="4" r="2.5"/><path d="M6 7v11a4 4 0 0 0 8 0v-5l-3 3"/></svg>';
+  const playIcon = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5 10 6 3 10.5Z"/></svg>';
+  const pauseIcon = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1h3v10H2zM7 1h3v10H7z"/></svg>';
+  function isHooked(row) {
+    return hookedID === row.id || previewRows.find(r => r.id === hookedID)?.parent === row.id;
   }
-
-  function bindMiniPlay(button, label) {
-    const render = () => {
-      const playing = button.getAttribute('aria-pressed') === 'true';
-      button.innerHTML = playing ? PAUSE_ICON : PLAY_ICON;
-      button.setAttribute('aria-label', `${playing ? 'Pause' : 'Play'} ${label}`);
-    };
-    button.addEventListener('click', () => {
-      button.setAttribute('aria-pressed', String(button.getAttribute('aria-pressed') !== 'true'));
-      render();
-    });
-    render();
+  function speaker(row) {
+    const playing = row.playing || previewRows.some(r => r.parent === row.id && r.playing);
+    const arcs = Math.max(1, Math.ceil(row.volume / 100 * 3));
+    return '<svg viewBox="0 0 24 20" aria-hidden="true"><path d="M2 7h4l5-4v14l-5-4H2z" fill="currentColor" stroke="none"/>'
+      + (row.muted || row.volume === 0 ? '<path d="m2 2 18 16" fill="none" stroke="currentColor" stroke-width="2"/>'
+        : [0,1,2].map(i => '<path class="preview-wave '+(playing && i < arcs ? 'sounding' : '')+'" style="--delay:'+(-0.6 + i * 0.2)+'s;opacity:'+(playing ? '.18' : '0')+'" d="M'+(13+i*3)+' '+(7-i*2)+' Q'+(16+i*3)+' 10 '+(13+i*3)+' '+(13+i*2)+'" fill="none" stroke="currentColor" stroke-width="1.4"/>').join(''))
+      + '</svg>';
   }
-
-  function makeSourceRow(app) {
-    const data = supportedApps[app];
-    const row = document.createElement('div');
-    row.className = 'glass-source';
-    row.innerHTML = '<button class="glass-mini-play" type="button" aria-pressed="true"></button>'
-      + '<span class="name"></span>'
-      + '<div class="glass-slider mini" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="100"><i></i></div>';
-    const label = row.querySelector('.name');
-    label.textContent = data.tab;
-    label.title = data.tab;
-    const sourceSlider = row.querySelector('.glass-slider');
-    sourceSlider.setAttribute('aria-label', `${data.tab} volume`);
-    sourceSlider.setAttribute('aria-valuenow', String(data.tabVolume));
-    sourceSlider.querySelector('i').style.width = `${data.tabVolume}%`;
-    bindSlider(sourceSlider, (value) => { data.tabVolume = value; });
-    bindMiniPlay(row.querySelector('.glass-mini-play'), data.tab);
-    return row;
+  function renderPreview() {
+    const visible = previewRows.filter(row => showAll || row.recent || isHooked(row));
+    rowsElement.innerHTML = visible.map(row => {
+      const active = isHooked(row);
+      return '<div class="preview-row '+(row.parent ? 'subitem ' : '')+(active ? 'hooked ' : '')+(row.muted ? 'muted' : '')+'" data-source="'+row.id+'">'
+        + '<button class="preview-name" data-action="hook" aria-label="'+(active ? 'Unhook ' : 'Hook ')+row.name+'" aria-pressed="'+active+'"><span class="preview-hook">'+hookIcon+'</span><span class="preview-title">'+row.name+'</span>'
+        + (row.track ? '<span class="preview-track"><span>'+row.track+'　　'+row.track+'</span></span>' : '') + '</button>'
+        + (row.transport ? '<button class="preview-play" data-action="play" aria-label="'+(row.playing ? 'Pause ' : 'Play ')+row.name+'">'+(row.playing ? pauseIcon : playIcon)+'</button>' : '<span class="preview-play"></span>')
+        + '<button class="preview-mute" data-action="mute" aria-label="'+(row.muted || row.volume === 0 ? 'Unmute ' : 'Mute ')+row.name+'" aria-pressed="'+Boolean(row.muted || row.volume === 0)+'">'+speaker(row)+'</button>'
+        + '<input type="range" min="0" max="100" value="'+(row.muted ? 0 : row.volume)+'" aria-label="'+row.name+' volume"></div>';
+    }).join('');
+    const target = previewRows.find(row => row.id === hookedID);
+    const enabled = Boolean(routingBySource[hookedID]);
+    routing.disabled = !target;
+    routing.setAttribute('aria-checked', String(enabled));
+    routing.setAttribute('aria-label', 'Route volume keys to '+(target?.name || 'hooked app'));
+    popup.querySelector('.preview-key-hint').textContent = target
+      ? (enabled ? '🔊 → ' : '⌘ + 🔊 → ') + target.name : 'Hook an app to route volume keys';
+    showAllButton.textContent = showAll ? 'Show less' : 'Show all';
+    showAllButton.setAttribute('aria-expanded', String(showAll));
   }
-
-  function bindHookButton(appBlock) {
-    appBlock.querySelector('.glass-pill').addEventListener('click', () => {
-      setTarget(appBlock.dataset.app === selectedApp ? 'Nothing' : appBlock.dataset.app);
-    });
-  }
-
-  function ensureAppRow(app) {
-    let appBlock = Array.from(appList.querySelectorAll('.glass-app[data-app]'))
-      .find((candidate) => candidate.dataset.app === app);
-    if (!appBlock) {
-      appBlock = document.createElement('div');
-      appBlock.className = 'glass-app';
-      appBlock.dataset.app = app;
-      appBlock.innerHTML = `<div class="glass-row"><span class="name dim"></span><button class="glass-pill" type="button" aria-pressed="false">Hook</button></div>`;
-      appBlock.querySelector('.glass-row .name').textContent = app;
-      bindHookButton(appBlock);
-      appList.appendChild(appBlock);
-    }
-    // Hooking a browser scans it for playable tabs, so its source row shows up then.
-    if (supportedApps[app].browser && !appBlock.querySelector('.glass-source')) {
-      appBlock.appendChild(makeSourceRow(app));
-    }
-    return appBlock;
-  }
-
-  function setTarget(app) {
-    const appData = supportedApps[app];
-    const hooked = app !== 'Nothing';
-    if (hooked) ensureAppRow(app);
-    selectedApp = app;
-    select.querySelector('span').textContent = app;
-    select.setAttribute('aria-label', hooked ? `Hook media keys to ${app}` : 'Hook media keys to nothing');
-
-    popup.querySelectorAll('.glass-target-menu [data-app]').forEach((option) => {
-      option.setAttribute('aria-checked', String(option.dataset.app === app));
-    });
-    appList.querySelectorAll('.glass-system-volume').forEach((message) => message.remove());
-    let targetBlock = null;
-    appList.querySelectorAll('.glass-app[data-app]').forEach((appBlock) => {
-      const active = appBlock.dataset.app === app;
-      const button = appBlock.querySelector('.glass-pill');
-      button.textContent = active ? 'Unhook' : 'Hook';
-      button.setAttribute('aria-pressed', String(active));
-      appBlock.classList.toggle('is-target', active);
-      appBlock.querySelector('.glass-row .name').classList.toggle('dim', !active);
-      if (!active && appBlock.contains(volumeControls)) volumeControls.remove();
-      if (!active) return;
-      targetBlock = appBlock;
-      if (appData.scriptable) {
-        appBlock.appendChild(volumeControls);
-      } else {
-        const message = document.createElement('span');
-        message.className = 'glass-system-volume';
-        message.textContent = 'system volume only';
-        appBlock.appendChild(message);
-      }
-    });
-
-    // The hooked app leads the list, split off from the rest — as in the popover.
-    if (targetBlock) {
-      appList.prepend(targetBlock);
-      targetBlock.after(targetSplit);
-      targetSplit.hidden = appList.querySelectorAll('.glass-app[data-app]').length < 2;
+  rowsElement.addEventListener('click', event => {
+    const button = event.target.closest('button[data-action]');
+    if (!button) return;
+    const row = previewRows.find(r => r.id === button.closest('[data-source]').dataset.source);
+    if (button.dataset.action === 'hook') {
+      hookedID = isHooked(row) ? null : row.id === 'safari' ? 'tab' : row.id;
+    } else if (button.dataset.action === 'play') {
+      row.playing = !row.playing;
     } else {
-      targetSplit.hidden = true;
+      if (row.volume === 0) { row.volume = row.restoreVolume || 50; row.muted = false; }
+      else { row.muted = !row.muted; }
     }
-
-    // A browser's volume lives in its per-tab rows, never in one app-wide slider.
-    volumeControls.classList.toggle('no-slider', Boolean(appData.browser));
-    if (appData.scriptable) {
-      if (!appData.browser) {
-        sliderFill.style.width = `${appData.volume}%`;
-        slider.setAttribute('aria-label', `${app} volume`);
-        slider.setAttribute('aria-valuenow', String(appData.volume));
-      }
-      volumeKeys.setAttribute('aria-label', `Route volume keys to ${app}`);
-      volumeKeys.setAttribute('aria-checked', String(appData.volumeKeys));
-      renderVolumeKeyHint();
-    }
-    play.disabled = !hooked;
-    renderPlayButton();
-    closeTargetMenu();
-  }
-
-  targetMenu.querySelectorAll('[data-app]').forEach((option) => {
-    option.addEventListener('click', () => setTarget(option.dataset.app));
+    const action = button.dataset.action;
+    renderPreview();
+    rowsElement.querySelector('[data-source="'+row.id+'"] [data-action="'+action+'"]')?.focus();
   });
-
-  document.addEventListener('pointerdown', (event) => {
-    if (!event.target.closest('.glass-target-picker')) closeTargetMenu();
+  rowsElement.addEventListener('input', event => {
+    if (!event.target.matches('input[type="range"]')) return;
+    const element = event.target.closest('[data-source]');
+    const row = previewRows.find(r => r.id === element.dataset.source);
+    if (row.volume > 0) row.restoreVolume = row.volume;
+    row.volume = Number(event.target.value);
+    row.muted = row.volume === 0;
+    element.classList.toggle('muted', row.muted);
+    const button = element.querySelector('.preview-mute');
+    button.innerHTML = speaker(row);
+    button.setAttribute('aria-label', (row.muted ? 'Unmute ' : 'Mute ')+row.name);
+    button.setAttribute('aria-pressed', String(row.muted));
   });
-
-  function renderPlayButton() {
-    play.innerHTML = isPlaying ? PAUSE_ICON : PLAY_ICON;
-    play.setAttribute('aria-pressed', String(isPlaying));
-    play.setAttribute('aria-label', selectedApp === 'Nothing'
-      ? 'Nothing is hooked'
-      : `${isPlaying ? 'Pause' : 'Play'} ${selectedApp}`);
-  }
-
-  play.addEventListener('click', () => {
-    isPlaying = !isPlaying;
-    renderPlayButton();
+  showAllButton.addEventListener('click', () => { showAll = !showAll; renderPreview(); });
+  routing.addEventListener('click', () => {
+    routingBySource[hookedID] = !routingBySource[hookedID];
+    renderPreview();
   });
-
-  popup.querySelectorAll('.glass-app[data-app]').forEach(bindHookButton);
-  popup.querySelectorAll('.glass-source').forEach((row) => {
-    bindMiniPlay(row.querySelector('.glass-mini-play'), row.querySelector('.name').textContent);
-  });
-
-  // One slider implementation for the target's volume and every per-tab slider.
-  function bindSlider(el, onChange) {
-    const fill = el.querySelector('i');
-    let pointerId = null;
-    const commit = (value) => {
-      fill.style.width = `${value}%`;
-      el.setAttribute('aria-valuenow', String(value));
-      onChange(value);
-    };
-    const setFromPointer = (clientX) => {
-      const bounds = el.getBoundingClientRect();
-      commit(Math.round(Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width)) * 100));
-    };
-    el.addEventListener('pointerdown', (event) => {
-      pointerId = event.pointerId;
-      if (el.setPointerCapture) el.setPointerCapture(event.pointerId);
-      setFromPointer(event.clientX);
-    });
-    window.addEventListener('pointermove', (event) => {
-      if (event.pointerId === pointerId) setFromPointer(event.clientX);
-    });
-    const release = (event) => { if (event.pointerId === pointerId) pointerId = null; };
-    window.addEventListener('pointerup', release);
-    window.addEventListener('pointercancel', release);
-    el.addEventListener('keydown', (event) => {
-      if (!['ArrowLeft', 'ArrowDown', 'ArrowRight', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-      event.preventDefault();
-      const current = Number(el.getAttribute('aria-valuenow'));
-      const step = ['ArrowRight', 'ArrowUp'].includes(event.key) ? 5 : -5;
-      commit(event.key === 'Home' ? 0
-        : event.key === 'End' ? 100
-        : Math.max(0, Math.min(100, current + step)));
-    });
-  }
-
-  const slider = popup.querySelector('.glass-volume-controls > .glass-slider');
-  const sliderFill = slider.querySelector('i');
-  bindSlider(slider, (value) => { supportedApps[selectedApp].volume = value; });
-  popup.querySelectorAll('.glass-source .glass-slider').forEach((sourceSlider) => {
-    const app = sourceSlider.closest('.glass-app').dataset.app;
-    bindSlider(sourceSlider, (value) => { supportedApps[app].tabVolume = value; });
-  });
-
-  const volumeKeys = popup.querySelector('.glass-check');
-
-  // ⌘ always leads to the volume the plain keys don't, so the hint flips with
-  // the checkbox rather than disappearing with it.
-  function renderVolumeKeyHint() {
-    const hooked = volumeKeys.getAttribute('aria-checked') === 'true';
-    const target = hooked ? 'system' : selectedApp;
-    vkHintTarget.textContent = `for ${target}`;
-    vkHint.setAttribute('aria-label', `Command plus Volume for ${target}`);
-  }
-
-  volumeKeys.addEventListener('click', () => {
-    const enabled = volumeKeys.getAttribute('aria-checked') !== 'true';
-    supportedApps[selectedApp].volumeKeys = enabled;
-    volumeKeys.setAttribute('aria-checked', String(enabled));
-    renderVolumeKeyHint();
-  });
+  renderPreview();
 
   // Launch at login and Add an app… now live in the Settings window, not the popover.
   settingsWindow.querySelectorAll('.glass-toggle').forEach((toggle) => {
