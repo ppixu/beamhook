@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import os
 import BeamhookKit
 
@@ -11,14 +12,72 @@ final class HookHUD {
     private init() {}
 
     /// One row of the volume-source picker. `percent` nil means the volume
-    /// hasn't been read yet. `muted` is the app's per-app (process-tap) mute;
+    /// is unavailable (or hasn't been read yet). `muted` is the app's per-app (process-tap) mute;
     /// a volume of 0 reads as muted too, which is how a tab is muted.
     struct SourceRow: Equatable {
         let name: String
         let percent: Int?
         var muted = false
+        var canMute = false
+        var indented = false
+        var sourceID = ""
+        var isEmitting = false
+        var isHooked = false
+        var isPlaying = false
+        var canPlayPause = false
+
+        var statusText: String {
+            if percent == nil {
+                return "Volume unavailable · " + (muted ? "Muted" : canMute ? "Mute available" : "Mute unavailable")
+            }
+            return isMuted ? "Muted" : percent.map { "\($0) percent" } ?? "Volume unavailable"
+        }
 
         var isMuted: Bool { muted || percent == 0 }
+    }
+
+    /// Reuses the menu's exact animation; only its surrounding size/color differ.
+    private struct SourceSpeakerIcon: View {
+        let seed: String
+        let isMuted: Bool
+        let canMute: Bool
+        var isEmitting: Bool
+
+        var body: some View {
+            Group {
+                if isMuted { Image(systemName: "speaker.slash.fill") }
+                else if isEmitting { EmittingSpeakerIcon(seed: seed) }
+                else { Image(systemName: "speaker.fill") }
+            }
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(Color(nsColor: canMute ? .labelColor : .tertiaryLabelColor))
+            .frame(width: 20, height: 16)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private var sourceSpeakers: [String: NSHostingView<SourceSpeakerIcon>] = [:]
+    private var sourceBars: [String: VolumeBarView] = [:]
+    private var sourcePlaybackIcons: [String: NSImageView] = [:]
+
+    func updateSourcePlayback(_ playback: [String: Bool?]) {
+        for (id, playing) in playback {
+            sourcePlaybackIcons[id]?.image = playing.flatMap { Self.playbackStateSymbol($0) }
+        }
+    }
+
+    private static func playbackStateSymbol(_ playing: Bool) -> NSImage? {
+        NSImage(systemSymbolName: playing ? "play.fill" : "pause.fill", accessibilityDescription: nil)
+    }
+
+    /// Activity updates must not call `show`: that would reset the hide deadline,
+    /// rebuild the list, and scroll back to the selected row on every meter tick.
+    func updateSourceActivity(_ activity: [String: Bool]) {
+        for (id, view) in sourceSpeakers {
+            let emitting = activity[id] ?? false
+            if view.rootView.isEmitting != emitting { view.rootView.isEmitting = emitting }
+            if sourceBars[id]?.isEmitting != emitting { sourceBars[id]?.isEmitting = emitting }
+        }
     }
 
     private enum Presentation {
@@ -82,9 +141,10 @@ final class HookHUD {
     /// Invoked when a hook confirmation appears — the AppDelegate uses it to run
     /// the status-item "fishing bob" animation at the same time.
     var onPresent: (() -> Void)?
-    /// Told when a volume presentation appears (true) and when it goes away —
-    /// hidden, or replaced by another presentation (false). AppState arms the
-    /// ⌘↑/⌘↓ keyboard tap only in between.
+    /// Arms picker shortcuts for any visible HUD, including playback and hook confirmations.
+    var onVisibilityChange: ((Bool) -> Void)?
+    /// Told when a volume presentation appears or is hidden/replaced, so the
+    /// source session can end independently of the general keyboard shortcuts.
     var onVolumeVisibilityChange: ((Bool) -> Void)?
     private var volumeVisible = false
 
@@ -116,10 +176,13 @@ final class HookHUD {
     private var pickerHint: NSView?
     /// The picker's rows; rebuilt on every `.volumeSources` show.
     private var sourceList: NSStackView?
+    private var sourceScroll: NSScrollView?
+    private var sourceHeight: NSLayoutConstraint?
     private var box: NSView?
     /// The padded stack inside the chrome; its fitting size drives the panel size.
     private var content: NSView?
     private var hideWork: DispatchWorkItem?
+    private var commandReleaseTimer: Timer?
     private var generation = 0
 
     /// Initialize Liquid Glass at full opacity outside every screen. Rendering
@@ -158,6 +221,27 @@ final class HookHUD {
         show(.volume(appName: appName,
                      percent: min(100, max(0, percent)),
                      commandHint: commandHint))
+    }
+
+    /// Poll the physical modifier state so a release during tap installation
+    /// or an asynchronous volume read cannot strand the picker on screen.
+    func holdUntilCommandRelease() {
+        hideWork?.cancel()
+        guard commandReleaseTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self,
+                      !CGEventSource.flagsState(.combinedSessionState).contains(.maskCommand)
+                else { return }
+                self.commandReleaseTimer?.invalidate()
+                self.commandReleaseTimer = nil
+                self.hideWork?.cancel()
+                self.generation += 1
+                self.dismiss(gen: self.generation)
+            }
+        }
+        commandReleaseTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     /// Show the volume-source picker with `selectedIndex` highlighted.
@@ -241,7 +325,11 @@ final class HookHUD {
         noticeLabel?.isHidden = true
         header?.isHidden = false
         pickerHint?.isHidden = true
-        sourceList?.isHidden = true
+        sourceScroll?.isHidden = true
+        updateSourceActivity([:])
+        sourceSpeakers = [:]
+        sourceBars = [:]
+        sourcePlaybackIcons = [:]
         switch presentation {
         case .hooked(let appName, let commandHint):
             label?.stringValue = "\(appName) hooked"
@@ -266,10 +354,15 @@ final class HookHUD {
                 panel.appearance?.performAsCurrentDrawingAppearance {
                     for (index, row) in rows.enumerated() {
                         sourceList.addArrangedSubview(
-                            Self.makeSourceRow(row, selected: index == selectedIndex))
+                            makeSourceRow(row, selected: index == selectedIndex))
                     }
                 }
-                sourceList.isHidden = false
+                sourceList.layoutSubtreeIfNeeded()
+                let size = sourceList.fittingSize
+                sourceList.setFrameSize(size)
+                let screenHeight = panel.screen?.visibleFrame.height ?? 700
+                sourceHeight?.constant = min(size.height, max(100, screenHeight - 120))
+                sourceScroll?.isHidden = false
             }
         case .launching(let appName):
             label?.stringValue = "Starting \(appName)…"
@@ -308,6 +401,11 @@ final class HookHUD {
         content?.layoutSubtreeIfNeeded()
         if let fitting = content?.fittingSize { panel.setContentSize(fitting) }
         position(panel)
+        if case .volumeSources(_, let selectedIndex) = presentation,
+           let sourceList, sourceList.arrangedSubviews.indices.contains(selectedIndex) {
+            sourceList.layoutSubtreeIfNeeded()
+            sourceList.scrollToVisible(sourceList.arrangedSubviews[selectedIndex].frame)
+        }
 
         hideWork?.cancel()
 
@@ -319,8 +417,12 @@ final class HookHUD {
         panel.invalidateShadow()
         if case .hooked = presentation { onPresent?() }
         setVolumeVisible(presentation.isVolume)
+        onVisibilityChange?(true)
         Self.log.info("HUD shown for \(presentation.appName, privacy: .public); frame=\(NSStringFromRect(panel.frame), privacy: .public)")
 
+        if presentation.isVolume && commandReleaseTimer != nil { return }
+        commandReleaseTimer?.invalidate()
+        commandReleaseTimer = nil
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated { self?.dismiss(gen: gen) }
         }
@@ -373,6 +475,8 @@ final class HookHUD {
     private func dismiss(gen: Int) {
         guard gen == generation, let panel else { return }
         setVolumeVisible(false)
+        onVisibilityChange?(false)
+        updateSourceActivity([:])
         // Fade to (near-)invisible but never order out: keeping the window in
         // keeps the glass backdrop warm, so the next show has no first-frame
         // flash while the effect re-initializes.
@@ -512,12 +616,22 @@ final class HookHUD {
         sources.orientation = .vertical
         sources.alignment = .leading
         sources.spacing = 4
-        sources.isHidden = true
+        let sourceScroll = NSScrollView()
+        sourceScroll.drawsBackground = false
+        sourceScroll.hasVerticalScroller = false
+        sourceScroll.documentView = sources
+        sourceScroll.isHidden = true
+        sourceScroll.translatesAutoresizingMaskIntoConstraints = false
+        let sourceHeight = sourceScroll.heightAnchor.constraint(equalToConstant: 0)
+        NSLayoutConstraint.activate([
+            sourceScroll.widthAnchor.constraint(equalToConstant: 368),
+            sourceHeight,
+        ])
 
         let picker = Self.makePickerHint()
         picker.isHidden = true
 
-        let stack = NSStackView(views: [header, volumeStack, sources, picker])
+        let stack = NSStackView(views: [header, volumeStack, sourceScroll, picker])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 9
@@ -540,8 +654,8 @@ final class HookHUD {
             bar.heightAnchor.constraint(equalToConstant: 7),
             loudSpeaker.widthAnchor.constraint(equalToConstant: 22),
             loudSpeaker.heightAnchor.constraint(equalToConstant: 20),
-            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
-            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -22),
+            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 14),
             stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -14),
         ])
@@ -584,6 +698,8 @@ final class HookHUD {
         self.volumeBar = bar
         self.pickerHint = picker
         self.sourceList = sources
+        self.sourceScroll = sourceScroll
+        self.sourceHeight = sourceHeight
         self.box = chrome
         self.content = content
         return panel
@@ -627,8 +743,8 @@ final class HookHUD {
         return (row, suffix)
     }
 
-    /// "⌘ ↑↓ switch · ⌘ <speaker.slash.fill> mute" — the picker's keys, built
-    /// as a row so the mute mark is the real SF Symbol, like the system hint.
+    /// Each shortcut includes its Command modifier, with space between groups.
+    /// The mute mark uses the real SF Symbol, like the system hint.
     private static func makePickerHint() -> NSStackView {
         let muted = NSImageView()
         muted.image = NSImage(systemSymbolName: "speaker.slash.fill",
@@ -639,70 +755,113 @@ final class HookHUD {
         muted.setContentHuggingPriority(.required, for: .horizontal)
         muted.setAccessibilityElement(false)
 
-        let row = NSStackView(views: [caption("⌘ ↑↓ switch · ⌘"), muted, caption("mute")])
+        let muteShortcut = NSStackView(views: [caption("⌘"), muted, caption("mute")])
+        muteShortcut.orientation = .horizontal
+        muteShortcut.alignment = .centerY
+        muteShortcut.spacing = 3
+
+        let row = NSStackView(views: [
+            caption("⌘ ↑↓ select"), caption("·"),
+            caption("⌘ ←→ volume"), caption("·"),
+            caption("⌘ ⏯ play/pause"), caption("·"), muteShortcut,
+        ])
         row.orientation = .horizontal
         row.alignment = .centerY
-        row.spacing = 3
+        row.spacing = 6
         row.setAccessibilityElement(true)
         row.setAccessibilityRole(.staticText)
-        row.setAccessibilityLabel("Command Up or Down to switch source, Command Mute to mute")
+        row.setAccessibilityLabel("Hold Command: Up or Down to select, Left or Right for volume, Play for play/pause, Mute to mute")
         return row
     }
 
     /// One picker row: marker, name, then a mini bar or "muted".
-    private static func makeSourceRow(_ row: SourceRow, selected: Bool) -> NSView {
-        let marker = NSTextField(labelWithString: selected ? "▸" : "")
-        marker.font = .systemFont(ofSize: 13, weight: .semibold)
-        marker.textColor = .labelColor
+    private func makeSourceRow(_ row: SourceRow, selected: Bool) -> NSView {
+        let marker = NSImageView()
+        marker.image = row.canPlayPause ? Self.playbackStateSymbol(row.isPlaying) : nil
+        marker.symbolConfiguration = .init(pointSize: 11, weight: .semibold)
+        marker.imageScaling = .scaleProportionallyDown
+        marker.contentTintColor = selected ? .labelColor : NSColor.labelColor.withAlphaComponent(0.65)
         marker.setAccessibilityElement(false)
+        sourcePlaybackIcons[row.sourceID] = marker
 
         let name = NSTextField(labelWithString: row.name)
-        name.font = .systemFont(ofSize: 13, weight: selected ? .semibold : .regular)
+        let nameFont = NSFont.systemFont(ofSize: 13, weight: selected ? .semibold : .regular)
+        name.font = nameFont
         name.textColor = .labelColor
         name.lineBreakMode = .byTruncatingTail
         name.setAccessibilityElement(false)
+        if row.isHooked, let glyph = NSImage(named: "HookGlyph") {
+            // The attachment shares the original name column, so adding the
+            // hook cannot widen the row or push its volume bar out of the HUD.
+            let attachment = NSTextAttachment()
+            attachment.image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
+                glyph.draw(in: rect)
+                NSColor.black.setFill()
+                rect.fill(using: .sourceAtop)
+                return true
+            }
+            attachment.bounds = NSRect(x: 0, y: -4, width: 18, height: 18)
+            let title = NSMutableAttributedString(attachment: attachment)
+            title.append(NSAttributedString(string: " " + row.name))
+            title.addAttributes([.font: nameFont, .foregroundColor: NSColor.labelColor],
+                                range: NSRange(location: 0, length: title.length))
+            name.attributedStringValue = title
+        }
 
         let level: NSView
-        if row.isMuted {
-            let icon = NSImageView()
-            icon.image = NSImage(systemSymbolName: "speaker.slash.fill", accessibilityDescription: nil)
-            icon.symbolConfiguration = .init(pointSize: 11, weight: .regular)
-            icon.contentTintColor = .secondaryLabelColor
-            icon.setAccessibilityElement(false)
-            let text = Self.caption("muted")
-            let mutedStack = NSStackView(views: [icon, text])
-            mutedStack.orientation = .horizontal
-            mutedStack.spacing = 4
-            level = mutedStack
+        if row.percent == nil && !row.isMuted {
+            let text = Self.caption("Volume unavailable")
+            text.font = .systemFont(ofSize: 10)
+            level = text
         } else {
             let bar = VolumeBarView()
             bar.percent = row.percent ?? 0
+            bar.isMuted = row.isMuted
+            bar.isEmitting = row.isEmitting
+            bar.trackHeight = 5
             bar.setAccessibilityElement(false)
+            sourceBars[row.sourceID] = bar
             level = bar
         }
 
-        let line = NSStackView(views: [marker, name, level])
+        let mute = NSHostingView(rootView: SourceSpeakerIcon(
+            seed: row.sourceID, isMuted: row.isMuted, canMute: row.canMute, isEmitting: row.isEmitting))
+        mute.setAccessibilityElement(false)
+        sourceSpeakers[row.sourceID] = mute
+
+        let line = NSStackView(views: [marker, name, mute, level])
         line.orientation = .horizontal
         line.alignment = .centerY
         line.spacing = 6
-        line.edgeInsets = NSEdgeInsets(top: 3, left: 4, bottom: 3, right: 8)
+        line.edgeInsets = NSEdgeInsets(top: 12, left: row.indented ? 24 : 8, bottom: 12, right: 12)
         line.wantsLayer = true
-        line.layer?.cornerRadius = 6
+        line.layer?.cornerRadius = 18
+        line.layer?.cornerCurve = .continuous
+        let dark = panel?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         if selected {
-            line.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.12).cgColor
+            // Follow the overlay's appearance (which contrasts with the system),
+            // so white labels never sit on the light-mode-strength highlight.
+            line.layer?.backgroundColor = NSColor.white.withAlphaComponent(dark ? 0.18 : 0.7).cgColor
+        } else if row.isMuted {
+            let tint: NSColor = dark ? .white : .black
+            line.layer?.backgroundColor = tint.withAlphaComponent(0.12).cgColor
+            line.layer?.borderColor = tint.withAlphaComponent(0.2).cgColor
+            line.layer?.borderWidth = 1
         }
         line.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            marker.widthAnchor.constraint(equalToConstant: 10),
-            name.widthAnchor.constraint(equalToConstant: 132),
-            level.widthAnchor.constraint(equalToConstant: 104),
-            level.heightAnchor.constraint(equalToConstant: row.isMuted ? 14 : 5),
+            marker.widthAnchor.constraint(equalToConstant: 20),
+            marker.heightAnchor.constraint(equalToConstant: 20),
+            name.widthAnchor.constraint(equalToConstant: row.indented ? 152 : 168),
+            level.widthAnchor.constraint(equalToConstant: 122),
+            mute.widthAnchor.constraint(equalToConstant: 20),
+            level.heightAnchor.constraint(equalToConstant: 16),
         ])
 
-        let state = row.isMuted ? "muted" : row.percent.map { "\($0) percent" } ?? "volume unknown"
+        let state = row.statusText
         line.setAccessibilityElement(true)
         line.setAccessibilityRole(.staticText)
-        line.setAccessibilityLabel("\(row.name), \(state)\(selected ? ", selected" : "")")
+        line.setAccessibilityLabel("\(row.name)\(row.isHooked ? ", hooked" : ""), \(state)\(selected ? ", selected" : "")")
         return line
     }
 
@@ -742,6 +901,9 @@ final class HookHUD {
 
 /// A compact, appearance-adaptive fill bar matching the monochrome system HUD.
 private final class VolumeBarView: NSView {
+    var isMuted = false { didSet { needsDisplay = true } }
+    var isEmitting = true { didSet { needsDisplay = true } }
+    var trackHeight: CGFloat? { didSet { needsDisplay = true } }
     var percent = 0 {
         didSet {
             percent = min(100, max(0, percent))
@@ -765,17 +927,30 @@ private final class VolumeBarView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
-        let track = bounds
+        let height = min(bounds.height, trackHeight ?? bounds.height)
+        let track = NSRect(x: bounds.minX, y: bounds.midY - height / 2,
+                           width: bounds.width, height: height)
+        let opacity: CGFloat = isMuted ? 0.25 : isEmitting ? 1 : 0.35
+        let caption = NSAttributedString(string: "Muted", attributes: [
+            .font: NSFont.systemFont(ofSize: 10, weight: .medium),
+            .foregroundColor: NSColor.labelColor,
+        ])
+        let captionSize = isMuted ? caption.size() : .zero
+        let captionOrigin = NSPoint(x: bounds.midX - captionSize.width / 2,
+                                    y: bounds.midY - captionSize.height / 2)
         let trackRadius = track.height / 2
-        NSColor.labelColor.withAlphaComponent(0.16).setFill()
+        NSColor.labelColor.withAlphaComponent(0.16 * opacity).setFill()
         NSBezierPath(roundedRect: track, xRadius: trackRadius, yRadius: trackRadius).fill()
 
         let fillWidth = track.width * CGFloat(percent) / 100
-        guard fillWidth > 0 else { return }
-        let fill = NSRect(x: track.minX, y: track.minY, width: fillWidth, height: track.height)
-        let fillRadius = min(fill.height / 2, fill.width / 2)
-        NSColor.labelColor.withAlphaComponent(0.88).setFill()
-        NSBezierPath(roundedRect: fill, xRadius: fillRadius, yRadius: fillRadius).fill()
+        if fillWidth > 0 {
+            let fill = NSRect(x: track.minX, y: track.minY, width: fillWidth, height: track.height)
+            let fillRadius = min(fill.height / 2, fill.width / 2)
+            NSColor.labelColor.withAlphaComponent(0.88 * opacity).setFill()
+            NSBezierPath(roundedRect: fill, xRadius: fillRadius, yRadius: fillRadius).fill()
+        }
+        // Overlay the text directly: no background box or rectangular cutout.
+        if isMuted { caption.draw(at: captionOrigin) }
     }
 
     override func viewDidChangeEffectiveAppearance() {

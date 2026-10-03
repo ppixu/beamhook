@@ -30,8 +30,8 @@ final class SourcePickerKeyTests: XCTestCase {
     }
 
     func testOtherKeysDoNotMatch() {
-        XCTAssertNil(match(123))   // ←
-        XCTAssertNil(match(124))   // →
+        XCTAssertEqual(match(123), .volumeDown)   // ←
+        XCTAssertEqual(match(124), .volumeUp)   // →
         XCTAssertNil(match(0))     // A
     }
 }

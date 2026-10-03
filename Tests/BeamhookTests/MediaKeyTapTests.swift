@@ -121,6 +121,112 @@ final class MediaKeyTapTests: XCTestCase {
         XCTAssertEqual(handled, [.volumeUp])
     }
 
+    func testCommandPlayTargetsPickerOnceEvenWhenHookedTransportPassesThrough() {
+        var picked = 0
+        let tap = MediaKeyTap(handler: { _ in XCTFail("Must not reach hooked target") },
+                             passthroughHandler: { _ in XCTFail("Must not reach system") },
+                             pickerPlayPauseHandler: { picked += 1 })
+        tap.volumeSessionActive = true
+        tap.transportKeysHijacked = false
+        XCTAssertNil(tap.handle(type: systemDefinedType,
+                                event: mediaKeyEvent(keyCode: 16, isDown: true, command: true)))
+        XCTAssertNil(tap.handle(type: systemDefinedType,
+                                event: mediaKeyEvent(keyCode: 16, isDown: true, isRepeat: true, command: true)))
+        XCTAssertNil(tap.handle(type: systemDefinedType,
+                                event: mediaKeyEvent(keyCode: 16, isDown: false, command: true)))
+        drainMainQueue()
+        XCTAssertEqual(picked, 1)
+    }
+
+    func testCommandPlayOpensPickerBeforePlaybackWhenOverlayIsClosed() {
+        var events: [String] = []
+        let tap = MediaKeyTap(handler: { _ in XCTFail("Must route through the picker") },
+                             passthroughHandler: { _ in XCTFail("Must not reach system") },
+                             commandVolumeHandler: { events.append("picker") },
+                             pickerPlayPauseHandler: { events.append("playback") })
+        tap.volumeSessionActive = false
+        tap.transportKeysHijacked = false
+        for (down, repeatKey) in [(true, false), (true, true), (false, false)] {
+            XCTAssertNil(tap.handle(type: systemDefinedType,
+                                    event: mediaKeyEvent(keyCode: 16, isDown: down,
+                                                         isRepeat: repeatKey, command: true)))
+        }
+        drainMainQueue()
+        XCTAssertEqual(events, ["picker", "playback"])
+    }
+
+    func testPlainPlayStillTargetsHookedAppDuringPicker() {
+        var handled: [MediaKey] = []
+        let tap = MediaKeyTap(handler: { handled.append($0) },
+                             pickerPlayPauseHandler: { XCTFail("Plain play must keep its target") })
+        tap.volumeSessionActive = true
+        XCTAssertNil(tap.handle(type: systemDefinedType,
+                                event: mediaKeyEvent(keyCode: 16, isDown: true)))
+        drainMainQueue()
+        XCTAssertEqual(handled, [.playPause])
+    }
+
+    func testCommandMuteOpensPickerBeforeTogglingAndIgnoresRepeatsAndKeyUp() {
+        var events: [String] = []
+        let tap = MediaKeyTap(handler: { _ in events.append("mute") },
+                             commandVolumeHandler: { events.append("picker") })
+        tap.targetCanTakeMute = true
+        for (down, repeatKey) in [(true, false), (true, true), (false, false)] {
+            XCTAssertNil(tap.handle(type: systemDefinedType,
+                                    event: mediaKeyEvent(keyCode: 7, isDown: down,
+                                                         isRepeat: repeatKey, command: true)))
+        }
+        drainMainQueue()
+        XCTAssertEqual(events, ["picker", "mute"])
+    }
+
+    func testCommandMuteOpensPickerEvenWhenMutePassesToSystem() {
+        var opened = 0
+        let tap = MediaKeyTap(handler: { _ in XCTFail("Mute should pass through") },
+                             commandVolumeHandler: { opened += 1 })
+        let result = tap.handle(type: systemDefinedType,
+                                event: mediaKeyEvent(keyCode: 7, isDown: true, command: true))
+        drainMainQueue()
+        XCTAssertNotNil(result)
+        XCTAssertEqual(opened, 1)
+    }
+
+    func testCommandVolumeOpensPickerBeforeDeliveringStep() {
+        var events: [String] = []
+        let tap = MediaKeyTap(handler: { _ in events.append("step") },
+                             commandVolumeHandler: { events.append("picker") })
+        tap.targetCanTakeVolume = true
+        _ = tap.handle(type: systemDefinedType,
+                       event: mediaKeyEvent(keyCode: volumeUpKeyCode, isDown: true, command: true))
+        drainMainQueue()
+        XCTAssertEqual(events, ["picker", "step"])
+    }
+
+    func testCommandVolumeOpensPickerWhenTargetVolumeIsUnavailable() {
+        var opened = 0
+        let tap = MediaKeyTap(handler: { _ in XCTFail("Unavailable volume must pass through") },
+                             commandVolumeHandler: { opened += 1 })
+        let result = tap.handle(type: systemDefinedType,
+                                event: mediaKeyEvent(keyCode: volumeUpKeyCode, isDown: true, command: true))
+        drainMainQueue()
+        XCTAssertNotNil(result)
+        XCTAssertEqual(opened, 1)
+    }
+
+    func testPickerDoesNotOpenForPlainVolumeKeyUpOrDisabledCommandRouting() {
+        var opened = 0
+        let tap = MediaKeyTap(handler: { _ in }, commandVolumeHandler: { opened += 1 })
+        _ = tap.handle(type: systemDefinedType,
+                       event: mediaKeyEvent(keyCode: volumeUpKeyCode, isDown: true))
+        _ = tap.handle(type: systemDefinedType,
+                       event: mediaKeyEvent(keyCode: volumeUpKeyCode, isDown: false, command: true))
+        tap.commandVolumeRouting = false
+        _ = tap.handle(type: systemDefinedType,
+                       event: mediaKeyEvent(keyCode: volumeUpKeyCode, isDown: true, command: true))
+        drainMainQueue()
+        XCTAssertEqual(opened, 0)
+    }
+
     func testPlainVolumeStillReachesTheSystemWhenTheKeysAreNotHooked() {
         var handled: [MediaKey] = []
         let tap = MediaKeyTap(handler: { handled.append($0) })

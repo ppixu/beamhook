@@ -13,8 +13,9 @@ import BeamhookKit
 /// — a bare muted tap changes nothing audible). So each muted process gets the
 /// full assembly: a muted tap, plus a private aggregate device containing the
 /// tap and the default output device (as the clock), plus a do-nothing IO proc
-/// whose only job is to keep the tap read. The IO callbacks ignore the data;
-/// Beamhook never records anything.
+/// whose only job is to keep the tap read. Mute-only callbacks ignore the data.
+/// Volume-controlled apps instead replay the samples through a gain ramp.
+/// No audio is stored.
 ///
 /// Reading tap audio is what the System Audio Recording permission gates
 /// (`NSAudioCaptureUsageDescription`; revocable under Privacy & Security →
@@ -34,6 +35,8 @@ import BeamhookKit
 @available(macOS 14.2, *)
 final class ProcessMuteController: ObservableObject {
     @Published private(set) var mutedBundleIDs: Set<String>
+    @Published private(set) var volumes: [String: Int]
+    @Published private(set) var volumeErrors: [String: String] = [:]
     /// nil until a tap attempt settles it. False drives the Settings hint that
     /// links to the Privacy pane — without it a denied permission is
     /// indistinguishable from mute buttons that silently do nothing.
@@ -54,11 +57,15 @@ final class ProcessMuteController: ObservableObject {
         let tapID: AudioObjectID
         let aggregateID: AudioObjectID
         let ioProcID: AudioDeviceIOProcID
+        let renderer: ProcessVolumeRenderer?
     }
 
     /// Active mutes keyed by the process object they silence. Engine-queue only.
     private var mutes: [AudioObjectID: ActiveMute] = [:]
     private var timer: Timer?
+    private var controlledIdentity: [AudioObjectID: String] = [:]
+    private var observedOutput: AudioObjectID?
+    private var outputListener: AudioObjectPropertyListenerBlock?
 
     // Metering (see `setMeterWatchlist`): the same tap assembly, unmuted, whose
     // IO block measures peaks instead of ignoring the buffers.
@@ -75,6 +82,7 @@ final class ProcessMuteController: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.mutedBundleIDs = PerAppMutePreference.mutedBundleIDs(defaults)
+        self.volumes = PerAppMutePreference.volumes(defaults)
         observeDefaultOutputChanges()
     }
 
@@ -87,7 +95,23 @@ final class ProcessMuteController: ObservableObject {
     /// The preference side is cleared by `PerAppMutePreference.setEnabled(false)`.
     func stopAndClear() {
         mutedBundleIDs = []
+        volumes = [:]
+        volumeErrors = [:]
+        PerAppMutePreference.setVolumes([:], in: defaults)
         setMeterWatchlist([])
+        applyAndReschedule()
+    }
+
+    func volume(for bundleID: String) -> Int { volumes[bundleID] ?? 100 }
+
+    func setVolume(_ percent: Int, bundleID: String) {
+        guard !bundleID.hasPrefix("com.github.ppixu.beamhook") else { return }
+        let next = min(100, max(0, percent))
+        guard next != volume(for: bundleID) else { return }
+        // Keep a live renderer at 100% until the process exits so the final step
+        // ramps smoothly. Only levels below 100% survive a Beamhook restart.
+        volumes[bundleID] = next
+        PerAppMutePreference.setVolumes(volumes, in: defaults)
         applyAndReschedule()
     }
 
@@ -205,7 +229,7 @@ final class ProcessMuteController: ObservableObject {
         loudLock.lock()
         let loudObjects = loudUntil.filter { $0.value > now }.map(\.key)
         loudLock.unlock()
-        let audible = Set(loudObjects.compactMap { meterIdentity[$0] })
+        let audible = Set(loudObjects.compactMap { meterIdentity[$0] ?? controlledIdentity[$0] }).intersection(watch)
         DispatchQueue.main.async { [weak self] in
             guard let self, self.audibleApps != audible else { return }
             self.audibleApps = audible
@@ -241,47 +265,74 @@ final class ProcessMuteController: ObservableObject {
     /// poll running while anything is muted so a muted app that (re)launches is
     /// re-tapped. Main thread only.
     private func applyAndReschedule() {
-        let wanted = mutedBundleIDs
-        engine.async { [weak self] in self?.reconcile(muted: wanted) }
-        if mutedBundleIDs.isEmpty {
+        let muted = mutedBundleIDs
+        let levels = volumes
+        engine.async { [weak self] in self?.reconcile(muted: muted, levels: levels) }
+        if muted.isEmpty && levels.isEmpty {
             timer?.invalidate()
             timer = nil
         } else if timer == nil {
             let t = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
-                guard let self else { return }
-                let wanted = self.mutedBundleIDs
-                self.engine.async { [weak self] in self?.reconcile(muted: wanted) }
+                self?.applyAndReschedule()
             }
             RunLoop.main.add(t, forMode: .common)
             timer = t
         }
     }
 
-    /// Engine-queue only.
-    private func reconcile(muted: Set<String>) {
-        var wanted = Set<AudioObjectID>()
-        if !muted.isEmpty {
-            for obj in AudioProcessMonitor.processObjectIDs()
-            where muted.contains(AudioProcessMonitor.rowBundleID(for: obj) ?? "") {
-                wanted.insert(obj)
+    /// Engine-queue only. Existing renderers receive gain updates on their IO
+    /// queue; changing the slider does not rebuild devices or interrupt audio.
+    private func reconcile(muted: Set<String>, levels: [String: Int]) {
+        let bundles = muted.union(levels.keys)
+        var wanted: [AudioObjectID: String] = [:]
+        if !bundles.isEmpty {
+            for obj in AudioProcessMonitor.processObjectIDs() {
+                guard let bid = AudioProcessMonitor.rowBundleID(for: obj),
+                      bundles.contains(bid), !bid.hasPrefix("com.github.ppixu.beamhook") else { continue }
+                wanted[obj] = bid
             }
         }
-        for (obj, mute) in mutes where !wanted.contains(obj) {
-            tearDown(mute)
+        for (obj, assembly) in mutes where wanted[obj] == nil {
+            tearDown(assembly)
             mutes[obj] = nil
+            controlledIdentity[obj] = nil
+            loudLock.lock(); loudUntil[obj] = nil; loudLock.unlock()
         }
-        for obj in wanted where mutes[obj] == nil {
-            switch buildAssembly(for: obj, muteBehavior: .muted) {
-            case .success(let mute):
-                Self.log.notice("Muting process object \(obj) (tap \(mute.tapID), aggregate \(mute.aggregateID))")
-                mutes[obj] = mute
+        var errors: [String: String] = [:]
+        for (obj, bid) in wanted {
+            let needsRenderer = levels[bid] != nil && !muted.contains(bid)
+            let gain: Float = muted.contains(bid) ? 0 : Float(levels[bid] ?? 100) / 100
+            if let assembly = mutes[obj] {
+                if let renderer = assembly.renderer {
+                    ioQueue.async { renderer.targetGain = gain }
+                    continue
+                }
+                if !needsRenderer { continue }
+                tearDown(assembly)
+                mutes[obj] = nil
+            }
+            // A controlled tap also supplies the meter; never run a second tap
+            // on the same process alongside playback.
+            if let meter = meters.removeValue(forKey: obj) { tearDown(meter) }
+            meterIdentity[obj] = nil
+            switch buildAssembly(for: obj, muteBehavior: .muted,
+                                 playbackGain: needsRenderer ? gain : nil) {
+            case .success(let assembly):
+                mutes[obj] = assembly
+                controlledIdentity[obj] = bid
                 DispatchQueue.main.async { [weak self] in self?.permissionGranted = true }
             case .processGone:
                 break
             case .failure(let err):
-                Self.log.error("Mute assembly failed for object \(obj): \(err)")
-                DispatchQueue.main.async { [weak self] in self?.permissionGranted = false }
+                Self.log.error("Audio control failed for object \(obj): \(err)")
+                errors[bid] = err == kAudioDeviceUnsupportedFormatError
+                    ? "Volume unavailable for this output format. Use a mono or stereo output."
+                    : "Audio control failed. Check System Audio Recording permission and try again."
             }
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.volumeErrors != errors else { return }
+            self.volumeErrors = errors
         }
     }
 
@@ -298,7 +349,8 @@ final class ProcessMuteController: ObservableObject {
     /// pass a block that measures the buffers instead.
     private func buildAssembly(for obj: AudioObjectID,
                                muteBehavior: CATapMuteBehavior,
-                               ioBlock: AudioDeviceIOBlock? = nil) -> BuildResult {
+                               ioBlock: AudioDeviceIOBlock? = nil,
+                               playbackGain: Float? = nil) -> BuildResult {
         let description = CATapDescription(stereoMixdownOfProcesses: [obj])
         description.muteBehavior = muteBehavior
         description.isPrivate = true
@@ -326,10 +378,12 @@ final class ProcessMuteController: ObservableObject {
                 ]
             ],
         ]
-        if let outputUID = Self.defaultOutputDeviceUID() {
+        let outputDevice = Self.defaultOutputDevice()
+        if let outputUID = outputDevice?.uid {
             aggregate[kAudioAggregateDeviceMainSubDeviceKey as String] = outputUID
             aggregate[kAudioAggregateDeviceSubDeviceListKey as String] = [
-                [kAudioSubDeviceUIDKey as String: outputUID]
+                [kAudioSubDeviceUIDKey as String: outputUID,
+                 kAudioSubDeviceInputChannelsKey as String: 0]
             ]
         }
 
@@ -343,9 +397,46 @@ final class ProcessMuteController: ObservableObject {
         // The read that engages the mute (and the permission). For a mute the
         // buffers are deliberately ignored; the HAL hands the output side to us
         // pre-zeroed, so leaving it untouched plays silence.
+        var renderer: ProcessVolumeRenderer?
+        var callback = ioBlock ?? { _, _, _, _, _ in }
+        if let gain = playbackGain {
+            // A tap initially defaults to 48 kHz even on a 44.1 kHz output.
+            // Set the private aggregate to the physical output's existing rate;
+            // HAL converts the tap using drift compensation. Never retune the
+            // user's hardware just to accommodate our capture stream.
+            guard let outputDevice,
+                  Self.matchOutputRate(aggregate: aggregateID, output: outputDevice.id) else {
+                AudioHardwareDestroyAggregateDevice(aggregateID)
+                AudioHardwareDestroyProcessTap(tapID)
+                return .failure(kAudioDeviceUnsupportedFormatError)
+            }
+            guard let configuration = ProcessVolumeRenderer.configuration(device: aggregateID) else {
+                AudioHardwareDestroyAggregateDevice(aggregateID)
+                AudioHardwareDestroyProcessTap(tapID)
+                return .failure(kAudioDeviceUnsupportedFormatError)
+            }
+            let playback = ProcessVolumeRenderer(gain: gain, sampleRate: configuration.sampleRate,
+                                                 outputChannels: configuration.outputChannels)
+            renderer = playback
+            var invalidated = false // IO-queue confined, just like the renderer.
+            callback = { [weak self] _, input, _, output, _ in
+                guard playback.render(input: input, output: output) else {
+                    if !invalidated {
+                        invalidated = true
+                        self?.engine.async { [weak self] in
+                            guard let self, self.mutes[obj]?.aggregateID == aggregateID else { return }
+                            self.rebuildAssemblies()
+                        }
+                    }
+                    return
+                }
+                if playback.currentGain > 0 {
+                    self?.notePeak(obj: obj, bufferList: UnsafePointer(output))
+                }
+            }
+        }
         var ioProcID: AudioDeviceIOProcID?
-        err = AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateID, ioQueue,
-                                                 ioBlock ?? { _, _, _, _, _ in })
+        err = AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateID, ioQueue, callback)
         guard err == noErr, let ioProcID else {
             AudioHardwareDestroyAggregateDevice(aggregateID)
             AudioHardwareDestroyProcessTap(tapID)
@@ -360,7 +451,7 @@ final class ProcessMuteController: ObservableObject {
             return .failure(err)
         }
 
-        return .success(ActiveMute(tapID: tapID, aggregateID: aggregateID, ioProcID: ioProcID))
+        return .success(ActiveMute(tapID: tapID, aggregateID: aggregateID, ioProcID: ioProcID, renderer: renderer))
     }
 
     /// Engine-queue only.
@@ -383,27 +474,61 @@ final class ProcessMuteController: ObservableObject {
         AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject), &address, engine
         ) { [weak self] _, _ in
-            guard let self else { return }
-            for (obj, mute) in self.mutes {
-                self.tearDown(mute)
-                self.mutes[obj] = nil
+            self?.observeOutputFormat()
+            self?.rebuildAssemblies()
+        }
+        engine.async { [weak self] in self?.observeOutputFormat() }
+    }
+
+    /// A Bluetooth profile or Audio MIDI Setup can change the format without
+    /// changing the default device. Rebuild against its new clock/layout too.
+    private func observeOutputFormat() {
+        let selectors: [AudioObjectPropertySelector] = [kAudioDevicePropertyNominalSampleRate,
+                                                        kAudioDevicePropertyStreamConfiguration]
+        if let device = observedOutput, let listener = outputListener {
+            for selector in selectors {
+                var address = AudioObjectPropertyAddress(mSelector: selector,
+                    mScope: selector == kAudioDevicePropertyStreamConfiguration
+                        ? kAudioDevicePropertyScopeOutput : kAudioObjectPropertyScopeGlobal,
+                    mElement: kAudioObjectPropertyElementMain)
+                AudioObjectRemovePropertyListenerBlock(device, &address, engine, listener)
             }
-            for (obj, meter) in self.meters {
-                self.tearDown(meter)
-                self.meters[obj] = nil
-                self.meterIdentity[obj] = nil
-            }
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                // Re-runs the reconcile with the current set (and keeps the
-                // poll timer consistent with it); the meter timer's next tick
-                // rebuilds the meters the same way.
-                self.applyAndReschedule()
-            }
+        }
+        observedOutput = Self.defaultOutputDevice()?.id
+        guard let device = observedOutput else { outputListener = nil; return }
+        let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.rebuildAssemblies() }
+        outputListener = listener
+        for selector in selectors {
+            var address = AudioObjectPropertyAddress(mSelector: selector,
+                mScope: selector == kAudioDevicePropertyStreamConfiguration
+                    ? kAudioDevicePropertyScopeOutput : kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain)
+            AudioObjectAddPropertyListenerBlock(device, &address, engine, listener)
         }
     }
 
-    private static func defaultOutputDeviceUID() -> String? {
+    private func rebuildAssemblies() {
+        for assembly in mutes.values { tearDown(assembly) }
+        mutes = [:]
+        controlledIdentity = [:]
+        for assembly in meters.values { tearDown(assembly) }
+        meters = [:]
+        meterIdentity = [:]
+        loudLock.lock(); loudUntil = [:]; loudLock.unlock()
+        DispatchQueue.main.async { [weak self] in self?.applyAndReschedule() }
+    }
+
+    private static func matchOutputRate(aggregate: AudioObjectID, output: AudioObjectID) -> Bool {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var rate: Float64 = 0
+        var size = UInt32(MemoryLayout<Float64>.size)
+        guard AudioObjectGetPropertyData(output, &address, 0, nil, &size, &rate) == noErr,
+              rate.isFinite, rate > 0 else { return false }
+        return AudioObjectSetPropertyData(aggregate, &address, 0, nil, size, &rate) == noErr
+    }
+
+    private static func defaultOutputDevice() -> (id: AudioObjectID, uid: String)? {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultOutputDevice,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -416,9 +541,10 @@ final class ProcessMuteController: ObservableObject {
         address.mSelector = kAudioDevicePropertyDeviceUID
         var uid: CFString = "" as CFString
         size = UInt32(MemoryLayout<CFString>.size)
-        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &uid) == noErr else {
-            return nil
+        let status = withUnsafeMutablePointer(to: &uid) {
+            AudioObjectGetPropertyData(device, &address, 0, nil, &size, $0)
         }
-        return uid as String
+        guard status == noErr else { return nil }
+        return (device, uid as String)
     }
 }

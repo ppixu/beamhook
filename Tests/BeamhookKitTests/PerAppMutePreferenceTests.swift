@@ -59,4 +59,19 @@ final class PerAppMutePreferenceTests: XCTestCase {
         PerAppMutePreference.setEnabled(true, in: defaults)
         XCTAssertTrue(PerAppMutePreference.mutedBundleIDs(defaults).isEmpty)
     }
+    func testVolumesPersistWithBoundsAndNormalVolumeIsNotStored() {
+        let defaults = makeDefaults()
+        XCTAssertEqual(PerAppMutePreference.volumes(defaults), [:])
+        PerAppMutePreference.setVolumes(["quiet": 25, "silent": -5, "normal": 100, "loud": 150], in: defaults)
+        XCTAssertEqual(PerAppMutePreference.volumes(defaults), ["quiet": 25, "silent": 0])
+        PerAppMutePreference.setMutedBundleIDs(["quiet"], in: defaults)
+        XCTAssertEqual(PerAppMutePreference.volumes(defaults)["quiet"], 25, "Mute preserves the restore level")
+        PerAppMutePreference.setMutedBundleIDs([], in: defaults)
+        XCTAssertEqual(PerAppMutePreference.volumes(defaults)["quiet"], 25)
+        PerAppMutePreference.setEnabled(false, in: defaults)
+        XCTAssertEqual(PerAppMutePreference.volumes(defaults), [:])
+        PerAppMutePreference.setEnabled(true, in: defaults)
+        XCTAssertEqual(PerAppMutePreference.volumes(defaults), [:])
+    }
+
 }

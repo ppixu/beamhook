@@ -1,11 +1,11 @@
 import Foundation
 
-/// Something whose volume the volume keys can drive during a picker session.
+/// A sounding source listed during a volume or mute picker session.
 public enum VolumeSource: Hashable, Sendable {
     /// Whatever is hooked — for a browser, its selected tab. Routed through
     /// `TargetManager` exactly like a volume key outside a session.
     case hookedTarget
-    /// Another running app with a scriptable volume.
+    /// Another sounding app, including apps that support only mute.
     case app(bundleID: String)
     /// A browser tab, by `BrowserMediaCandidate.id`.
     case browserTab(id: String)
@@ -24,20 +24,20 @@ public enum VolumeSource: Hashable, Sendable {
 public struct VolumeSourceEntry: Equatable, Sendable {
     public let source: VolumeSource
     public let name: String
+    public let parentSource: VolumeSource?
 
-    public init(source: VolumeSource, name: String) {
+    public init(source: VolumeSource, name: String, parentSource: VolumeSource? = nil) {
+        self.parentSource = parentSource
         self.source = source
         self.name = name
     }
 }
 
 /// The rows of the volume-source picker: the hooked target first, then other
-/// playing apps, then browser tabs, capped so the HUD stays a glance. Selection
+/// playing apps, with browser tabs grouped below their parent. Selection
 /// wraps at both ends and survives refreshes by source identity, because tabs
 /// arrive a moment after the list first appears.
 public struct VolumeSourceList: Equatable, Sendable {
-    public static let maxRows = 6
-
     public private(set) var entries: [VolumeSourceEntry] = []
     public private(set) var selectedIndex = 0
 
@@ -47,6 +47,7 @@ public struct VolumeSourceList: Equatable, Sendable {
 
     public init(target: VolumeSourceEntry?, apps: [VolumeSourceEntry], tabs: [VolumeSourceEntry]) {
         entries = Self.ordered(target: target, apps: apps, tabs: tabs)
+        selectedIndex = entries.firstIndex { $0.source == target?.source } ?? 0
     }
 
     public mutating func selectNext() {
@@ -76,6 +77,19 @@ public struct VolumeSourceList: Equatable, Sendable {
                                 tabs: [VolumeSourceEntry]) -> [VolumeSourceEntry] {
         var seen = Set<VolumeSource>()
         let all = (target.map { [$0] } ?? []) + apps + tabs
-        return Array(all.filter { seen.insert($0.source).inserted }.prefix(maxRows))
+        let unique = all.filter { seen.insert($0.source).inserted }
+        let sources = Set(unique.map(\.source))
+        var result: [VolumeSourceEntry] = []
+        for entry in unique where entry.parentSource.map({ sources.contains($0) }) != true {
+            result.append(entry)
+            result.append(contentsOf: unique.filter { $0.parentSource == entry.source }.sorted {
+                switch $0.name.localizedStandardCompare($1.name) {
+                case .orderedAscending: return true
+                case .orderedDescending: return false
+                case .orderedSame: return $0.source.id < $1.source.id
+                }
+            })
+        }
+        return result
     }
 }

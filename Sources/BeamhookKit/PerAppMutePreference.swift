@@ -13,6 +13,7 @@ import Foundation
 public enum PerAppMutePreference {
     public static let enabledKey = "perAppMuteEnabled"
     public static let mutedAppsKey = "perAppMutedBundleIDs"
+    public static let volumesKey = "perAppVolumes"
 
     /// Absent means ON.
     public static func isEnabled(_ defaults: UserDefaults) -> Bool {
@@ -23,7 +24,20 @@ public enum PerAppMutePreference {
         defaults.set(enabled, forKey: enabledKey)
         if !enabled {
             defaults.removeObject(forKey: mutedAppsKey)
+            defaults.removeObject(forKey: volumesKey)
         }
+    }
+
+    /// Only attenuated levels are persisted; absence means normal (100%).
+    public static func volumes(_ defaults: UserDefaults) -> [String: Int] {
+        (defaults.dictionary(forKey: volumesKey) as? [String: Int] ?? [:])
+            .mapValues { min(100, max(0, $0)) }.filter { $0.value < 100 }
+    }
+
+    public static func setVolumes(_ volumes: [String: Int], in defaults: UserDefaults) {
+        let values = volumes.mapValues { min(100, max(0, $0)) }.filter { $0.value < 100 }
+        if values.isEmpty { defaults.removeObject(forKey: volumesKey) }
+        else { defaults.set(values, forKey: volumesKey) }
     }
 
     public static func mutedBundleIDs(_ defaults: UserDefaults) -> Set<String> {

@@ -1,10 +1,10 @@
 import Foundation
 
-/// A keystroke that moves the volume-source picker. ⌘↑ / ⌘↓ are the advertised
-/// keys; ⌘PgUp / ⌘PgDn are quiet aliases for external keyboards. Anything with
+/// A picker keystroke: ⌘↑ / ⌘↓ select and ⌘← / ⌘→ adjust volume.
+/// ⌘PgUp / ⌘PgDn are selection aliases for external keyboards. Anything with
 /// ⇧, ⌥ or ⌃ as well is left alone — ⌘⇧↑ is "select to start" in every editor.
 public enum SourcePickerKey: Equatable, Sendable {
-    case previous, next
+    case previous, next, volumeDown, volumeUp
 
     /// Virtual key codes from Carbon's HIToolbox `Events.h`.
     private static let upArrow = 126, downArrow = 125, pageUp = 116, pageDown = 121
@@ -17,6 +17,8 @@ public enum SourcePickerKey: Equatable, Sendable {
         switch keyCode {
         case upArrow, pageUp: return .previous
         case downArrow, pageDown: return .next
+        case 123: return .volumeDown
+        case 124: return .volumeUp
         default: return nil
         }
     }

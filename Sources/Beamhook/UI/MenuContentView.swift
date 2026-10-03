@@ -302,39 +302,7 @@ private struct PlayingAppsListAvailable: View {
     /// actually emitting audio. Supported browsers resolve to their YouTube
     /// definitions in AudioProcessMonitor, including Safari's WebKit helper.
     private var rows: [PlayingApp] {
-        var seen = Set<String>()
-        var out: [PlayingApp] = []
-        for app in monitor.playingApps where seen.insert(app.bundleID).inserted {
-            // Prefer a known app's own name (e.g. "Apple Music") over the OS process
-            // name ("Music") so the label is the same whether it's playing or just open.
-            let name = state.availableApps.first { $0.bundleID == app.bundleID }?.displayName ?? app.displayName
-            out.append(PlayingApp(id: app.bundleID, displayName: name, bundleID: app.bundleID))
-        }
-        let scriptableRunning = state.availableApps
-            .filter { state.volumeScriptable(bundleID: $0.bundleID) && state.isRunning(bundleID: $0.bundleID) }
-            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
-        for def in scriptableRunning where seen.insert(def.bundleID).inserted {
-            out.append(PlayingApp(id: def.bundleID, displayName: def.displayName, bundleID: def.bundleID))
-        }
-        // Muted apps stay listed while they run, even once silent — a muted app
-        // stops appearing "recently playing", and the unmute button must not
-        // vanish along with the sound it silenced.
-        if state.perAppMuteEnabled {
-            for bid in state.mutedApps.sorted()
-            where !seen.contains(bid) && state.isRunning(bundleID: bid) {
-                seen.insert(bid)
-                let name = state.availableApps.first { $0.bundleID == bid }?.displayName
-                    ?? state.runningAppName(bundleID: bid)
-                    ?? bid
-                out.append(PlayingApp(id: bid, displayName: name, bundleID: bid))
-            }
-        }
-        if let targetBundleID,
-           let targetIndex = out.firstIndex(where: { $0.bundleID == targetBundleID }),
-           targetIndex != 0 {
-            out.insert(out.remove(at: targetIndex), at: 0)
-        }
-        return out
+        state.playingAppRows(monitor.playingApps)
     }
 
     var body: some View {
@@ -368,10 +336,7 @@ private struct PlayingAppsListAvailable: View {
             state.setMeterWatchlist(state.isMenuVisible ? meterWatchlist : [])
         }
         .task(id: browserRefreshID) {
-            guard state.isMenuVisible else {
-                await state.refreshActiveBrowserMedia(bundleIDs: [])
-                return
-            }
+            guard state.isMenuVisible else { return }
             while !Task.isCancelled {
                 await state.refreshActiveBrowserMedia(bundleIDs: activeBrowserBundleIDs)
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
@@ -411,7 +376,10 @@ private struct AppVolumeRow: View {
     @State private var appIsPlaying: Bool?
     @State private var playPauseInFlight = false
 
-    private var scriptable: Bool { availability == .slider }
+    private var scriptable: Bool {
+        state.usesProcessVolume(bundleID: playing.bundleID)
+            || (!isBrowser && state.volumeScriptable(bundleID: playing.bundleID) && availability == .slider)
+    }
 
     private var isTarget: Bool {
         guard let id = state.selectedTargetID,
@@ -469,9 +437,9 @@ private struct AppVolumeRow: View {
                     .accessibilityAction { state.activate(bundleID: playing.bundleID) }
                     .help("Show \(playing.displayName)")
                 Spacer(minLength: 2)
-                // Browsers expose multiple independently controllable media sources,
-                // so their volume always lives in the named child rows below.
-                if scriptable && !isTarget && !isBrowser {
+                // Browser parents adjust the whole browser; child rows below
+                // continue to adjust only their named tab.
+                if scriptable && (!isTarget || isBrowser) {
                     compactSlider
                 }
                 if state.perAppMuteEnabled {
@@ -502,6 +470,13 @@ private struct AppVolumeRow: View {
                     Text("system volume only").font(.caption2).foregroundStyle(.secondary)
                 }
             }
+            if let error = state.processVolumeErrors[playing.bundleID] {
+                Text(error).font(.caption2).foregroundStyle(.secondary)
+            }
+            if state.usesProcessVolume(bundleID: playing.bundleID), state.mutePermissionGranted == false {
+                Button("Allow System Audio Recording…") { state.permissions.openAudioCaptureSettings() }
+                    .buttonStyle(.link).font(.caption2)
+            }
             ForEach(browserSources) { candidate in
                 BrowserVolumeRow(candidate: candidate)
             }
@@ -515,20 +490,24 @@ private struct AppVolumeRow: View {
                     .foregroundStyle(.tertiary)
                     .padding(.leading, 8)
             }
-            if scriptable && isTarget && isBrowser {
+            if isTarget && isBrowser && state.targetCanTakeVolume {
                 volumeKeyControls
             }
         }
-        .task(id: state.isMenuVisible) {
+        .task(id: "\(state.isMenuVisible):\(state.perAppMuteEnabled)") {
             guard state.isMenuVisible else { return }
-            if isBrowser {
+            if isBrowser && !state.usesProcessVolume(bundleID: playing.bundleID) {
                 // Browser volume is source-specific. We only need the capability
                 // flag here; BrowserVolumeRow obtains each source's live volume.
                 availability = state.volumeScriptable(bundleID: playing.bundleID)
                     ? .slider : .systemVolumeOnly
                 return
             }
-            if let cached = state.volumeByBundle[playing.bundleID] {
+            if state.usesProcessVolume(bundleID: playing.bundleID),
+               let level = await state.volume(for: playing.bundleID) {
+                volume = Double(level); availability = .slider
+            } else if let cached = state.volumeByBundle[playing.bundleID],
+                      state.volumeScriptable(bundleID: playing.bundleID) {
                 volume = Double(cached); availability = .slider
             } else {
                 if let v = await state.volume(for: playing.bundleID) {
@@ -604,8 +583,8 @@ private struct AppVolumeRow: View {
         .controlSize(.mini)
         .tint(.gray)
         .frame(width: 52)
-        .accessibilityLabel("\(playing.displayName) volume")
-        .help("\(playing.displayName) volume: \(Int(volume))%")
+        .accessibilityLabel("\(playing.displayName) volume\(isBrowser ? ", all tabs" : "")")
+        .help("\(playing.displayName)\(isBrowser ? " — all tabs" : "") volume: \(Int(volume))%")
     }
 
     private var isMuted: Bool { state.isAppMuted(playing.bundleID) }
@@ -715,7 +694,7 @@ private struct AppVolumeRow: View {
 /// symbol's geometry stable, so the flicker never shifts the row's layout.
 /// The levels are a fixed loop (cheap, deterministic); `seed` offsets each
 /// icon's position in it so neighboring rows don't pulse in lockstep.
-private struct EmittingSpeakerIcon: View {
+struct EmittingSpeakerIcon: View {
     let seed: String
 
     private static let levels: [Double] = [0.67, 1.0, 0.34, 0.67, 1.0, 0.67, 0.34, 1.0, 0.67, 0.34]

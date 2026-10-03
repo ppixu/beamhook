@@ -109,9 +109,8 @@ final class AppState: ObservableObject {
     private let targetLauncher: TargetLauncher
     /// Per-browser playback recency used to keep the menu bounded to the three
     /// most relevant source tabs even when a browser has hundreds of media tabs.
-    private var browserSourceRecency: [String: UInt64] = [:]
-    private var playingBrowserSourceIDs = Set<String>()
-    private var browserSourceRecencySequence: UInt64 = 0
+    private var browserSourceRecency: [String: Date] = [:]
+    private static let browserSourceRetention: TimeInterval = 2 * 60 * 60
     /// Volume-key presses for one source, coalesced into a net step count.
     private struct VolumeStepBatch {
         let source: VolumeSource
@@ -155,15 +154,19 @@ final class AppState: ObservableObject {
     /// Non-nil while the source list is on screen — the spec's "volume session".
     /// While set, every volume key and ⌘+Mute follow its selection.
     private var volumeSession: VolumeSourceList? {
-        didSet { updateVolumeSessionRouting() }
+        didSet {
+            updateVolumeSessionRouting()
+            updateMeterWatchlist()
+        }
     }
+    private var menuMeterWatchlist: Set<String> = []
     /// The session's background refresh (volumes, browser tabs).
     private var volumeSessionRefresh: Task<Void, Never>?
     /// Whether the volume HUD is currently on screen. Guards against a ⌘↑/⌘↓
     /// that reaches the main queue just after the HUD hid and the picker tap
     /// was disarmed — without this, a stale key would open a session and
     /// re-show the HUD with no keyboard tap behind it.
-    private var volumeHUDVisible = false
+    private var hudVisible = false
     /// Exists for the app's lifetime; only *installed* while a volume HUD is up.
     private lazy var sourcePickerTap = SourcePickerKeyTap { [weak self] key in
         MainActor.assumeIsolated { self?.handleSourcePickerKey(key) }
@@ -214,6 +217,8 @@ final class AppState: ObservableObject {
     @Published var volumeKeyOverride: [String: Bool] = [:]
     /// Latest known volume (0...100) per bundle id, so sliders update live.
     @Published var volumeByBundle: [String: Int] = [:]
+    @Published private(set) var processVolumeLevels: [String: Int] = [:]
+    @Published private(set) var processVolumeErrors: [String: String] = [:]
     @Published var browserMediaInjectionAvailable: Bool?
     @Published var browserTargetRunning: Bool?
     @Published var browserMediaCandidates: [BrowserMediaCandidate] = [] {
@@ -223,17 +228,17 @@ final class AppState: ObservableObject {
             // inout write inside its own didSet re-fires the didSet. Scanned
             // data is patched with the session's tab levels before assignment
             // (see `applyingSessionTabVolumes`).
-            if volumeSession != nil { updateVolumeSessionRouting() }
+            updateVolumeRouting()
         }
     }
     @Published var selectedBrowserMediaID: String? {
         didSet {
             if selectedBrowserMediaID != oldValue { playbackContextRevision &+= 1 }
             updateMenuBarGlyph()
+            updateVolumeRouting()
         }
     }
-    /// Volume-controllable browser tabs for browsers whose Core Audio process
-    /// currently has an output stream. Populated while the menu is visible, and
+    /// Volume-controllable browser tabs for sounding or recently playing browsers. Populated while the menu is visible, and
     /// also kept fresh by the volume-source picker's session refresh.
     @Published var activeBrowserMediaCandidates: [BrowserMediaCandidate] = [] {
         didSet {
@@ -302,12 +307,18 @@ final class AppState: ObservableObject {
             },
             passthroughHandler: { key in
                 MainActor.assumeIsolated { handlerBox.state?.handlePassedThroughKey(key) }
+            },
+            commandVolumeHandler: {
+                MainActor.assumeIsolated { handlerBox.state?.showVolumePicker() }
+            },
+            pickerPlayPauseHandler: {
+                MainActor.assumeIsolated { handlerBox.state?.togglePickerPlayback() }
             })
         self.tap = tap
         self.watchdog = TapWatchdog(tap: tap)
 
         loadVolumeOverrides()
-        if PerAppMutePreference.isEnabled(.standard), #available(macOS 14.2, *) {
+        if !AppEnvironment.isRunningTests, PerAppMutePreference.isEnabled(.standard), #available(macOS 14.2, *) {
             // No permission probe here: this runs before Accessibility is
             // settled. `activateInput` asks once, on the first activation, so
             // a fresh install sees Accessibility first and System Audio
@@ -484,6 +495,9 @@ final class AppState: ObservableObject {
         HookHUD.shared.onVolumeVisibilityChange = { [weak self] visible in
             self?.volumeHUDVisibilityChanged(visible)
         }
+        HookHUD.shared.onVisibilityChange = { [weak self] visible in
+            self?.hudVisibilityChanged(visible)
+        }
         if selectedTargetIsBrowser {
             Task { await refreshBrowserMedia() }
         }
@@ -615,6 +629,7 @@ final class AppState: ObservableObject {
     /// Authoritative: a click, a key press, or a settled confirm read.
     func notePlayback(bundleID: String, playing: Bool) {
         playbackHints[bundleID] = PlaybackHint(playing: playing, at: Date())
+        refreshVolumeSourceActivity()
     }
 
     /// From a periodic poll — dropped while that app's toggle is settling.
@@ -863,6 +878,9 @@ final class AppState: ObservableObject {
         guard BrowserKind.target(id: selectedTargetID) == browser else { return }
 
         browserMediaInjectionAvailable = scan.injectionAvailable
+        if scan.injectionAvailable {
+            _ = recentBrowserSources(from: scan.candidates, browser: browser)
+        }
         browserMediaCandidates = Self.applyingSessionTabVolumes(sessionTabVolumes, to: scan.candidates)
         tap.transportKeysHijacked = scan.injectionAvailable
 
@@ -905,25 +923,18 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Discover volume-controllable tabs in browsers that Core Audio currently
-    /// reports as producing output. The selected browser's regular scan is reused
-    /// when possible so opening the menu doesn't send duplicate Apple events.
+    /// Include recently playing browsers even after their output stream stops.
+    /// Only live scans supply rows, so remembered IDs cannot resurrect closed tabs.
     func refreshActiveBrowserMedia(bundleIDs: Set<String>) async {
-        let browsers = BrowserKind.allCases.filter { bundleIDs.contains($0.bundleID) }
-        guard !browsers.isEmpty else {
-            activeBrowserMediaCandidates = []
-            browserSourceRecency = [:]
-            playingBrowserSourceIDs = []
-            return
+        let remembered = recentBrowserBundleIDs()
+        let browsers = BrowserKind.allCases.filter {
+            (bundleIDs.contains($0.bundleID) || remembered.contains($0.bundleID))
+                && isRunning(bundleID: $0.bundleID)
         }
-
-        let activePrefixes = browsers.map { "\($0.rawValue):" }
+        let runningPrefixes = browsers.map { "\($0.rawValue):" }
         browserSourceRecency = browserSourceRecency.filter { entry in
-            activePrefixes.contains { entry.key.hasPrefix($0) }
+            runningPrefixes.contains { entry.key.hasPrefix($0) }
         }
-        playingBrowserSourceIDs = Set(playingBrowserSourceIDs.filter { id in
-            activePrefixes.contains { id.hasPrefix($0) }
-        })
 
         var candidates: [BrowserMediaCandidate] = []
         for browser in browsers {
@@ -951,9 +962,10 @@ final class AppState: ObservableObject {
     /// target, then previously observed playback recency. Only three survive.
     /// Ranking decides *which* three; the rows are then shown in name order, so
     /// pausing a source can't make it jump past its neighbours under the cursor.
-    private func recentBrowserSources(
+    func recentBrowserSources(
         from candidates: [BrowserMediaCandidate],
-        browser: BrowserKind
+        browser: BrowserKind,
+        now: Date = Date()
     ) -> [BrowserMediaCandidate] {
         let prefix = "\(browser.rawValue):"
         let candidateIDs = Set(candidates.map(\.id))
@@ -961,15 +973,12 @@ final class AppState: ObservableObject {
             !entry.key.hasPrefix(prefix) || candidateIDs.contains(entry.key)
         }
 
-        let previouslyPlaying = Set(playingBrowserSourceIDs.filter { $0.hasPrefix(prefix) })
-        let nowPlaying = Set(candidates.lazy.filter(\.isPlaying).map(\.id))
-        for candidate in candidates where candidate.isPlaying
-            && !previouslyPlaying.contains(candidate.id) {
-            browserSourceRecencySequence &+= 1
-            browserSourceRecency[candidate.id] = browserSourceRecencySequence
+        for candidate in candidates where candidate.isPlaying {
+            browserSourceRecency[candidate.id] = now
         }
-        playingBrowserSourceIDs.subtract(previouslyPlaying)
-        playingBrowserSourceIDs.formUnion(nowPlaying)
+        browserSourceRecency = browserSourceRecency.filter {
+            now.timeIntervalSince($0.value) < Self.browserSourceRetention
+        }
 
         let ranked = candidates
             .filter {
@@ -979,8 +988,8 @@ final class AppState: ObservableObject {
             .sorted { lhs, rhs in
                 if lhs.isPlaying != rhs.isPlaying { return lhs.isPlaying }
                 if lhs.isSelected != rhs.isSelected { return lhs.isSelected }
-                let lhsRecency = browserSourceRecency[lhs.id] ?? 0
-                let rhsRecency = browserSourceRecency[rhs.id] ?? 0
+                let lhsRecency = browserSourceRecency[lhs.id] ?? .distantPast
+                let rhsRecency = browserSourceRecency[rhs.id] ?? .distantPast
                 if lhsRecency != rhsRecency { return lhsRecency > rhsRecency }
                 return lhs.id < rhs.id
             }
@@ -992,12 +1001,17 @@ final class AppState: ObservableObject {
             }
         }
 
-        // Keep only the recency needed for future three-row rankings.
-        let retainedIDs = Set(displayed.map(\.id))
-        browserSourceRecency = browserSourceRecency.filter { entry in
-            !entry.key.hasPrefix(prefix) || retainedIDs.contains(entry.key)
-        }
         return displayed
+    }
+
+    /// Expiration is based on actual observed playback, never menu access.
+    func recentBrowserBundleIDs(now: Date = Date()) -> Set<String> {
+        browserSourceRecency = browserSourceRecency.filter {
+            now.timeIntervalSince($0.value) < Self.browserSourceRetention
+        }
+        return Set(BrowserKind.allCases.filter { browser in
+            browserSourceRecency.keys.contains { $0.hasPrefix("\(browser.rawValue):") }
+        }.map(\.bundleID))
     }
 
     func setBrowserVolume(_ percent: Int, for candidate: BrowserMediaCandidate) {
@@ -1067,13 +1081,31 @@ final class AppState: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] in self?.mutedApps = $0 }
             .store(in: &cancellables)
+        controller.$volumes
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.processVolumeLevels = $0 }
+            .store(in: &cancellables)
+        controller.$volumeErrors
+            .receive(on: RunLoop.main)
+            .sink { [weak self] errors in
+                self?.processVolumeErrors = errors
+                self?.updateVolumeRouting()
+                if self?.volumeSession != nil { self?.showVolumeSessionHUD() }
+            }
+            .store(in: &cancellables)
         controller.$permissionGranted
             .receive(on: RunLoop.main)
-            .sink { [weak self] in self?.mutePermissionGranted = $0 }
+            .sink { [weak self] granted in
+                self?.mutePermissionGranted = granted
+                self?.updateVolumeRouting()
+            }
             .store(in: &cancellables)
         controller.$audibleApps
             .receive(on: RunLoop.main)
-            .sink { [weak self] in self?.audibleApps = $0 }
+            .sink { [weak self] audible in
+                self?.audibleApps = audible
+                self?.refreshVolumeSourceActivity()
+            }
             .store(in: &cancellables)
         muteControllerStorage = controller
         return controller
@@ -1083,16 +1115,105 @@ final class AppState: ObservableObject {
     /// ask for): while the menu is open the mute controller meters exactly
     /// these; an empty set tears the meters down.
     func setMeterWatchlist(_ bundleIDs: Set<String>) {
+        menuMeterWatchlist = bundleIDs
+        updateMeterWatchlist()
+    }
+
+    /// The menu and overlay can be visible independently. Closing either one
+    /// must not stop the other's meters; closing both releases every watch.
+    private func updateMeterWatchlist() {
         guard #available(macOS 14.2, *), perAppMuteEnabled else { return }
-        muteController.setMeterWatchlist(bundleIDs)
+        let overlay = Set((volumeSession?.entries ?? []).compactMap { volumeSourceBundleID($0.source) })
+        muteController.setMeterWatchlist(menuMeterWatchlist.union(overlay))
+    }
+
+    private func volumeSourceBundleID(_ source: VolumeSource) -> String? {
+        switch source {
+        case .hookedTarget: return targetManager.targetBundleID
+        case .app(let bundleID): return bundleID
+        case .browserTab(let id): return browserCandidate(id: id)?.browser.bundleID
+        }
+    }
+
+    private func volumeSourceIsEmitting(_ source: VolumeSource) -> Bool {
+        guard let bundleID = volumeSourceBundleID(source), !isAppMuted(bundleID),
+              !perAppMuteEnabled || processVolumeLevels[bundleID] != 0 else { return false }
+        let candidate: BrowserMediaCandidate?
+        switch source {
+        case .hookedTarget: candidate = selectedTargetIsBrowser ? selectedBrowserMediaCandidate : nil
+        case .app: candidate = nil
+        case .browserTab(let id): candidate = browserCandidate(id: id)
+        }
+        // Per-tab playback disambiguates siblings; the app meter alone cannot
+        // tell which tab is sounding. A paused/zero-volume tab stays still.
+        if let candidate, !candidate.isPlaying || tabVolume(id: candidate.id) == 0 { return false }
+        if #available(macOS 14.2, *), perAppMuteEnabled {
+            return audibleApps.contains(bundleID)
+        }
+        return candidate?.isPlaying ?? playbackHint(for: bundleID) ?? false
+    }
+
+    /// A sound-emitting process is not necessarily a media player. Only show
+    /// transport indicators when we have a command that can control the source.
+    func canPlayPauseVolumeSource(_ source: VolumeSource) -> Bool {
+        switch source {
+        case .browserTab(let id): return browserCandidate(id: id)?.supportsTransport == true
+        case .hookedTarget:
+            if selectedTargetIsBrowser {
+                return browserMediaInjectionAvailable == true
+                    && selectedBrowserMediaCandidate?.supportsTransport == true
+            }
+        case .app: break
+        }
+        guard let bundleID = volumeSourceBundleID(source) else { return false }
+        // Browser parent rows represent all tabs for volume/mute only.
+        // Playback belongs to a specific tab, never the whole browser.
+        if BrowserKind.browser(bundleID: bundleID) != nil { return false }
+        return availableApps.contains {
+            $0.bundleID == bundleID && ($0.menuControl != nil
+                || !$0.playPauseScript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+    }
+
+    private func volumeSourceIsPlaying(_ source: VolumeSource) -> Bool {
+        switch source {
+        case .browserTab(let id): return browserCandidate(id: id)?.isPlaying ?? false
+        case .hookedTarget:
+            if selectedTargetIsBrowser, let candidate = selectedBrowserMediaCandidate { return candidate.isPlaying }
+        case .app: break
+        }
+        guard let bundleID = volumeSourceBundleID(source) else { return false }
+        if BrowserKind.browser(bundleID: bundleID) != nil {
+            return (browserMediaCandidates + activeBrowserMediaCandidates).contains {
+                $0.browser.bundleID == bundleID && $0.isPlaying
+            } || audibleApps.contains(bundleID)
+        }
+        // Playback and audibility differ: muting a playing app must not make
+        // its transport icon claim it is paused.
+        return playbackHint(for: bundleID) ?? audibleApps.contains(bundleID)
+    }
+
+    private func refreshVolumeSourceActivity() {
+        guard let session = volumeSession else { return }
+        let activity = Dictionary(uniqueKeysWithValues: session.entries.map {
+            ($0.source.id, volumeSourceIsEmitting($0.source))
+        })
+        HookHUD.shared.updateSourceActivity(activity)
+        HookHUD.shared.updateSourcePlayback(Dictionary(uniqueKeysWithValues: session.entries.map {
+            ($0.source.id, canPlayPauseVolumeSource($0.source) ? volumeSourceIsPlaying($0.source) : nil)
+        }))
     }
 
     func setPerAppMute(_ on: Bool) {
+        for bundleID in processVolumeLevels.keys { volumeByBundle[bundleID] = nil }
+        processVolumeLevels = [:]
+        processVolumeErrors = [:]
         perAppMuteEnabled = on
         PerAppMutePreference.setEnabled(on, in: .standard)
         defer {
             updateVolumeRouting()   // the tap's mute-key routing follows the setting
             updateMenuBarGlyph()
+            updateMeterWatchlist()
         }
         guard #available(macOS 14.2, *) else { return }
         if on {
@@ -1161,13 +1282,23 @@ final class AppState: ObservableObject {
     // The initial read uses the poll runner (best-effort); the write uses the command
     // runner since it's a user action.
     func volume(for bundleID: String) async -> Int? {
-        guard let app = registry.allApps().first(where: { $0.bundleID == bundleID }) else { return nil }
+        if #available(macOS 14.2, *), usesProcessVolume(bundleID: bundleID) {
+            return muteController.volume(for: bundleID)
+        }
+        guard BrowserKind.browser(bundleID: bundleID) == nil,
+              let app = registry.allApps().first(where: { $0.bundleID == bundleID }) else { return nil }
         return await pollRunner.run { app.currentVolume() }
     }
 
     func setVolume(_ percent: Int, for bundleID: String) {
+        let percent = min(100, max(0, percent))
         volumeByBundle[bundleID] = percent   // optimistic: the slider reflects it at once
-        guard let app = registry.allApps().first(where: { $0.bundleID == bundleID }) else { return }
+        if #available(macOS 14.2, *), usesProcessVolume(bundleID: bundleID) {
+            muteController.setVolume(percent, bundleID: bundleID)
+            return
+        }
+        guard BrowserKind.browser(bundleID: bundleID) == nil,
+              let app = registry.allApps().first(where: { $0.bundleID == bundleID }) else { return }
         Task { await scripting.run { app.setVolume(percent) } }
     }
 
@@ -1239,7 +1370,13 @@ final class AppState: ObservableObject {
             // closure), not a separately-read target.
             let wasBrowser = selectedTargetIsBrowser
             let browserTabID = selectedBrowserMediaID
-            change = await targetManager.updateVolume(transform)
+            if (!wasBrowser || selectedBrowserMediaCandidate == nil),
+               let bundleID = targetManager.targetBundleID,
+               usesProcessVolume(bundleID: bundleID) {
+                change = changeProcessVolume(bundleID: bundleID, transform)
+            } else {
+                change = await targetManager.updateVolume(transform)
+            }
             if let change {
                 volumeByBundle[change.bundleID] = change.volume
                 if wasBrowser, let id = browserTabID,
@@ -1249,7 +1386,12 @@ final class AppState: ObservableObject {
                 }
             }
         case .app(let bundleID):
-            change = await targetManager.updateVolume(ofBundleID: bundleID, transform)
+            if usesProcessVolume(bundleID: bundleID) {
+                change = changeProcessVolume(bundleID: bundleID, transform)
+            } else {
+                guard BrowserKind.browser(bundleID: bundleID) == nil else { return nil }
+                change = await targetManager.updateVolume(ofBundleID: bundleID, transform)
+            }
             if let change { volumeByBundle[bundleID] = change.volume }
         case .browserTab(let id):
             guard let candidate = browserCandidate(id: id), let current = tabVolume(id: id) else {
@@ -1291,6 +1433,15 @@ final class AppState: ObservableObject {
                                       commandHint: tap.volumeKeysHijacked ? .system : nil)
         }
         return change
+    }
+
+    private func changeProcessVolume(bundleID: String, _ transform: (Int) -> Int) -> VolumeChange? {
+        guard #available(macOS 14.2, *), isRunning(bundleID: bundleID),
+              usesProcessVolume(bundleID: bundleID) else { return nil }
+        let previous = muteController.volume(for: bundleID)
+        let next = min(100, max(0, transform(previous)))
+        setVolume(next, for: bundleID)
+        return VolumeChange(bundleID: bundleID, previous: previous, volume: next)
     }
 
     /// Both browser-tab volume caches (the menu's hooked-browser rows and the
@@ -1406,7 +1557,7 @@ final class AppState: ObservableObject {
             canTakeMute = targetCanTakeMute
         case .app(let bundleID)?:
             let running = isRunning(bundleID: bundleID)
-            canTakeVolume = running && volumeScriptable(bundleID: bundleID)
+            canTakeVolume = running && canControlVolume(bundleID: bundleID)
             canTakeMute = running && perAppMuteEnabled
         case .browserTab(let id)?:
             canTakeVolume = tabVolume(id: id) != nil
@@ -1414,16 +1565,23 @@ final class AppState: ObservableObject {
         }
         tap.volumeSessionCanTakeVolume = canTakeVolume
         tap.volumeSessionCanTakeMute = canTakeMute
+        refreshVolumeSourceActivity()
     }
 
     // MARK: - Volume source picker
 
-    private func volumeHUDVisibilityChanged(_ visible: Bool) {
-        volumeHUDVisible = visible
+    private func hudVisibilityChanged(_ visible: Bool) {
+        guard hudVisible != visible else { return }
+        hudVisible = visible
         if visible {
             sourcePickerTap.arm()
         } else {
             sourcePickerTap.disarm()
+        }
+    }
+
+    private func volumeHUDVisibilityChanged(_ visible: Bool) {
+        if !visible {
             volumeSessionRefresh?.cancel()
             volumeSessionRefresh = nil
             volumeSession = nil
@@ -1431,13 +1589,76 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// ⌘↑/⌘↓ while a volume HUD is up. The first press opens the session (the
-    /// HUD grows into the list) and moves the selection one row.
+    /// Command-arrows expand any visible HUD into the picker, then perform the
+    /// corresponding selection or volume action.
     private func handleSourcePickerKey(_ key: SourcePickerKey) {
         // A key can reach the main queue just after the HUD hid and the picker
         // tap was disarmed. Ignore it — otherwise a stale key would open a
         // session and re-show the HUD with no keyboard tap behind it.
-        guard volumeHUDVisible else { return }
+        guard hudVisible else { return }
+        beginVolumeSessionIfNeeded()
+        guard volumeSession != nil else { return }
+        HookHUD.shared.holdUntilCommandRelease()
+        switch key {
+        case .previous: volumeSession?.selectPrevious()
+        case .next: volumeSession?.selectNext()
+        case .volumeDown: nudgeVolume(up: false)
+        case .volumeUp: nudgeVolume(up: true)
+        }
+        showVolumeSessionHUD()
+    }
+
+    /// Command-volume opens the full list without moving off the current source.
+    private func showVolumePicker() {
+        beginVolumeSessionIfNeeded()
+        guard volumeSession != nil else { return }
+        HookHUD.shared.holdUntilCommandRelease()
+        showVolumeSessionHUD()
+    }
+
+    private var pickerPlaybackInFlight = false
+
+    private func togglePickerPlayback() {
+        guard !pickerPlaybackInFlight, let source = volumeSession?.selected?.source,
+              let session = activeVolumeSession,
+              canPlayPauseVolumeSource(source) else { return }
+        let context = playbackTargetContext
+        let candidate: BrowserMediaCandidate?
+        if case .browserTab(let id) = source { candidate = browserCandidate(id: id) }
+        else { candidate = nil }
+        pickerPlaybackInFlight = true
+        Task {
+            defer { pickerPlaybackInFlight = false }
+            var previous = volumeSourceIsPlaying(source)
+            if let bundleID = volumeSourceBundleID(source),
+               BrowserKind.browser(bundleID: bundleID) == nil,
+               playbackHint(for: bundleID) == nil,
+               let playing = await isPlaying(bundleID: bundleID) {
+                previous = playing
+            }
+            switch source {
+            case .hookedTarget:
+                // Never fall back to the system's unrelated now-playing app.
+                if selectedTargetIsBrowser && browserMediaInjectionAvailable != true { return }
+                if await togglePlayPauseTarget(in: context),
+                   context == playbackTargetContext, !selectedTargetIsBrowser,
+                   let bundleID = volumeSourceBundleID(source) {
+                    notePlayback(bundleID: bundleID, playing: !previous)
+                }
+            case .app(let bundleID):
+                if await togglePlayPause(bundleID: bundleID) {
+                    notePlayback(bundleID: bundleID, playing: !previous)
+                }
+            case .browserTab:
+                if let candidate, candidate.supportsTransport {
+                    _ = await toggleBrowserPlayPause(candidate)
+                }
+            }
+            if activeVolumeSession == session { showVolumeSessionHUD() }
+        }
+    }
+
+    private func beginVolumeSessionIfNeeded() {
         if volumeSession == nil {
             let audible = audibleBundleIDs()
             let list = VolumeSourceList(target: hookedVolumeEntry(),
@@ -1451,11 +1672,6 @@ final class AppState: ObservableObject {
             volumeSession = list
             startVolumeSessionRefresh(audible: audible)
         }
-        switch key {
-        case .previous: volumeSession?.selectPrevious()
-        case .next: volumeSession?.selectNext()
-        }
-        showVolumeSessionHUD()
     }
 
     private func showVolumeSessionHUD() {
@@ -1463,21 +1679,36 @@ final class AppState: ObservableObject {
         let rows = session.entries.map {
             HookHUD.SourceRow(name: $0.name,
                               percent: currentVolume(of: $0.source),
-                              muted: isProcessMuted($0.source))
+                              muted: isProcessMuted($0.source),
+                              canMute: canMuteVolumeSource($0.source),
+                              indented: $0.parentSource != nil,
+                              sourceID: $0.source.id,
+                              isEmitting: volumeSourceIsEmitting($0.source),
+                              isHooked: $0.source == .hookedTarget,
+                              isPlaying: volumeSourceIsPlaying($0.source),
+                              canPlayPause: canPlayPauseVolumeSource($0.source))
         }
         HookHUD.shared.showVolumeSources(rows, selectedIndex: session.selectedIndex)
     }
 
+    private func canMuteVolumeSource(_ source: VolumeSource) -> Bool {
+        switch source {
+        case .hookedTarget: return targetCanTakeMute
+        case .app(let bundleID): return perAppMuteEnabled && isRunning(bundleID: bundleID)
+        case .browserTab(let id): return tabVolume(id: id) != nil
+        }
+    }
+
     /// Cached volume for a row; the session refresh fills these in.
-    private func currentVolume(of source: VolumeSource) -> Int? {
+    func currentVolume(of source: VolumeSource) -> Int? {
         switch source {
         case .hookedTarget:
-            if selectedTargetIsBrowser, let volume = selectedBrowserMediaCandidate?.volume {
-                return volume
+            if selectedTargetIsBrowser, let candidate = selectedBrowserMediaCandidate {
+                return candidate.volume
             }
-            return targetManager.targetBundleID.flatMap { volumeByBundle[$0] }
+            return targetManager.targetBundleID.flatMap { cachedAppVolume(bundleID: $0) }
         case .app(let bundleID):
-            return volumeByBundle[bundleID]
+            return cachedAppVolume(bundleID: bundleID)
         case .browserTab(let id):
             return tabVolume(id: id)
         }
@@ -1498,12 +1729,62 @@ final class AppState: ObservableObject {
     }
 
     private func hookedVolumeEntry() -> VolumeSourceEntry? {
-        guard targetCanTakeVolume, let def = currentTargetDefinition() else { return nil }
+        guard let def = currentTargetDefinition(), isRunning(bundleID: def.bundleID) else { return nil }
         let name = selectedTargetIsBrowser
             ? (selectedBrowserMediaCandidate?.label ?? def.displayName)
             : def.displayName
-        return VolumeSourceEntry(source: .hookedTarget, name: name)
+        let parent: VolumeSource? = selectedTargetIsBrowser && selectedBrowserMediaCandidate != nil
+            ? .app(bundleID: def.bundleID) : nil
+        return VolumeSourceEntry(source: .hookedTarget, name: name, parentSource: parent)
     }
+
+    // Use the menu's row ordering in the picker as well.
+    func playingAppRows(_ playingApps: [PlayingApp]) -> [PlayingApp] {
+        let targetBundleID = targetManager.targetBundleID
+        var seen = Set<String>()
+        var out: [PlayingApp] = []
+        for app in playingApps where seen.insert(app.bundleID).inserted {
+            // Prefer a known app's own name (e.g. "Apple Music") over the OS process
+            // name ("Music") so the label is the same whether it's playing or just open.
+            let name = availableApps.first { $0.bundleID == app.bundleID }?.displayName ?? app.displayName
+            out.append(PlayingApp(id: app.bundleID, displayName: name, bundleID: app.bundleID))
+        }
+        let scriptableRunning = availableApps
+            .filter { volumeScriptable(bundleID: $0.bundleID) && isRunning(bundleID: $0.bundleID) }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        for def in scriptableRunning where seen.insert(def.bundleID).inserted {
+            out.append(PlayingApp(id: def.bundleID, displayName: def.displayName, bundleID: def.bundleID))
+        }
+        // Muted apps stay listed while they run, even once silent — a muted app
+        // stops appearing "recently playing", and the unmute button must not
+        // vanish along with the sound it silenced.
+        if perAppMuteEnabled {
+            for bid in mutedApps.union(processVolumeLevels.keys).sorted()
+            where !seen.contains(bid) && isRunning(bundleID: bid) {
+                seen.insert(bid)
+                let name = availableApps.first { $0.bundleID == bid }?.displayName
+                    ?? runningAppName(bundleID: bid)
+                    ?? bid
+                out.append(PlayingApp(id: bid, displayName: name, bundleID: bid))
+            }
+        }
+        // A silent browser still needs its parent row while recent tabs remain.
+        for bid in recentBrowserBundleIDs().sorted()
+        where !seen.contains(bid) && isRunning(bundleID: bid) {
+            seen.insert(bid)
+            let name = availableApps.first { $0.bundleID == bid }?.displayName
+                ?? runningAppName(bundleID: bid) ?? bid
+            out.append(PlayingApp(id: bid, displayName: name, bundleID: bid))
+        }
+        if let targetBundleID,
+           let targetIndex = out.firstIndex(where: { $0.bundleID == targetBundleID }),
+           targetIndex != 0 {
+            out.insert(out.remove(at: targetIndex), at: 0)
+        }
+        return out
+    }
+
+    private var volumePickerApps: [PlayingApp] = []
 
     /// Bundle ids with a live audio output stream. Before macOS 14.2 there's no
     /// per-process audio API, so every running supported browser stands in (its
@@ -1512,25 +1793,33 @@ final class AppState: ObservableObject {
         if #available(macOS 14.2, *) {
             let monitor = AudioProcessMonitor()
             monitor.refresh()
-            return Set(monitor.playingApps.map(\.bundleID))
+            volumePickerApps = playingAppRows(monitor.playingApps)
+            return Set(volumePickerApps.map(\.bundleID))
         }
         return Set(BrowserKind.allCases.map(\.bundleID).filter { isRunning(bundleID: $0) })
     }
 
-    /// Other playing apps Beamhook can script the volume of, by name. The hooked
-    /// target is row 1 already, and browsers contribute tabs instead.
+    /// Every other sounding app, including mute-only apps and browsers whose
+    /// tabs cannot be scanned. Browser tabs also offer individual volume control.
     private func playingVolumeApps(audible: Set<String>) -> [VolumeSourceEntry] {
         let targetBundleID = targetManager.targetBundleID
-        return audible
-            .filter { $0 != targetBundleID
-                && BrowserKind.browser(bundleID: $0) == nil
-                && volumeScriptable(bundleID: $0) }
+        let parents = Set(browserVolumeTabs().compactMap { entry -> String? in
+            if case .app(let id)? = entry.parentSource { return id }
+            return nil
+        })
+        let hookedBrowser = selectedTargetIsBrowser && selectedBrowserMediaCandidate != nil
+        var ordered = volumePickerApps.map(\.bundleID)
+        let missing = audible.union(parents).union(hookedBrowser ? Set([targetBundleID].compactMap { $0 }) : [])
+            .subtracting(ordered)
+        ordered.append(contentsOf: missing.sorted())
+        return ordered
+            .filter { $0 != targetBundleID || hookedBrowser }
             .map { bundleID in
                 VolumeSourceEntry(source: .app(bundleID: bundleID),
-                                  name: availableApps.first { $0.bundleID == bundleID }?.displayName
-                                      ?? bundleID)
+                                  name: volumePickerApps.first { $0.bundleID == bundleID }?.displayName
+                                      ?? availableApps.first { $0.bundleID == bundleID }?.displayName
+                                      ?? runningAppName(bundleID: bundleID) ?? bundleID)
             }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     /// Tabs with a volume from the last active-browser scan, minus the hooked tab.
@@ -1539,7 +1828,10 @@ final class AppState: ObservableObject {
         return activeBrowserMediaCandidates
             .filter { $0.volume != nil && $0.id != hookedTabID }
             .map { VolumeSourceEntry(source: .browserTab(id: $0.id),
-                                     name: "\($0.label) · \($0.browser.applicationName)") }
+                                     name: $0.label,
+                                     parentSource: $0.browser.bundleID == targetManager.targetBundleID
+                                         && selectedBrowserMediaCandidate == nil
+                                         ? .hookedTarget : .app(bundleID: $0.browser.bundleID)) }
     }
 
     /// Read every row's volume and scan browser tabs, off main, then redraw. The
@@ -1562,6 +1854,11 @@ final class AppState: ObservableObject {
                 if let bundleID, let volume = await self.volume(for: bundleID) {
                     self.volumeByBundle[bundleID] = volume
                 }
+                if let bundleID, BrowserKind.browser(bundleID: bundleID) == nil,
+                   let playing = await self.isPlaying(bundleID: bundleID),
+                   !Task.isCancelled, !self.pickerPlaybackInFlight {
+                    self.notePolledPlayback(bundleID: bundleID, playing: playing)
+                }
             }
             guard !Task.isCancelled, self.volumeSession != nil else { return }
             self.showVolumeSessionHUD()
@@ -1575,6 +1872,30 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Browser app rows control all of that browser's audio through a process
+    /// tap. Its child tab rows keep their independent JavaScript volume controls.
+    /// Other apps use process gain only when they have no native volume API.
+    func usesProcessVolume(bundleID: String) -> Bool {
+        guard #available(macOS 14.2, *), perAppMuteEnabled else { return false }
+        return BrowserKind.browser(bundleID: bundleID) != nil || !volumeScriptable(bundleID: bundleID)
+    }
+
+    func canControlVolume(bundleID: String) -> Bool {
+        if usesProcessVolume(bundleID: bundleID) {
+            return mutePermissionGranted != false && processVolumeErrors[bundleID] == nil
+        }
+        return BrowserKind.browser(bundleID: bundleID) == nil && volumeScriptable(bundleID: bundleID)
+    }
+
+    private func cachedAppVolume(bundleID: String) -> Int? {
+        if #available(macOS 14.2, *), usesProcessVolume(bundleID: bundleID) {
+            guard mutePermissionGranted != false, processVolumeErrors[bundleID] == nil else { return nil }
+            return muteController.volume(for: bundleID)
+        }
+        guard BrowserKind.browser(bundleID: bundleID) == nil else { return nil }
+        return volumeScriptable(bundleID: bundleID) ? volumeByBundle[bundleID] : nil
+    }
+
     /// Can we control this app's volume via AppleScript? (Independent of whether
     /// it's running — reflects whether a matching definition supports volume.)
     func volumeScriptable(bundleID: String) -> Bool {
@@ -1585,6 +1906,7 @@ final class AppState: ObservableObject {
     /// can afford the extra permission check — and that check is what separates an
     /// app with no volume control from one macOS is blocking us from reaching.
     func volumeAvailability(for bundleID: String) async -> VolumeAvailability {
+        if usesProcessVolume(bundleID: bundleID) { return .slider }
         let supportsVolume = volumeScriptable(bundleID: bundleID)
         guard supportsVolume else { return .systemVolumeOnly }
         let allowed = await pollRunner.run { AutomationPermission.isAllowed(bundleID: bundleID) }
@@ -1658,7 +1980,7 @@ final class AppState: ObservableObject {
     private func updateVolumeRouting() {
         tap.volumeKeysHijacked = VolumeKeyRouting.shouldHijack(
             targetBundleID: targetManager.targetBundleID,
-            targetSupportsVolume: targetManager.targetSupportsVolume,
+            targetSupportsVolume: targetCanTakeVolume,
             preferences: volumeKeyOverride
         )
         tap.commandVolumeRouting = commandVolumeRouting
@@ -1671,9 +1993,11 @@ final class AppState: ObservableObject {
     /// The hooked target exposes a volume Beamhook can drive and is running right
     /// now — the precondition for either routing to swallow a volume key.
     var targetCanTakeVolume: Bool {
-        guard targetManager.targetSupportsVolume,
-              let bundleID = targetManager.targetBundleID else { return false }
-        return isRunning(bundleID: bundleID)
+        guard let bundleID = targetManager.targetBundleID, isRunning(bundleID: bundleID) else { return false }
+        if selectedTargetIsBrowser, let candidate = selectedBrowserMediaCandidate {
+            return candidate.volume != nil
+        }
+        return canControlVolume(bundleID: bundleID)
     }
 
     /// What ⌘ + a volume key reaches right now, or nil when ⌘ changes nothing.

@@ -26,9 +26,9 @@
 Beamhook makes your Mac's media keys predictable. It sends play/pause,
 next, and previous to **one app you choose** — so macOS can't redirect them
 to Apple Music, YouTube, or whichever player it remembers. It also lets you
-control the volume of apps that are currently playing audio, when the app
-supports AppleScript — and mute any app at all, AppleScript or not. Requires
-macOS 14.0 or later; the active-audio source list and per-app mute require
+control the volume of apps that are currently playing audio and mute them,
+even without AppleScript support. Requires
+macOS 14.0 or later; the active-audio source list and process-tap volume/mute require
 macOS 14.2. Tested on macOS Tahoe 26.5.
 
 > [!IMPORTANT]
@@ -39,10 +39,22 @@ macOS 14.2. Tested on macOS Tahoe 26.5.
 
 - Hook the media keys to one target app — nothing else can steal them.
 - Play/pause button that reflects what's actually playing.
-- Volume sliders for scriptable apps that are currently playing audio, whether
-  or not they are hooked.
-- Per-tab volume sliders for actively playing browser sources when [JavaScript
-  from Apple Events](https://beamhook.app/help/) is enabled.
+- Volume sliders for apps that are currently playing audio, whether or not
+  they are hooked. Apps without native volume controls use Core Audio process
+  taps on macOS 14.2+, with the same System Audio Recording permission as mute.
+  Levels range from 0–100%, persist by app, and are preserved when muting and
+  unmuting. Native controls and browser-tab sliders keep their existing behavior.
+  Process-tap playback currently supports mono and stereo Float32 outputs;
+  unsupported formats show an error and leave the original output intact.
+- Browser app rows control the volume of the whole browser, including Safari
+  and Brave, through process taps. Child tab sliders remain independent and need
+  [JavaScript from Apple Events](https://beamhook.app/help/) enabled.
+- Open the expanded volume list with ⌘ + a volume key or ⌘ + Play, or press
+  ⌘ + any arrow while a Beamhook overlay is visible. ⌘↑/↓ selects a source,
+  ⌘←/→ changes its volume, and ⌘ + Play/Mute controls the selected source.
+- Recently observed playing tabs stay eligible for two hours after pausing,
+  with up to three shown per browser. Closed tabs are removed on the next scan;
+  restarting Beamhook clears this history.
 - Optionally route the keyboard's volume keys to the selected app.
 - **Command flips which volume the keys control.** With the volume keys routed
   to the app, ⌘ + a volume key reaches the Mac's system volume; with them left
@@ -52,8 +64,9 @@ macOS 14.2. Tested on macOS Tahoe 26.5.
   apps with no AppleScript at all, such as Electron apps and chat apps with
   notification chimes. Works through a Core Audio process tap; needs macOS 14.2
   and the System Audio Recording permission, which macOS asks for when Beamhook
-  first starts. Beamhook only mutes, it never records. Can be turned off in
-  Settings.
+  first starts. Audio is processed live and never stored. Turn off **Per-app
+  volume and mute** in Settings to restore normal output and clear saved levels
+  and mutes.
 - The speaker icon animates while an app or tab is actually making sound.
 - ⌘ + mute toggles the hooked app's mute, following the same rule as the volume
   keys. The menu-bar icon shows a slash through the hooked app's badge while it
@@ -71,7 +84,7 @@ macOS 14.2. Tested on macOS Tahoe 26.5.
   Amazon Music, Plexamp, and Deezer. IINA is tested; the other three are not yet
   — if one does nothing when you press play,
   [tell us](https://github.com/ppixu/beamhook/issues) and it can be fixed.
-  These targets have no volume slider, because menus only step the volume.
+  These targets use process taps for their volume sliders on macOS 14.2+.
 - Add another app with your own AppleScript commands.
 
 Some apps do not expose suitable AppleScript controls and cannot be controlled

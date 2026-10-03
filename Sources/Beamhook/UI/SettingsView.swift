@@ -59,8 +59,8 @@ private struct GeneralSettingsTab: View {
             // the row is omitted rather than shown dead.
             if #available(macOS 14.2, *) {
                 settingRow(
-                    title: "Mute buttons next to apps",
-                    caption: "Click an app's speaker in the menu to silence just that app — works even on apps Beamhook can't otherwise control. Needs the System Audio Recording permission.",
+                    title: "Per-app volume and mute",
+                    caption: "Adjust volume or mute apps that have no native volume controls. Needs the System Audio Recording permission. Turning this off resets these volume levels and mutes.",
                     isOn: Binding(get: { state.perAppMuteEnabled },
                                   set: { state.setPerAppMute($0) }))
                 if state.perAppMuteEnabled, state.mutePermissionGranted == false {
@@ -103,7 +103,7 @@ private struct GeneralSettingsTab: View {
     /// otherwise a denied permission just looks like buttons that do nothing.
     private var mutePermissionHint: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Beamhook isn't allowed to use system-audio taps, so the mute buttons can't work yet. Allow Beamhook under System Audio Recording.")
+            Text("Beamhook isn't allowed to use system-audio taps, so per-app volume and mute can't work yet. Allow Beamhook under System Audio Recording.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

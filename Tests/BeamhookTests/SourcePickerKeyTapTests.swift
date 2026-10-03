@@ -22,9 +22,11 @@ final class SourcePickerKeyTapTests: XCTestCase {
 
         XCTAssertNil(tap.handle(type: .keyDown, event: keyEvent(126)))
         XCTAssertNil(tap.handle(type: .keyDown, event: keyEvent(125)))
+        XCTAssertNil(tap.handle(type: .keyDown, event: keyEvent(123)))
+        XCTAssertNil(tap.handle(type: .keyDown, event: keyEvent(124)))
 
         drainMainQueue()
-        XCTAssertEqual(keys, [.previous, .next])
+        XCTAssertEqual(keys, [.previous, .next, .volumeDown, .volumeUp])
     }
 
     func testFnAndNumericPadFlagsAreIgnored() {

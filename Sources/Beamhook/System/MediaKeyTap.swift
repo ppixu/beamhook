@@ -25,6 +25,8 @@ final class MediaKeyTap: @unchecked Sendable {
         var volumeSessionCanTakeMute = false
     }
 
+    private let commandVolumeHandler: (() -> Void)?
+    private let pickerPlayPauseHandler: (() -> Void)?
     private let handler: Handler
     /// Told about transport key-downs the tap deliberately let macOS keep
     /// (browser target without tab control). Purely informational — the event
@@ -101,7 +103,11 @@ final class MediaKeyTap: @unchecked Sendable {
     /// Both handlers are always invoked on the main thread, for fresh (non-repeat)
     /// key-downs only: `handler` for transport keys the tap swallowed and routed,
     /// `passthroughHandler` for transport keys it handed back to macOS.
-    init(handler: @escaping Handler, passthroughHandler: Handler? = nil) {
+    init(handler: @escaping Handler, passthroughHandler: Handler? = nil,
+         commandVolumeHandler: (() -> Void)? = nil,
+         pickerPlayPauseHandler: (() -> Void)? = nil) {
+        self.pickerPlayPauseHandler = pickerPlayPauseHandler
+        self.commandVolumeHandler = commandVolumeHandler
         self.handler = handler
         self.passthroughHandler = passthroughHandler
     }
@@ -170,6 +176,19 @@ final class MediaKeyTap: @unchecked Sendable {
 
         let key = decoded.key
 
+        if key == .playPause, event.flags.contains(.maskCommand),
+           volumeSessionActive || pickerPlayPauseHandler != nil {
+            if decoded.isDown && !decoded.isRepeat {
+                DispatchQueue.main.async { [weak self] in
+                    // Open the extended overlay first, establishing a selection
+                    // before toggling playback. An existing selection is kept.
+                    self?.commandVolumeHandler?()
+                    self?.pickerPlayPauseHandler?()
+                }
+            }
+            return nil
+        }
+
         if key.isHandledTransport {
             if !transportKeysHijacked {
                 // macOS keeps the key. Say so (fresh key-downs only, matching
@@ -192,6 +211,11 @@ final class MediaKeyTap: @unchecked Sendable {
         if key.isVolume {
             let commandHeld = event.flags.contains(.maskCommand)
             let routing = withStateLock { routingState }
+            // Open/refresh the picker before delivering the step, even when
+            // this source has no volume and the key falls through to macOS.
+            if commandHeld && routing.commandVolumeRouting && decoded.isDown {
+                DispatchQueue.main.async { [weak self] in self?.commandVolumeHandler?() }
+            }
             switch VolumeKeyRouting.destination(commandHeld: commandHeld,
                                                 hijacked: routing.volumeKeysHijacked,
                                                 commandRoutingEnabled: routing.commandVolumeRouting,
@@ -222,6 +246,9 @@ final class MediaKeyTap: @unchecked Sendable {
         if key == .mute {
             let commandHeld = event.flags.contains(.maskCommand)
             let routing = withStateLock { routingState }
+            if commandHeld && routing.commandVolumeRouting && decoded.isDown && !decoded.isRepeat {
+                DispatchQueue.main.async { [weak self] in self?.commandVolumeHandler?() }
+            }
             let sessionMute: Bool? = routing.volumeSessionActive ? routing.volumeSessionCanTakeMute : nil
             switch VolumeKeyRouting.muteDestination(commandHeld: commandHeld,
                                                     hijacked: routing.volumeKeysHijacked,

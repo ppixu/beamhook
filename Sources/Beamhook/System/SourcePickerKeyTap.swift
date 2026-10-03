@@ -3,8 +3,8 @@ import CoreGraphics
 import os
 import BeamhookKit
 
-/// A keyboard tap that exists only while Beamhook's volume HUD is on screen. It
-/// swallows ⌘↑/⌘↓ (and the ⌘PgUp/⌘PgDn aliases) for the volume-source picker
+/// A keyboard tap that exists only while any Beamhook HUD is on screen. It
+/// swallows Command-arrow keys (and the ⌘PgUp/⌘PgDn aliases) for the volume-source picker
 /// and hands every other keystroke back untouched. Between `disarm()` and the
 /// next `arm()` there is no keyboard tap at all, so Beamhook never sees ordinary
 /// typing.

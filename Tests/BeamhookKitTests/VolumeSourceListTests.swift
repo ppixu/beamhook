@@ -23,12 +23,33 @@ final class VolumeSourceListTests: XCTestCase {
         XCTAssertEqual(list.selected, target)
     }
 
-    func testCapsAtSixRowsDroppingTabsFirst() {
+    func testKeepsEverySourceBeyondSixRows() {
         let list = VolumeSourceList(target: target,
                                     apps: [app("a1"), app("a2"), app("a3")],
                                     tabs: [tab("t1"), tab("t2"), tab("t3")])
-        XCTAssertEqual(VolumeSourceList.maxRows, 6)
-        XCTAssertEqual(list.entries.map(\.name), ["Spotify", "a1", "a2", "a3", "t1", "t2"])
+        XCTAssertEqual(list.entries.map(\.name), ["Spotify", "a1", "a2", "a3", "t1", "t2", "t3"])
+    }
+
+    func testBrowserTabsFollowTheirParentBeforeOtherApps() {
+        let safari = app("safari")
+        let child = VolumeSourceEntry(source: .browserTab(id: "video"), name: "Video",
+                                      parentSource: safari.source)
+        let list = VolumeSourceList(target: target, apps: [safari, app("other")], tabs: [child])
+        XCTAssertEqual(list.entries.map(\.name), ["Spotify", "safari", "Video", "other"])
+    }
+
+    func testHookedTabStartsSelectedUnderBrowserAndSurvivesRefresh() {
+        let safari = app("safari")
+        let hooked = VolumeSourceEntry(source: .hookedTarget, name: "Hooked tab",
+                                       parentSource: safari.source)
+        var list = VolumeSourceList(target: hooked, apps: [app("other"), safari], tabs: [])
+        XCTAssertEqual(list.entries.map(\.name), ["other", "safari", "Hooked tab"])
+        XCTAssertEqual(list.selected?.source, .hookedTarget)
+        let child = VolumeSourceEntry(source: .browserTab(id: "new"), name: "New tab",
+                                      parentSource: safari.source)
+        list.replace(target: hooked, apps: [safari, app("other")], tabs: [child])
+        XCTAssertEqual(list.entries.map(\.name), ["safari", "Hooked tab", "New tab", "other"])
+        XCTAssertEqual(list.selected?.source, .hookedTarget)
     }
 
     func testDuplicateSourcesAreDropped() {
