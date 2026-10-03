@@ -6,21 +6,45 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-10-03
+
 ### Added
 
-- **Pick whose volume the keys control, right from the overlay.** While the
-  volume overlay is up, ⌘↑ / ⌘↓ grows it into a list of the apps and browser
-  tabs that are playing, each with its own level, and moves the selection.
-  Until the overlay fades, every volume key — with or without ⌘ — adjusts the
-  picked source, so turning down a YouTube tab no longer means opening the
-  menu. ⌘PgUp / ⌘PgDn work too. Beamhook only listens for these keys while the
-  overlay is on screen, and the overlay's bottom line names them.
-- **⌘ + Mute mutes the picked source.** While the list is up, ⌘ + Mute toggles
-  the selected row instead of following the usual rule; with the volume keys
-  hooked, plain Mute does the same. An app is muted with the same per-app mute
-  as the menu's buttons (so it needs that setting); a browser tab is muted
-  through its own volume, so the rest of the browser keeps playing, and
-  pressing it again restores the tab's previous level.
+- **Per-app volume, even without AppleScript.** Adjust the volume of sounding
+  apps through Core Audio process taps, including Safari, Brave and other
+  whole-browser app rows. Browser-tab sliders remain independent. Levels are
+  saved per app and preserved when muting and unmuting. Requires macOS 14.2+
+  and System Audio Recording permission; audio is processed live and never
+  stored. Native app controls remain in use where available.
+- **An expanded volume overlay.** Press Command with a volume key or Play to
+  open the app-and-tab list. Command plus any arrow also expands a regular
+  Beamhook overlay while it is visible. Command-Up/Down selects a source;
+  Command-Left/Right adjusts its volume. Command-Page Up/Page Down also select.
+  The list stays open while Command is held.
+- **Playback and mute from the list.** Command-Play toggles the selected source;
+  Command-Mute mutes it. While the list is open, volume keys adjust the selected
+  source, and plain Mute does too when volume keys are hooked. Muting a tab
+  preserves its previous level without silencing the whole browser.
+- **Recently played tabs stay available for two hours.** Tabs Beamhook observes
+  playing remain eligible after pausing, even when the browser goes silent or
+  the menu closes. Playback renews the window; closed tabs are removed on the
+  next scan. Up to three relevant tabs are displayed per browser. History is
+  kept in memory and clears when Beamhook quits; an explicitly hooked tab
+  remains available independently of its playback history.
+
+### Changed
+
+- The expanded overlay identifies the hooked source, animates speakers for
+  sources producing sound, dims inactive volume bars, and labels muted bars.
+  Muted rows have a distinct background. Playback indicators appear only on
+  sources that support playback control, including individual browser tabs
+  rather than whole-browser rows.
+- Improved overlay text space, rounded selection highlights, contrast in both
+  appearances, and shortcut labels with explicit Command symbols.
+- Settings now calls the audio feature **Per-app volume and mute**. Turning it
+  off restores normal output and clears saved levels and mutes. Process volume
+  supports mono/stereo Float32 output; unsupported formats leave the original
+  output intact and report the limitation.
 
 ## [1.2.1] — 2026-09-02
 

@@ -15,6 +15,29 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.3.0</title>
+            <pubDate>Sat, 03 Oct 2026 19:05:18 +0300</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.3.0</link>
+            <sparkle:version>20</sparkle:version>
+            <sparkle:shortVersionString>1.3.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Added</h3>
+<ul>
+<li>**Per-app volume, even without AppleScript.** Adjust the volume of sounding apps through Core Audio process taps, including Safari, Brave and other whole-browser app rows. Browser-tab sliders remain independent. Levels are saved per app and preserved when muting and unmuting. Requires macOS 14.2+ and System Audio Recording permission; audio is processed live and never stored. Native app controls remain in use where available.</li>
+<li>**An expanded volume overlay.** Press Command with a volume key or Play to open the app-and-tab list. Command plus any arrow also expands a regular Beamhook overlay while it is visible. Command-Up/Down selects a source; Command-Left/Right adjusts its volume. Command-Page Up/Page Down also select. The list stays open while Command is held.</li>
+<li>**Playback and mute from the list.** Command-Play toggles the selected source; Command-Mute mutes it. While the list is open, volume keys adjust the selected source, and plain Mute does too when volume keys are hooked. Muting a tab preserves its previous level without silencing the whole browser.</li>
+<li>**Recently played tabs stay available for two hours.** Tabs Beamhook observes playing remain eligible after pausing, even when the browser goes silent or the menu closes. Playback renews the window; closed tabs are removed on the next scan. Up to three relevant tabs are displayed per browser. History is kept in memory and clears when Beamhook quits; an explicitly hooked tab remains available independently of its playback history.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li>The expanded overlay identifies the hooked source, animates speakers for sources producing sound, dims inactive volume bars, and labels muted bars. Muted rows have a distinct background. Playback indicators appear only on sources that support playback control, including individual browser tabs rather than whole-browser rows.</li>
+<li>Improved overlay text space, rounded selection highlights, contrast in both appearances, and shortcut labels with explicit Command symbols.</li>
+<li>Settings now calls the audio feature **Per-app volume and mute**. Turning it off restores normal output and clears saved levels and mutes. Process volume supports mono/stereo Float32 output; unsupported formats leave the original output intact and report the limitation.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.3.0.zip" length="2489794" type="application/octet-stream" sparkle:edSignature="Hm7uVLhT1VWhVbPF24qD+Tfhag7E7Kwieree2TQQkkGR8AbGtKjIJ00RSDSTPQxaYhRzgJnUBCevH5/HvlQkCQ=="/>
+        </item>
+        <item>
             <title>1.2.1</title>
             <pubDate>Fri, 04 Sep 2026 10:19:21 +0300</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.2.1</link>
@@ -257,6 +280,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: WmevBx4EPlWXRnT0fkXZBUy5eSseKAghOmtpKpsCloVa+Hch2g1ss5uD0PQmnV2wm0EQZUuN6JYsW88eEAskBw==
-length: 21399
+edSignature: W2KfXN9Rq/OlAhsHFdRYPJhdDYHA8YDOb/6yui3J/727OL1He5DyLt9d3884OvgGHcDs7NHYLeyk55b6rj2pCg==
+length: 24457
 -->
