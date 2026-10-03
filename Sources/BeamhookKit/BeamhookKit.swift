@@ -45,19 +45,23 @@ public enum VolumeKeyRouting {
     ///   - targetCanTakeVolume: the target exposes a volume Beamhook can drive
     ///     AND is running. When it can't take the key we never swallow it —
     ///     a press that would otherwise die silently reaches the system instead.
-    ///   - sessionActive: the volume-source picker's list is on screen. Every
-    ///     volume key, with or without ⌘, then goes to the picked source —
-    ///     otherwise a user still holding ⌘ after picking would hit the system
-    ///     volume with the hook on. The list only offers sources whose volume
-    ///     Beamhook can drive, so the key always has somewhere to land.
+    ///   - sessionSourceCanTakeVolume: nil outside a volume-source picker
+    ///     session. Inside one (the source list is on screen) every volume key,
+    ///     with or without ⌘, goes to the picked source — otherwise a user still
+    ///     holding ⌘ after picking would hit the system volume with the hook
+    ///     on. The value says whether that source can take a volume step right
+    ///     now; when it can't (it quit, or the list is empty) the key reaches
+    ///     the system rather than being swallowed for nothing.
     public static func destination(
         commandHeld: Bool,
         hijacked: Bool,
         commandRoutingEnabled: Bool,
         targetCanTakeVolume: Bool,
-        sessionActive: Bool = false
+        sessionSourceCanTakeVolume: Bool? = nil
     ) -> VolumeKeyDestination {
-        if sessionActive { return .app }
+        if let sessionSourceCanTakeVolume {
+            return sessionSourceCanTakeVolume ? .app : .system
+        }
         guard targetCanTakeVolume else { return .system }
         if hijacked { return commandHeld ? .system : .app }
         return commandHeld && commandRoutingEnabled ? .app : .system
@@ -66,12 +70,15 @@ public enum VolumeKeyRouting {
     /// The mute key rides the same flip as the volume keys (see `destination`),
     /// with mute's own capability in place of volume's.
     ///
-    /// During a picker session ⌘ + Mute toggles the picked source instead —
+    /// During a picker session every mute press Beamhook would take — ⌘ + Mute,
+    /// and plain Mute while the volume keys are hooked — toggles the picked
+    /// source instead, so it is gated on that source, not the hooked app.
     /// `sessionSourceCanTakeMute` is nil outside a session, and inside one says
-    /// whether that source can be muted right now (an app needs per-app mute;
-    /// a browser tab is muted through its volume). When it can't, the chord
-    /// reaches the system exactly as it would for a hooked app that can't be
-    /// muted. Plain Mute keeps the ordinary rule in a session too.
+    /// whether the picked source can be muted right now (an app needs per-app
+    /// mute and must be running; a browser tab is muted through its volume).
+    /// When it can't, the press reaches the system exactly as it would for a
+    /// hooked app that can't be muted. Plain Mute with the hook off stays the
+    /// system's, session or not.
     public static func muteDestination(
         commandHeld: Bool,
         hijacked: Bool,
@@ -79,7 +86,7 @@ public enum VolumeKeyRouting {
         targetCanTakeMute: Bool,
         sessionSourceCanTakeMute: Bool? = nil
     ) -> VolumeKeyDestination {
-        if commandHeld, let sessionSourceCanTakeMute {
+        if let sessionSourceCanTakeMute, commandHeld || hijacked {
             return sessionSourceCanTakeMute ? .app : .system
         }
         return destination(commandHeld: commandHeld,

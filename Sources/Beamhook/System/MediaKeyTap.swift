@@ -21,6 +21,7 @@ final class MediaKeyTap: @unchecked Sendable {
         var targetCanTakeVolume = false
         var targetCanTakeMute = false
         var volumeSessionActive = false
+        var volumeSessionCanTakeVolume = false
         var volumeSessionCanTakeMute = false
     }
 
@@ -71,15 +72,22 @@ final class MediaKeyTap: @unchecked Sendable {
     }
 
     /// True while the volume-source picker's list is on screen: every volume
-    /// key, with or without ⌘, then goes to the picked source, and so does
-    /// ⌘ + Mute (see `VolumeKeyRouting.muteDestination`).
+    /// key, with or without ⌘, then follows the picked source, and so does
+    /// every mute press Beamhook would take (see `VolumeKeyRouting`).
     var volumeSessionActive: Bool {
         get { withStateLock { routingState.volumeSessionActive } }
         set { withStateLock { routingState.volumeSessionActive = newValue } }
     }
 
+    /// Whether the picked source can take a volume step right now. Read only
+    /// while `volumeSessionActive`; when false, the volume keys reach the system.
+    var volumeSessionCanTakeVolume: Bool {
+        get { withStateLock { routingState.volumeSessionCanTakeVolume } }
+        set { withStateLock { routingState.volumeSessionCanTakeVolume = newValue } }
+    }
+
     /// Whether the picked source can be muted right now. Read only while
-    /// `volumeSessionActive`; when false, ⌘ + Mute reaches the system.
+    /// `volumeSessionActive`; when false, the mute key reaches the system.
     var volumeSessionCanTakeMute: Bool {
         get { withStateLock { routingState.volumeSessionCanTakeMute } }
         set { withStateLock { routingState.volumeSessionCanTakeMute = newValue } }
@@ -188,7 +196,8 @@ final class MediaKeyTap: @unchecked Sendable {
                                                 hijacked: routing.volumeKeysHijacked,
                                                 commandRoutingEnabled: routing.commandVolumeRouting,
                                                 targetCanTakeVolume: routing.targetCanTakeVolume,
-                                                sessionActive: routing.volumeSessionActive) {
+                                                sessionSourceCanTakeVolume: routing.volumeSessionActive
+                                                    ? routing.volumeSessionCanTakeVolume : nil) {
             case .app:
                 // Forward on key-down AND repeats so holding the key ramps the volume.
                 if decoded.isDown {
@@ -209,7 +218,7 @@ final class MediaKeyTap: @unchecked Sendable {
         // The mute key rides the same Command flip as the volume keys — it is
         // part of the same physical cluster — but toggles the hooked app's
         // process-tap mute instead of a volume step. During a picker session
-        // ⌘ + Mute toggles the picked source instead.
+        // a mute press Beamhook takes toggles the picked source instead.
         if key == .mute {
             let commandHeld = event.flags.contains(.maskCommand)
             let routing = withStateLock { routingState }

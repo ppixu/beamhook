@@ -76,21 +76,55 @@ final class CommandVolumeRoutingTests: XCTestCase {
 
     // MARK: - Volume-source picker session
 
-    /// While the source list is on screen every volume key goes to the picked
-    /// source, whatever the hook, the setting or ⌘ would otherwise say.
+    /// While the source list is on screen every volume key follows the picked
+    /// source, whatever the hook, the setting, ⌘ or the hooked app's own
+    /// capability would otherwise say.
     func testSessionSendsEveryVolumeKeyToThePickedSource() {
         for command in [true, false] {
             for hijacked in [true, false] {
                 for enabled in [true, false] {
-                    XCTAssertEqual(
-                        VolumeKeyRouting.destination(commandHeld: command,
-                                                     hijacked: hijacked,
-                                                     commandRoutingEnabled: enabled,
-                                                     targetCanTakeVolume: false,
-                                                     sessionActive: true),
-                        .app,
-                        "command=\(command) hijacked=\(hijacked) enabled=\(enabled)")
+                    for targetCanTake in [true, false] {
+                        XCTAssertEqual(
+                            VolumeKeyRouting.destination(commandHeld: command,
+                                                         hijacked: hijacked,
+                                                         commandRoutingEnabled: enabled,
+                                                         targetCanTakeVolume: targetCanTake,
+                                                         sessionSourceCanTakeVolume: true),
+                            .app,
+                            "command=\(command) hijacked=\(hijacked) enabled=\(enabled) target=\(targetCanTake)")
+                    }
                 }
+            }
+        }
+    }
+
+    /// A picked source that can't take the key (it quit, or the list is
+    /// empty) never swallows it — not even when the hooked app could.
+    func testSessionHandsEveryVolumeKeyToTheSystemWhenThePickedSourceCannotTakeIt() {
+        for command in [true, false] {
+            for hijacked in [true, false] {
+                XCTAssertEqual(
+                    VolumeKeyRouting.destination(commandHeld: command,
+                                                 hijacked: hijacked,
+                                                 commandRoutingEnabled: true,
+                                                 targetCanTakeVolume: true,
+                                                 sessionSourceCanTakeVolume: false),
+                    .system,
+                    "command=\(command) hijacked=\(hijacked)")
+            }
+        }
+    }
+
+    func testNoSessionLeavesTheFlipUntouched() {
+        for command in [true, false] {
+            for hijacked in [true, false] {
+                XCTAssertEqual(
+                    VolumeKeyRouting.destination(commandHeld: command,
+                                                 hijacked: hijacked,
+                                                 commandRoutingEnabled: true,
+                                                 targetCanTakeVolume: true,
+                                                 sessionSourceCanTakeVolume: nil),
+                    destination(command: command, hijacked: hijacked))
             }
         }
     }
@@ -136,10 +170,21 @@ final class CommandVolumeRoutingTests: XCTestCase {
         XCTAssertEqual(mute(command: true, hijacked: false, session: false), .system)
     }
 
-    func testSessionLeavesPlainMuteOnItsOrdinaryRule() {
+    /// Plain Mute with the hook off stays the system's, even in a session.
+    func testSessionLeavesPlainMuteToTheSystemWithTheHookOff() {
         XCTAssertEqual(mute(command: false, hijacked: false, session: true), .system)
-        XCTAssertEqual(mute(command: false, hijacked: true, session: true), .app)
-        XCTAssertEqual(mute(command: false, hijacked: true, canTakeMute: false, session: true), .system)
+        XCTAssertEqual(mute(command: false, hijacked: false, session: false), .system)
+    }
+
+    /// With the hook on, plain Mute acts on the picked source in a session, so
+    /// the picked source's capability decides — not the hooked app's.
+    func testSessionGatesHookedPlainMuteOnThePickedSource() {
+        XCTAssertEqual(mute(command: false, hijacked: true, canTakeMute: true, session: true), .app)
+        // A picked tab with per-app mute off: the hooked app can't be muted,
+        // but the tab can.
+        XCTAssertEqual(mute(command: false, hijacked: true, canTakeMute: false, session: true), .app)
+        // A picked app that quit while the hooked app still runs.
+        XCTAssertEqual(mute(command: false, hijacked: true, canTakeMute: true, session: false), .system)
     }
 
     // MARK: - Preference

@@ -12,11 +12,13 @@ final class MediaKeyTapTests: XCTestCase {
                 tap.volumeKeysHijacked = index.isMultiple(of: 6)
                 tap.volumeSessionActive = index.isMultiple(of: 8)
                 tap.volumeSessionCanTakeMute = index.isMultiple(of: 10)
+                tap.volumeSessionCanTakeVolume = index.isMultiple(of: 12)
             } else {
                 _ = tap.transportKeysHijacked
                 _ = tap.volumeKeysHijacked
                 _ = tap.volumeSessionActive
                 _ = tap.volumeSessionCanTakeMute
+                _ = tap.volumeSessionCanTakeVolume
             }
         }
 
@@ -337,6 +339,7 @@ final class MediaKeyTapTests: XCTestCase {
         tap.volumeKeysHijacked = true
         tap.targetCanTakeVolume = true
         tap.volumeSessionActive = true
+        tap.volumeSessionCanTakeVolume = true
 
         let result = tap.handle(type: systemDefinedType,
                                 event: mediaKeyEvent(keyCode: 1, isDown: true, command: true))
@@ -352,6 +355,7 @@ final class MediaKeyTapTests: XCTestCase {
         tap.volumeKeysHijacked = false
         tap.commandVolumeRouting = false
         tap.volumeSessionActive = true
+        tap.volumeSessionCanTakeVolume = true
 
         let result = tap.handle(type: systemDefinedType,
                                 event: mediaKeyEvent(keyCode: volumeUpKeyCode, isDown: true))
@@ -367,7 +371,27 @@ final class MediaKeyTapTests: XCTestCase {
         tap.volumeKeysHijacked = true
         tap.targetCanTakeVolume = true
         tap.volumeSessionActive = true
+        tap.volumeSessionCanTakeVolume = true
         tap.volumeSessionActive = false
+
+        let event = mediaKeyEvent(keyCode: volumeUpKeyCode, isDown: true, command: true)
+        let result = tap.handle(type: systemDefinedType, event: event)
+
+        XCTAssertNotNil(result)
+        XCTAssertFalse(event.flags.contains(.maskCommand))
+        drainMainQueue()
+        XCTAssertTrue(handled.isEmpty)
+    }
+
+    /// The picked source quit (or the list is empty): the keys go to the
+    /// system even though the hooked app could take them.
+    func testSessionHandsVolumeToTheSystemWhenThePickedSourceCannotTakeIt() {
+        var handled: [MediaKey] = []
+        let tap = MediaKeyTap(handler: { handled.append($0) })
+        tap.volumeKeysHijacked = true
+        tap.targetCanTakeVolume = true
+        tap.volumeSessionActive = true
+        tap.volumeSessionCanTakeVolume = false
 
         let event = mediaKeyEvent(keyCode: volumeUpKeyCode, isDown: true, command: true)
         let result = tap.handle(type: systemDefinedType, event: event)
@@ -445,6 +469,42 @@ final class MediaKeyTapTests: XCTestCase {
         withExtendedLifetime(event) {
             XCTAssertTrue(tap.handle(type: systemDefinedType, event: event) != nil)
         }
+        drainMainQueue()
+        XCTAssertTrue(handled.isEmpty)
+    }
+
+    /// With the hook on, plain Mute acts on the picked source in a session, so
+    /// it is gated on that source: a picked tab works with per-app mute off…
+    func testSessionHookedPlainMuteFollowsThePickedSource() {
+        var handled: [MediaKey] = []
+        let tap = MediaKeyTap(handler: { handled.append($0) })
+        tap.volumeKeysHijacked = true
+        tap.targetCanTakeMute = false
+        tap.volumeSessionActive = true
+        tap.volumeSessionCanTakeMute = true
+
+        let result = tap.handle(type: systemDefinedType,
+                                event: mediaKeyEvent(keyCode: muteKeyCode, isDown: true))
+
+        XCTAssertNil(result)
+        drainMainQueue()
+        XCTAssertEqual(handled, [.mute])
+    }
+
+    /// …and a picked app that quit hands the press back to the system even
+    /// though the hooked app could be muted.
+    func testSessionHookedPlainMuteReachesTheSystemWhenThePickedSourceCannotBeMuted() {
+        var handled: [MediaKey] = []
+        let tap = MediaKeyTap(handler: { handled.append($0) })
+        tap.volumeKeysHijacked = true
+        tap.targetCanTakeMute = true
+        tap.volumeSessionActive = true
+        tap.volumeSessionCanTakeMute = false
+
+        let event = mediaKeyEvent(keyCode: muteKeyCode, isDown: true)
+        let result = tap.handle(type: systemDefinedType, event: event)
+
+        XCTAssertTrue(result?.takeUnretainedValue() === event)
         drainMainQueue()
         XCTAssertTrue(handled.isEmpty)
     }

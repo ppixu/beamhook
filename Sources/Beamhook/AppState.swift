@@ -193,7 +193,10 @@ final class AppState: ObservableObject {
     @Published var browserMediaInjectionAvailable: Bool?
     @Published var browserTargetRunning: Bool?
     @Published var browserMediaCandidates: [BrowserMediaCandidate] = [] {
-        didSet { updateMenuBarGlyph() }
+        didSet {
+            updateMenuBarGlyph()
+            if volumeSession != nil { updateVolumeSessionRouting() }
+        }
     }
     @Published var selectedBrowserMediaID: String? {
         didSet {
@@ -204,7 +207,11 @@ final class AppState: ObservableObject {
     /// Volume-controllable browser tabs for browsers whose Core Audio process
     /// currently has an output stream. Populated while the menu is visible, and
     /// also kept fresh by the volume-source picker's session refresh.
-    @Published var activeBrowserMediaCandidates: [BrowserMediaCandidate] = []
+    @Published var activeBrowserMediaCandidates: [BrowserMediaCandidate] = [] {
+        didSet {
+            if volumeSession != nil { updateVolumeSessionRouting() }
+        }
+    }
     /// Whether the current output device's volume is adjustable. Informational only
     /// (drives a UI hint); it does NOT auto-enable the volume-key hijack.
     @Published private(set) var outputVolumeControllable: Bool = true
@@ -1241,7 +1248,8 @@ final class AppState: ObservableObject {
     }
 
     /// A mute key the tap routed to us. Outside a picker session it is exactly
-    /// upstream's hooked-app mute; inside one it toggles the picked source.
+    /// upstream's hooked-app mute; inside one — ⌘ + Mute, or plain Mute with the
+    /// volume keys hooked — it toggles the picked source.
     private func handleMuteKey() {
         guard volumeSession != nil else {
             toggleTargetMute()
@@ -1300,20 +1308,35 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Whether the picked source can be muted right now, mirrored to the tap so
-    /// ⌘ + Mute is never swallowed for a source it can't act on. Apps follow
-    /// `targetCanTakeMute`'s rule (per-app mute on, app running); a listed tab
-    /// always has a volume to set to 0.
+    /// Whether the picked source can take a volume step and a mute right now,
+    /// mirrored to the tap so a session never swallows a key it can't act on.
+    /// The hooked target uses upstream's `targetCanTakeVolume` /
+    /// `targetCanTakeMute`; another app must be running (and scriptable, for
+    /// volume; per-app mute on, for mute); a tab must still be in the caches.
+    /// No selection (an emptied list) can take nothing. Kept current from the
+    /// session's didSet, `updateVolumeRouting` (launch/terminate, settings)
+    /// and the browser caches' didSets.
     private func updateVolumeSessionRouting() {
         tap.volumeSessionActive = volumeSession != nil
+        let canTakeVolume: Bool
+        let canTakeMute: Bool
         switch volumeSession?.selected?.source {
-        case nil, .hookedTarget?:
-            tap.volumeSessionCanTakeMute = targetCanTakeMute
+        case nil:
+            canTakeVolume = false
+            canTakeMute = false
+        case .hookedTarget?:
+            canTakeVolume = targetCanTakeVolume
+            canTakeMute = targetCanTakeMute
         case .app(let bundleID)?:
-            tap.volumeSessionCanTakeMute = perAppMuteEnabled && isRunning(bundleID: bundleID)
-        case .browserTab?:
-            tap.volumeSessionCanTakeMute = true
+            let running = isRunning(bundleID: bundleID)
+            canTakeVolume = running && volumeScriptable(bundleID: bundleID)
+            canTakeMute = running && perAppMuteEnabled
+        case .browserTab(let id)?:
+            canTakeVolume = browserCandidate(id: id)?.volume != nil
+            canTakeMute = canTakeVolume
         }
+        tap.volumeSessionCanTakeVolume = canTakeVolume
+        tap.volumeSessionCanTakeMute = canTakeMute
     }
 
     // MARK: - Volume source picker
@@ -1339,9 +1362,13 @@ final class AppState: ObservableObject {
         guard volumeHUDVisible else { return }
         if volumeSession == nil {
             let audible = audibleBundleIDs()
-            volumeSession = VolumeSourceList(target: hookedVolumeEntry(),
-                                             apps: playingVolumeApps(audible: audible),
-                                             tabs: browserVolumeTabs())
+            let list = VolumeSourceList(target: hookedVolumeEntry(),
+                                        apps: playingVolumeApps(audible: audible),
+                                        tabs: browserVolumeTabs())
+            // Nothing to pick: no session, so the keys keep their usual rule
+            // instead of being held for a list with no rows.
+            guard !list.entries.isEmpty else { return }
+            volumeSession = list
             startVolumeSessionRefresh(audible: audible)
         }
         switch key {
