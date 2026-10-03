@@ -226,6 +226,7 @@ private struct PlayingAppsListAvailable: View {
 
 /// The same template asset used by the overlay, with an always-visible dim state.
 private struct HookRowLabel: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let name: String
     let hooked: Bool
@@ -235,14 +236,17 @@ private struct HookRowLabel: View {
     var body: some View {
         HStack(spacing: 6) {
             Image("HookGlyph")
-                .resizable().renderingMode(.template).scaledToFit()
+                .resizable().renderingMode(.template)
+                .interpolation(.high)
+                .scaledToFit()
+                // Render the full-resolution asset at its final size instead
+                // of magnifying an already-rasterized small image.
+                .frame(width: hooked ? 17.55 : 13, height: hooked ? 21.6 : 16)
                 .frame(width: 13, height: 16)
-                // Scale inside the fixed slot so names and controls stay aligned.
-                .scaleEffect(hooked ? 1.35 : 1)
                 .animation(reduceMotion ? nil : (hooked
                     ? .spring(response: 0.35, dampingFraction: 0.45)
                     : .easeOut(duration: 0.16)), value: hooked)
-                .foregroundStyle(hooked ? Color.white : Color.primary)
+                .foregroundStyle(hooked ? (colorScheme == .dark ? Color.white : Color.black) : Color.primary)
                 .opacity(hooked ? 1 : 0.28)
                 .accessibilityHidden(true)
             Text(name)
@@ -416,7 +420,7 @@ private struct AppVolumeRow: View {
         Button { state.setAppMuted(!state.isAppMuted(playing.bundleID), bundleID: playing.bundleID) } label: {
             Group {
                 if isMuted { Image(systemName: "speaker.slash.fill") }
-                else if showsEmittingArcs { EmittingSpeakerIcon(seed: playing.bundleID) }
+                else if showsEmittingArcs { EmittingSpeakerIcon(seed: playing.bundleID, volume: Int(volume)) }
                 else { Image(systemName: "speaker.fill") }
             }
             .font(.system(size: 9, weight: .semibold)).frame(width: 22, height: 26)
@@ -439,14 +443,45 @@ private struct AppVolumeRow: View {
     }
 }
 
-/// A speaker whose arcs jump like an EQ meter. The symbol geometry stays stable.
+/// Each active arc pulses independently. Volume determines how many arcs are
+/// active; audible sources always retain at least the innermost arc.
 struct EmittingSpeakerIcon: View {
     let seed: String
-    private static let levels: [Double] = [0.67, 1.0, 0.34, 0.67, 1.0, 0.67, 0.34, 1.0, 0.67, 0.34]
+    let volume: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.15)) { context in
-            let tick = Int(context.date.timeIntervalSinceReferenceDate / 0.15) + abs(seed.hashValue)
-            Image(systemName: "speaker.wave.3.fill", variableValue: Self.levels[tick % Self.levels.count])
+        TimelineView(.animation(minimumInterval: 1.0 / 15, paused: reduceMotion)) { context in
+            let time = context.date.timeIntervalSinceReferenceDate
+            let phase = Double(UInt(bitPattern: seed.hashValue) % 100) / 100
+            let activeArcs = max(1, min(3, Int(ceil(Double(volume) / 100 * 3))))
+            HStack(spacing: 1) {
+                Image(systemName: "speaker.fill")
+                ZStack {
+                    ForEach(0..<3) { arc in
+                        SpeakerArc(index: arc)
+                            .stroke(style: StrokeStyle(lineWidth: 1, lineCap: .round))
+                            .opacity(arc < activeArcs
+                                     ? (reduceMotion ? 1 : 0.45 + 0.55 * (sin(time * 9 + phase - Double(arc) * 1.8) + 1) / 2)
+                                     : 0.12)
+                    }
+                }
+                .frame(width: 7, height: 12)
+            }
+        }
+    }
+
+    private struct SpeakerArc: Shape {
+        let index: Int
+        func path(in rect: CGRect) -> Path {
+            let scale = CGFloat(index + 1) / 3
+            let x = CGFloat(index) * rect.width / 3
+            let halfHeight = rect.height * 0.48 * scale
+            return Path { path in
+                path.move(to: CGPoint(x: x, y: rect.midY - halfHeight))
+                path.addQuadCurve(to: CGPoint(x: x, y: rect.midY + halfHeight),
+                                  control: CGPoint(x: x + rect.width * 0.55 * scale, y: rect.midY))
+            }
         }
     }
 }
@@ -500,7 +535,7 @@ private struct BrowserVolumeRow: View {
             } label: {
                 Group {
                     if isMuted { Image(systemName: "speaker.slash.fill") }
-                    else if sourceIsPlaying { EmittingSpeakerIcon(seed: candidate.sourceID) }
+                    else if sourceIsPlaying { EmittingSpeakerIcon(seed: candidate.sourceID, volume: Int(volume)) }
                     else { Image(systemName: "speaker.fill") }
                 }
                 .font(.system(size: 9, weight: .semibold)).frame(width: 22, height: 26)

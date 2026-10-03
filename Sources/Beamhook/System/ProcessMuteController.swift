@@ -236,24 +236,25 @@ final class ProcessMuteController: ObservableObject {
         }
     }
 
-    /// IO-queue: cheap peak probe. Every 8th sample is plenty to detect
-    /// presence, and taps deliver Float32, so a threshold of 0.002 (~-54 dB)
-    /// separates sound from a stream of zeros.
-    private func notePeak(obj: AudioObjectID, bufferList: UnsafePointer<AudioBufferList>) {
-        var peak: Float = 0
+    /// Probe every sample: a fixed stride skips channels in interleaved audio
+    /// and can alias periodic signals into apparent silence. Stop at the first
+    /// audible sample, keeping the common case cheap without allocations.
+    static func containsAudibleSamples(_ bufferList: UnsafePointer<AudioBufferList>) -> Bool {
         let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: bufferList))
         for buffer in buffers {
             guard let data = buffer.mData else { continue }
             let count = Int(buffer.mDataByteSize) / MemoryLayout<Float>.size
             let samples = data.assumingMemoryBound(to: Float.self)
-            var index = 0
-            while index < count {
-                let value = abs(samples[index])
-                if value > peak { peak = value }
-                index += 8
+            for index in 0..<count {
+                let value = samples[index]
+                if value.isFinite && abs(value) > 0.002 { return true }
             }
         }
-        guard peak > 0.002 else { return }
+        return false
+    }
+
+    private func notePeak(obj: AudioObjectID, bufferList: UnsafePointer<AudioBufferList>) {
+        guard Self.containsAudibleSamples(bufferList) else { return }
         loudLock.lock()
         loudUntil[obj] = Date().timeIntervalSinceReferenceDate + 0.45
         loudLock.unlock()

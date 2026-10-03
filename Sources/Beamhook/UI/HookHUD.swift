@@ -43,11 +43,12 @@ final class HookHUD {
         let isMuted: Bool
         let canMute: Bool
         var isEmitting: Bool
+        var volume: Int
 
         var body: some View {
             Group {
                 if isMuted { Image(systemName: "speaker.slash.fill") }
-                else if isEmitting { EmittingSpeakerIcon(seed: seed) }
+                else if isEmitting { EmittingSpeakerIcon(seed: seed, volume: volume) }
                 else { Image(systemName: "speaker.fill") }
             }
             .font(.system(size: 9, weight: .semibold))
@@ -587,6 +588,10 @@ final class HookHUD {
         if panel.appearance?.name != contrastingAppearance {
             panel.appearance = NSAppearance(named: contrastingAppearance)
         }
+        // Resolve against the HUD's contrasting palette, not the system
+        // appearance active when the subtitle was created.
+        trackSubtitle?.textColor = (systemUsesDarkColors ? NSColor.black : NSColor.white)
+            .withAlphaComponent(0.5)
         if #available(macOS 26.0, *),
            let glass = panel.contentView as? NSGlassEffectView {
             // Glass remains backdrop-adaptive even with a forced appearance, so
@@ -766,6 +771,7 @@ final class HookHUD {
         }
 
         panel.contentView = chrome
+        self.trackSubtitle = subtitle
         applyContrastingAppearance(to: panel)
         self.panel = panel
         self.label = text
@@ -773,7 +779,6 @@ final class HookHUD {
         self.hintRow = hint
         self.hintSuffix = hintSuffix
         self.noticeLabel = notice
-        self.trackSubtitle = subtitle
         self.hookIcon = icon
         self.transportIcon = transport
         self.volumeRow = volumeStack
@@ -862,7 +867,7 @@ final class HookHUD {
         return legend
     }
 
-    /// One picker row: marker, name, then a mini bar or "muted".
+    /// Match the menu: hooked name, playback control, speaker, then volume.
     private func makeSourceRow(_ row: SourceRow, selected: Bool) -> NSView {
         let marker = NSImageView()
         marker.image = row.canPlayPause ? Self.playbackStateSymbol(row.isPlaying) : nil
@@ -919,7 +924,7 @@ final class HookHUD {
         }
 
         let mute = NSHostingView(rootView: SourceSpeakerIcon(
-            seed: row.sourceID, isMuted: row.isMuted, canMute: row.canMute, isEmitting: row.isEmitting))
+            seed: row.sourceID, isMuted: row.isMuted, canMute: row.canMute, isEmitting: row.isEmitting, volume: row.percent ?? 100))
         mute.setAccessibilityElement(false)
         sourceSpeakers[row.sourceID] = mute
 
@@ -948,7 +953,7 @@ final class HookHUD {
         } else {
             nameColumn = name
         }
-        let line = NSStackView(views: [marker, nameColumn, mute, level])
+        let line = NSStackView(views: [nameColumn, marker, mute, level])
         line.orientation = .horizontal
         line.alignment = .centerY
         line.spacing = 6

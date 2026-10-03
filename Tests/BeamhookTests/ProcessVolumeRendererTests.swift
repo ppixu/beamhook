@@ -26,6 +26,22 @@ final class ProcessVolumeRendererTests: XCTestCase {
         }
     }
 
+    @available(macOS 14.2, *)
+    func testAudibilityDetectsRightOnlyStereoAndSamplesBetweenOldStride() {
+        let rightOnly = Buffers([[0, 0.5, 0, -0.5, 0, 0.5, 0, -0.5]], channels: [2])
+        XCTAssertTrue(ProcessMuteController.containsAudibleSamples(rightOnly.list.unsafePointer))
+        let periodic = Buffers([[0, 0.4, 0, -0.4, 0, 0.4, 0, -0.4, 0]], channels: [1])
+        XCTAssertTrue(ProcessMuteController.containsAudibleSamples(periodic.list.unsafePointer))
+        let planar = Buffers([[0, 0], [0, -0.5]], channels: [1, 1])
+        XCTAssertTrue(ProcessMuteController.containsAudibleSamples(planar.list.unsafePointer))
+    }
+
+    @available(macOS 14.2, *)
+    func testAudibilityRejectsSilenceNoiseAndInvalidSamples() {
+        let quiet = Buffers([[0, 0.001, -0.001, .nan, .infinity]], channels: [1])
+        XCTAssertFalse(ProcessMuteController.containsAudibleSamples(quiet.list.unsafePointer))
+    }
+
     func testStereoGainPreservesChannelsAndPolarity() {
         let input = Buffers([[1, -1, 0.4, -0.2]], channels: [2])
         let output = Buffers([[99, 99, 99, 99]], channels: [2])

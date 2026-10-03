@@ -6,6 +6,26 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ## [Unreleased]
 
+## [1.3.2] — 2026-10-03
+
+### Fixed
+
+- Sound detection now checks every sample instead of skipping through the
+  buffer, fixing missed right-channel and repeating audio signals. This also
+  restores active-app discovery and speaker feedback for affected apps,
+  including Unity.
+- Spotify's small playback subtitle uses the correct dim text color in both
+  macOS appearances.
+- Active menu hook icons are black in light mode and white in dark mode, and
+  render directly at their final size for sharper edges.
+
+### Changed
+
+- Speaker arcs pulse outward in both the menu and overlay. The volume setting
+  determines how many arcs react, with at least one whenever sound is detected.
+- Expanded overlay controls follow the menu order: hook and name, play/pause,
+  speaker, then volume.
+
 ## [1.3.1] — 2026-10-03
 
 ### Added
