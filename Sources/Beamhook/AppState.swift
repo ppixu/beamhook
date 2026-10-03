@@ -117,6 +117,14 @@ final class AppState: ObservableObject {
     /// net delta off-main, so a held key never stacks up blocked Apple-event sends.
     private var pendingVolumeSteps = 0
     private var volumeDrainInFlight = false
+    /// Same coalescing shape for ⌘+Mute: each press bumps `pendingMuteToggles`
+    /// and a single drain task runs them one at a time. Unlike volume steps these
+    /// aren't summed into a net delta — each toggle must fully complete (including
+    /// `muteMemory.record`) before the next one reads `restoreVolume`, otherwise a
+    /// quick double-press races the first toggle's Apple-event round trip and
+    /// reads the fallback restore value instead of what the first press saved.
+    private var pendingMuteToggles = 0
+    private var muteToggleInFlight = false
     /// Pre-mute volumes, so ⌘+Mute can undo itself. Outlives sessions.
     private var muteMemory = MuteMemory()
     /// Non-nil while the source list is on screen — the spec's "volume session".
@@ -182,7 +190,8 @@ final class AppState: ObservableObject {
         }
     }
     /// Volume-controllable browser tabs for browsers whose Core Audio process
-    /// currently has an output stream. Populated only while the menu is visible.
+    /// currently has an output stream. Populated while the menu is visible, and
+    /// also kept fresh by the volume-source picker's session refresh.
     @Published var activeBrowserMediaCandidates: [BrowserMediaCandidate] = []
     /// Whether the current output device's volume is adjustable. Informational only
     /// (drives a UI hint); it does NOT auto-enable the volume-key hijack.
@@ -922,11 +931,18 @@ final class AppState: ObservableObject {
         let change: VolumeChange?
         switch source {
         case .hookedTarget:
+            // Capture what "hooked" meant at the moment this RMW started — by the
+            // time it returns, the user may have switched tabs or re-hooked, and
+            // writing into today's selection with yesterday's result would land
+            // one source's volume on another's row.
+            let wasBrowser = selectedTargetIsBrowser
+            let browserTabID = selectedBrowserMediaID
             change = await targetManager.updateVolume(transform)
             if let change {
                 volumeByBundle[change.bundleID] = change.volume
-                if selectedTargetIsBrowser, let id = selectedBrowserMediaID,
-                   let index = browserMediaCandidates.firstIndex(where: { $0.id == id }) {
+                if wasBrowser, let id = browserTabID,
+                   let index = browserMediaCandidates.firstIndex(where: { $0.id == id }),
+                   browserMediaCandidates[index].browser.bundleID == change.bundleID {
                     browserMediaCandidates[index].volume = change.volume
                 }
             }
@@ -960,16 +976,34 @@ final class AppState: ObservableObject {
     }
 
     /// ⌘+Mute: silence the current volume source, or put back what muting took.
+    /// Queued like `nudgeVolume`/`drainVolumeSteps`, so a quick double-press can't
+    /// read `restoreVolume` before the first press has recorded it.
     private func toggleMute() {
+        pendingMuteToggles += 1
+        guard !muteToggleInFlight else { return }
+        muteToggleInFlight = true
+        Task { await drainMuteToggles() }
+    }
+
+    private func drainMuteToggles() async {
+        defer { muteToggleInFlight = false }
+        while pendingMuteToggles > 0 {
+            pendingMuteToggles -= 1
+            await performMuteToggle()
+        }
+    }
+
+    /// One full mute toggle: source, key, and the restore value are all resolved
+    /// here — at the moment this toggle actually runs — not when it was queued,
+    /// so it always sees the previous toggle's recorded result.
+    private func performMuteToggle() async {
         let source = currentVolumeSource
         let key = muteMemoryKey(for: source)
         let restore = muteMemory.restoreVolume(for: key)
-        Task {
-            guard let change = await changeVolume(of: source, {
-                MuteMemory.toggled(from: $0, restore: restore)
-            }) else { return }
-            muteMemory.record(sourceID: key, previous: change.previous, new: change.volume)
-        }
+        guard let change = await changeVolume(of: source, {
+            MuteMemory.toggled(from: $0, restore: restore)
+        }) else { return }
+        muteMemory.record(sourceID: key, previous: change.previous, new: change.volume)
     }
 
     /// Mute memory follows the thing actually silenced, not the "hooked target"
