@@ -219,9 +219,11 @@ final class AppState: ObservableObject {
     @Published var browserMediaCandidates: [BrowserMediaCandidate] = [] {
         didSet {
             updateMenuBarGlyph()
-            guard volumeSession != nil else { return }
-            Self.applyingSessionTabVolumes(sessionTabVolumes, to: &browserMediaCandidates)
-            updateVolumeSessionRouting()
+            // Never mutate this property from here: on a @Published property an
+            // inout write inside its own didSet re-fires the didSet. Scanned
+            // data is patched with the session's tab levels before assignment
+            // (see `applyingSessionTabVolumes`).
+            if volumeSession != nil { updateVolumeSessionRouting() }
         }
     }
     @Published var selectedBrowserMediaID: String? {
@@ -235,9 +237,8 @@ final class AppState: ObservableObject {
     /// also kept fresh by the volume-source picker's session refresh.
     @Published var activeBrowserMediaCandidates: [BrowserMediaCandidate] = [] {
         didSet {
-            guard volumeSession != nil else { return }
-            Self.applyingSessionTabVolumes(sessionTabVolumes, to: &activeBrowserMediaCandidates)
-            updateVolumeSessionRouting()
+            // Read-only here for the same reason as `browserMediaCandidates`.
+            if volumeSession != nil { updateVolumeSessionRouting() }
         }
     }
     /// Whether the current output device's volume is adjustable. Informational only
@@ -862,7 +863,7 @@ final class AppState: ObservableObject {
         guard BrowserKind.target(id: selectedTargetID) == browser else { return }
 
         browserMediaInjectionAvailable = scan.injectionAvailable
-        browserMediaCandidates = scan.candidates
+        browserMediaCandidates = Self.applyingSessionTabVolumes(sessionTabVolumes, to: scan.candidates)
         tap.transportKeysHijacked = scan.injectionAvailable
 
         guard scan.injectionAvailable, !scan.candidates.isEmpty else {
@@ -943,7 +944,7 @@ final class AppState: ObservableObject {
                 browser: browser
             ))
         }
-        activeBrowserMediaCandidates = candidates
+        activeBrowserMediaCandidates = Self.applyingSessionTabVolumes(sessionTabVolumes, to: candidates)
     }
 
     /// Rank a browser's sources with currently playing tabs first, then the selected
@@ -1001,6 +1002,9 @@ final class AppState: ObservableObject {
 
     func setBrowserVolume(_ percent: Int, for candidate: BrowserMediaCandidate) {
         let clamped = min(max(percent, 0), 100)
+        // A slider move during a picker session is the newest level: record it
+        // so a key-written level from earlier in the session can't override it.
+        if volumeSession != nil { sessionTabVolumes[candidate.id] = clamped }
         updateBrowserVolumeCaches(clamped, forTabID: candidate.id)
         Task {
             _ = await scripting.run { [browserMediaController] in
@@ -1301,16 +1305,20 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Re-applies the session's key-written tab levels over a freshly replaced
-    /// cache. Writes only what differs, so calling it from the caches' own
-    /// didSets settles at once.
-    private static func applyingSessionTabVolumes(_ volumes: [String: Int],
-                                                  to candidates: inout [BrowserMediaCandidate]) {
-        guard !volumes.isEmpty else { return }
-        for index in candidates.indices {
-            if let volume = volumes[candidates[index].id], candidates[index].volume != volume {
-                candidates[index].volume = volume
-            }
+    /// Scanned candidates with the session's key-written tab levels laid over
+    /// them. Pure, so the scan sites can patch incoming data before assigning
+    /// it once; an empty map (always the case outside a session) returns the
+    /// scan unchanged.
+    nonisolated static func applyingSessionTabVolumes(
+        _ volumes: [String: Int],
+        to candidates: [BrowserMediaCandidate]
+    ) -> [BrowserMediaCandidate] {
+        guard !volumes.isEmpty else { return candidates }
+        return candidates.map { candidate in
+            guard let volume = volumes[candidate.id] else { return candidate }
+            var patched = candidate
+            patched.volume = volume
+            return patched
         }
     }
 
