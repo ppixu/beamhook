@@ -884,7 +884,8 @@ final class AppState: ObservableObject {
                 volumeByBundle[result.bundleID] = result.volume
                 let appName = availableApps.first { $0.bundleID == result.bundleID }?.displayName
                     ?? result.bundleID
-                HookHUD.shared.showVolume(appName: appName, percent: result.volume)
+                HookHUD.shared.showVolume(appName: appName, percent: result.volume,
+                                          systemVolumeHint: tap.volumeKeysHijacked)
             }
         }
     }
