@@ -112,19 +112,43 @@ final class AppState: ObservableObject {
     private var browserSourceRecency: [String: UInt64] = [:]
     private var playingBrowserSourceIDs = Set<String>()
     private var browserSourceRecencySequence: UInt64 = 0
+    /// Volume-key presses for one source, coalesced into a net step count.
+    private struct VolumeStepBatch {
+        let source: VolumeSource
+        /// The picker session the presses were made in (nil outside one). A
+        /// batch from a session that has since ended is dropped, not redirected.
+        let session: UInt64?
+        var steps: Int
+    }
     /// Coalescing state for volume-key repeats (main-actor isolated → race-free):
-    /// each key press bumps `pendingVolumeSteps`; a single drain task applies the
-    /// net delta off-main, so a held key never stacks up blocked Apple-event sends.
-    private var pendingVolumeSteps = 0
+    /// each key press bumps the last pending batch for the same source and
+    /// session, or starts a new one; a single drain task applies each batch's
+    /// net delta off-main, so a held key never stacks up blocked Apple-event
+    /// sends. The source is captured at press time, so presses for one row can
+    /// never land on another.
+    private var pendingVolumeBatches: [VolumeStepBatch] = []
     private var volumeDrainInFlight = false
-    /// Same coalescing shape for mute inside a picker session: each press bumps `pendingMuteToggles`
-    /// and a single drain task runs them one at a time. Unlike volume steps these
-    /// aren't summed into a net delta — each toggle must fully complete (including
-    /// `muteMemory.record`) before the next one reads `restoreVolume`, otherwise a
-    /// quick double-press races the first toggle's Apple-event round trip and
+    /// One mute press inside a picker session, with its source captured at
+    /// press time.
+    private struct SessionMuteToggle {
+        let source: VolumeSource
+        let session: UInt64
+    }
+    /// Same queue shape for mute inside a picker session, but unlike volume
+    /// steps these aren't summed — each toggle must fully complete (including
+    /// `muteMemory.record`) before the next one reads `restoreVolume`, otherwise
+    /// a quick double-press races the first toggle's Apple-event round trip and
     /// reads the fallback restore value instead of what the first press saved.
-    private var pendingMuteToggles = 0
+    private var pendingMuteToggles: [SessionMuteToggle] = []
     private var muteToggleInFlight = false
+    /// Incremented each time a picker session opens; identifies the session
+    /// queued key work belongs to.
+    private var volumeSessionGeneration: UInt64 = 0
+    /// Tab levels the keys wrote during the current session, by tab id. A
+    /// browser scan taken before a key's send can land after it and replace
+    /// the caches wholesale; these win over scanned values until the session
+    /// ends, so the next press steps from what was actually set.
+    private var sessionTabVolumes: [String: Int] = [:]
     /// Pre-mute volumes of browser tabs, so a session's ⌘+Mute can undo itself.
     /// Apps use the process-tap mute instead. Outlives sessions.
     private var muteMemory = MuteMemory()
@@ -195,7 +219,9 @@ final class AppState: ObservableObject {
     @Published var browserMediaCandidates: [BrowserMediaCandidate] = [] {
         didSet {
             updateMenuBarGlyph()
-            if volumeSession != nil { updateVolumeSessionRouting() }
+            guard volumeSession != nil else { return }
+            Self.applyingSessionTabVolumes(sessionTabVolumes, to: &browserMediaCandidates)
+            updateVolumeSessionRouting()
         }
     }
     @Published var selectedBrowserMediaID: String? {
@@ -209,7 +235,9 @@ final class AppState: ObservableObject {
     /// also kept fresh by the volume-source picker's session refresh.
     @Published var activeBrowserMediaCandidates: [BrowserMediaCandidate] = [] {
         didSet {
-            if volumeSession != nil { updateVolumeSessionRouting() }
+            guard volumeSession != nil else { return }
+            Self.applyingSessionTabVolumes(sessionTabVolumes, to: &activeBrowserMediaCandidates)
+            updateVolumeSessionRouting()
         }
     }
     /// Whether the current output device's volume is adjustable. Informational only
@@ -973,7 +1001,7 @@ final class AppState: ObservableObject {
 
     func setBrowserVolume(_ percent: Int, for candidate: BrowserMediaCandidate) {
         let clamped = min(max(percent, 0), 100)
-        updateBrowserVolumeCaches(clamped, for: candidate)
+        updateBrowserVolumeCaches(clamped, forTabID: candidate.id)
         Task {
             _ = await scripting.run { [browserMediaController] in
                 browserMediaController.setVolume(clamped, for: candidate)
@@ -1142,10 +1170,21 @@ final class AppState: ObservableObject {
     // MARK: - Volume-key coalescing
 
     /// Records one volume-key press and kicks off the drain if it isn't already
-    /// running. Presses that arrive mid-flight just accumulate, so holding the key
-    /// collapses into a few off-main round-trips instead of one blocked send each.
+    /// running. Presses that arrive mid-flight accumulate into the last pending
+    /// batch while it is for the same source, so holding the key collapses into
+    /// a few off-main round-trips instead of one blocked send each; a press for
+    /// a different source starts a new batch.
     private func nudgeVolume(up: Bool) {
-        pendingVolumeSteps += up ? 1 : -1
+        guard let source = currentVolumeSource else { return }
+        let session = activeVolumeSession
+        let step = up ? 1 : -1
+        if let last = pendingVolumeBatches.indices.last,
+           pendingVolumeBatches[last].source == source,
+           pendingVolumeBatches[last].session == session {
+            pendingVolumeBatches[last].steps += step
+        } else {
+            pendingVolumeBatches.append(VolumeStepBatch(source: source, session: session, steps: step))
+        }
         guard !volumeDrainInFlight else { return }
         volumeDrainInFlight = true
         Task { await drainVolumeSteps() }
@@ -1153,24 +1192,37 @@ final class AppState: ObservableObject {
 
     private func drainVolumeSteps() async {
         defer { volumeDrainInFlight = false }
-        while pendingVolumeSteps != 0 {
-            let steps = pendingVolumeSteps
-            pendingVolumeSteps = 0
-            let delta = steps * targetManager.volumeStep
-            await changeVolume(of: currentVolumeSource) { $0 + delta }
+        while !pendingVolumeBatches.isEmpty {
+            let batch = pendingVolumeBatches.removeFirst()
+            guard batch.steps != 0 else { continue }
+            // Pressed for a session that has since ended: drop it rather than
+            // land it on whatever the keys reach now.
+            if let session = batch.session, session != activeVolumeSession { continue }
+            let delta = batch.steps * targetManager.volumeStep
+            await changeVolume(of: batch.source, session: batch.session) { $0 + delta }
         }
     }
 
-    /// The session's selected source, otherwise the hooked target.
-    private var currentVolumeSource: VolumeSource {
-        volumeSession?.selected?.source ?? .hookedTarget
+    /// The session's selected source, otherwise the hooked target; nil in a
+    /// session whose list has no selection.
+    private var currentVolumeSource: VolumeSource? {
+        guard let volumeSession else { return .hookedTarget }
+        return volumeSession.selected?.source
+    }
+
+    /// The open picker session's generation, or nil when none is open.
+    private var activeVolumeSession: UInt64? {
+        volumeSession == nil ? nil : volumeSessionGeneration
     }
 
     /// Read-modify-write one source's volume (AppleScript off main), update the
     /// caches the menu and HUD read, then show the HUD. Returns the change, or nil
-    /// when nothing was changed (source gone, not ready, no volume).
+    /// when nothing was changed (source gone, not ready, no volume, send failed).
+    /// `session` is the picker session the change was asked for in; once that
+    /// session has ended the change still lands in the caches but shows no HUD.
     @discardableResult
     private func changeVolume(of source: VolumeSource,
+                              session: UInt64?,
                               _ transform: @escaping (Int) -> Int) async -> VolumeChange? {
         let change: VolumeChange?
         switch source {
@@ -1196,27 +1248,34 @@ final class AppState: ObservableObject {
             change = await targetManager.updateVolume(ofBundleID: bundleID, transform)
             if let change { volumeByBundle[bundleID] = change.volume }
         case .browserTab(let id):
-            if let candidate = browserCandidate(id: id), let current = candidate.volume {
-                let next = min(100, max(0, transform(current)))
-                if next != current {
-                    updateBrowserVolumeCaches(next, for: candidate)
-                    // Awaited inline (unlike the menu slider's `setBrowserVolume`),
-                    // so this RMW suspends until the send completes. Otherwise
-                    // `drainVolumeSteps` would finish at once and a held key's
-                    // repeats would fire overlapping, unordered sends.
-                    await scripting.run { [browserMediaController] in
-                        _ = browserMediaController.setVolume(next, for: candidate)
-                    }
-                }
-                // Reported even when unchanged (already at 0 or 100), so the
-                // press still shows the HUD.
-                change = VolumeChange(bundleID: candidate.browser.bundleID, previous: current, volume: next)
-            } else {
-                change = nil
+            guard let candidate = browserCandidate(id: id), let current = tabVolume(id: id) else {
+                return nil
             }
+            let next = min(100, max(0, transform(current)))
+            if next != current {
+                // Awaited inline (unlike the menu slider's `setBrowserVolume`),
+                // so this RMW suspends until the send completes. Otherwise
+                // `drainVolumeSteps` would finish at once and a held key's
+                // repeats would fire overlapping, unordered sends.
+                let sent = await scripting.run { [browserMediaController] in
+                    browserMediaController.setVolume(next, for: candidate)
+                }
+                // A stale row (the tab closed or navigated): report nothing, so
+                // the HUD neither redraws nor stays up for it.
+                guard sent else { return nil }
+                updateBrowserVolumeCaches(next, forTabID: id)
+                if let session, session == activeVolumeSession {
+                    sessionTabVolumes[id] = next
+                }
+            }
+            // Reported even when unchanged (already at 0 or 100), so the
+            // press still shows the HUD.
+            change = VolumeChange(bundleID: candidate.browser.bundleID, previous: current, volume: next)
         }
         guard let change else { return nil }
-        if volumeSession != nil {
+        if let session {
+            if session == activeVolumeSession { showVolumeSessionHUD() }
+        } else if volumeSession != nil {
             showVolumeSessionHUD()
         } else {
             let appName = availableApps.first { $0.bundleID == change.bundleID }?.displayName
@@ -1233,12 +1292,25 @@ final class AppState: ObservableObject {
     /// Both browser-tab volume caches (the menu's hooked-browser rows and the
     /// active-tab list) for one tab. Shared by the menu slider's
     /// `setBrowserVolume` and the volume keys' `changeVolume`.
-    private func updateBrowserVolumeCaches(_ percent: Int, for candidate: BrowserMediaCandidate) {
-        if let index = activeBrowserMediaCandidates.firstIndex(where: { $0.id == candidate.id }) {
+    private func updateBrowserVolumeCaches(_ percent: Int, forTabID id: String) {
+        if let index = activeBrowserMediaCandidates.firstIndex(where: { $0.id == id }) {
             activeBrowserMediaCandidates[index].volume = percent
         }
-        if let index = browserMediaCandidates.firstIndex(where: { $0.id == candidate.id }) {
+        if let index = browserMediaCandidates.firstIndex(where: { $0.id == id }) {
             browserMediaCandidates[index].volume = percent
+        }
+    }
+
+    /// Re-applies the session's key-written tab levels over a freshly replaced
+    /// cache. Writes only what differs, so calling it from the caches' own
+    /// didSets settles at once.
+    private static func applyingSessionTabVolumes(_ volumes: [String: Int],
+                                                  to candidates: inout [BrowserMediaCandidate]) {
+        guard !volumes.isEmpty else { return }
+        for index in candidates.indices {
+            if let volume = volumes[candidates[index].id], candidates[index].volume != volume {
+                candidates[index].volume = volume
+            }
         }
     }
 
@@ -1247,22 +1319,22 @@ final class AppState: ObservableObject {
             ?? browserMediaCandidates.first { $0.id == id }
     }
 
+    /// A tab's level: what the keys wrote this session, else the cached scan.
+    private func tabVolume(id: String) -> Int? {
+        guard browserCandidate(id: id) != nil else { return nil }
+        return sessionTabVolumes[id] ?? browserCandidate(id: id)?.volume
+    }
+
     /// A mute key the tap routed to us. Outside a picker session it is exactly
     /// upstream's hooked-app mute; inside one — ⌘ + Mute, or plain Mute with the
     /// volume keys hooked — it toggles the picked source.
     private func handleMuteKey() {
-        guard volumeSession != nil else {
+        guard let session = activeVolumeSession else {
             toggleTargetMute()
             return
         }
-        toggleSessionMute()
-    }
-
-    /// Mute inside a picker session. Queued like `nudgeVolume`/`drainVolumeSteps`,
-    /// so a quick double-press on a tab can't read `restoreVolume` before the
-    /// first press has recorded it.
-    private func toggleSessionMute() {
-        pendingMuteToggles += 1
+        guard let source = currentVolumeSource else { return }
+        pendingMuteToggles.append(SessionMuteToggle(source: source, session: session))
         guard !muteToggleInFlight else { return }
         muteToggleInFlight = true
         Task { await drainMuteToggles() }
@@ -1270,27 +1342,24 @@ final class AppState: ObservableObject {
 
     private func drainMuteToggles() async {
         defer { muteToggleInFlight = false }
-        while pendingMuteToggles > 0 {
-            pendingMuteToggles -= 1
-            await performMuteToggle()
+        while !pendingMuteToggles.isEmpty {
+            let toggle = pendingMuteToggles.removeFirst()
+            // The session ended while this was queued: drop it. Redirecting it
+            // to the hooked app could mute it for a press macOS should have had.
+            guard toggle.session == activeVolumeSession else { continue }
+            await performMuteToggle(toggle)
         }
     }
 
-    /// One full mute toggle, with the source resolved when it actually runs —
-    /// not when it was queued — so it always sees the previous toggle's result.
+    /// One full mute toggle on the source picked when the key was pressed.
     ///
     /// Apps (the hooked target included) use the same process-tap mute as the
     /// mute key outside a session, so the menu, the menu-bar slash and the
     /// persisted set stay in step. A browser tab can't be process-muted without
     /// silencing the whole browser, so a tab is muted through its volume, with
     /// `MuteMemory` remembering what to put back.
-    private func performMuteToggle() async {
-        guard volumeSession != nil else {
-            // The HUD hid while this toggle was queued: back to the ordinary rule.
-            toggleTargetMute()
-            return
-        }
-        switch currentVolumeSource {
+    private func performMuteToggle(_ toggle: SessionMuteToggle) async {
+        switch toggle.source {
         case .hookedTarget:
             guard let bundleID = targetManager.targetBundleID,
                   toggleProcessMute(bundleID: bundleID) != nil else { return }
@@ -1301,7 +1370,7 @@ final class AppState: ObservableObject {
         case .browserTab(let id):
             let source = VolumeSource.browserTab(id: id)
             let restore = muteMemory.restoreVolume(for: source.id)
-            guard let change = await changeVolume(of: source, {
+            guard let change = await changeVolume(of: source, session: toggle.session, {
                 MuteMemory.toggled(from: $0, restore: restore)
             }) else { return }
             muteMemory.record(sourceID: source.id, previous: change.previous, new: change.volume)
@@ -1332,7 +1401,7 @@ final class AppState: ObservableObject {
             canTakeVolume = running && volumeScriptable(bundleID: bundleID)
             canTakeMute = running && perAppMuteEnabled
         case .browserTab(let id)?:
-            canTakeVolume = browserCandidate(id: id)?.volume != nil
+            canTakeVolume = tabVolume(id: id) != nil
             canTakeMute = canTakeVolume
         }
         tap.volumeSessionCanTakeVolume = canTakeVolume
@@ -1350,6 +1419,7 @@ final class AppState: ObservableObject {
             volumeSessionRefresh?.cancel()
             volumeSessionRefresh = nil
             volumeSession = nil
+            sessionTabVolumes = [:]
         }
     }
 
@@ -1368,6 +1438,8 @@ final class AppState: ObservableObject {
             // Nothing to pick: no session, so the keys keep their usual rule
             // instead of being held for a list with no rows.
             guard !list.entries.isEmpty else { return }
+            volumeSessionGeneration &+= 1
+            sessionTabVolumes = [:]
             volumeSession = list
             startVolumeSessionRefresh(audible: audible)
         }
@@ -1399,7 +1471,7 @@ final class AppState: ObservableObject {
         case .app(let bundleID):
             return volumeByBundle[bundleID]
         case .browserTab(let id):
-            return browserCandidate(id: id)?.volume
+            return tabVolume(id: id)
         }
     }
 
