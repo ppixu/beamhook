@@ -3,7 +3,7 @@
 **Date:** 2026-10-03
 **Status:** Approved for planning
 
-> **Superseded in part by the 1.2.1 merge.** The key routing and the app mute described below were replaced when this branch merged upstream 1.2.1: routing lives in `VolumeKeyRouting.destination` / `VolumeKeyRouting.muteDestination` (there is no `VolumeKeyAction`), apps are muted through `ProcessMuteController` (not volume 0), plain Mute follows upstream's rule rather than always going to macOS, and `MuteMemory` is used for browser tabs only. The body is kept as written.
+> **Superseded in part by the 1.2.1 merge.** The key routing and the app mute described below were replaced when this branch merged upstream 1.2.1: routing lives in `VolumeKeyRouting.destination` / `VolumeKeyRouting.muteDestination` (there is no `VolumeKeyAction`); apps are muted through `ProcessMuteController` (not volume 0); `MuteMemory` is used for browser tabs only; and plain Mute no longer always goes to macOS — outside a picker session it follows upstream's rule, and with the volume keys hooked, plain Mute in a session toggles the picked row. The body is kept as written.
 
 ## Problem
 
