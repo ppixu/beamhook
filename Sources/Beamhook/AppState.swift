@@ -966,12 +966,7 @@ final class AppState: ObservableObject {
 
     func setBrowserVolume(_ percent: Int, for candidate: BrowserMediaCandidate) {
         let clamped = min(max(percent, 0), 100)
-        if let index = activeBrowserMediaCandidates.firstIndex(where: { $0.id == candidate.id }) {
-            activeBrowserMediaCandidates[index].volume = clamped
-        }
-        if let index = browserMediaCandidates.firstIndex(where: { $0.id == candidate.id }) {
-            browserMediaCandidates[index].volume = clamped
-        }
+        updateBrowserVolumeCaches(clamped, for: candidate)
         Task {
             _ = await scripting.run { [browserMediaController] in
                 browserMediaController.setVolume(clamped, for: candidate)
@@ -1196,7 +1191,18 @@ final class AppState: ObservableObject {
         case .browserTab(let id):
             if let candidate = browserCandidate(id: id), let current = candidate.volume {
                 let next = min(100, max(0, transform(current)))
-                setBrowserVolume(next, for: candidate)   // updates both caches, sends off main
+                if next != current {
+                    updateBrowserVolumeCaches(next, for: candidate)
+                    // Awaited inline (unlike the menu slider's `setBrowserVolume`),
+                    // so this RMW suspends until the send completes. Otherwise
+                    // `drainVolumeSteps` would finish at once and a held key's
+                    // repeats would fire overlapping, unordered sends.
+                    await scripting.run { [browserMediaController] in
+                        _ = browserMediaController.setVolume(next, for: candidate)
+                    }
+                }
+                // Reported even when unchanged (already at 0 or 100), so the
+                // press still shows the HUD.
                 change = VolumeChange(bundleID: candidate.browser.bundleID, previous: current, volume: next)
             } else {
                 change = nil
@@ -1215,6 +1221,18 @@ final class AppState: ObservableObject {
                                       commandHint: tap.volumeKeysHijacked ? .system : nil)
         }
         return change
+    }
+
+    /// Both browser-tab volume caches (the menu's hooked-browser rows and the
+    /// active-tab list) for one tab. Shared by the menu slider's
+    /// `setBrowserVolume` and the volume keys' `changeVolume`.
+    private func updateBrowserVolumeCaches(_ percent: Int, for candidate: BrowserMediaCandidate) {
+        if let index = activeBrowserMediaCandidates.firstIndex(where: { $0.id == candidate.id }) {
+            activeBrowserMediaCandidates[index].volume = percent
+        }
+        if let index = browserMediaCandidates.firstIndex(where: { $0.id == candidate.id }) {
+            browserMediaCandidates[index].volume = percent
+        }
     }
 
     private func browserCandidate(id: String) -> BrowserMediaCandidate? {

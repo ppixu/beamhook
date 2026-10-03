@@ -155,7 +155,7 @@ final class TargetManagerTests: XCTestCase {
         XCTAssertTrue(music.performedCommands.isEmpty)
     }
 
-    // MARK: - adjustVolume
+    // MARK: - updateVolume (volume-key steps)
 
     private func makeVolumeTarget(current: Int?, running: Bool = true) -> (MockResolver, MockMediaApp) {
         let resolver = MockResolver()
@@ -166,59 +166,52 @@ final class TargetManagerTests: XCTestCase {
         return (resolver, app)
     }
 
-    func testAdjustVolumeStepsUpFromCurrent() async {
+    func testUpdateVolumeStepsUpFromCurrent() async {
         let (resolver, app) = makeVolumeTarget(current: 50)
         let tm = makeManager(resolver: resolver, volumeStep: 6)
         tm.selectedTargetID = "spotify"
 
-        let result = await tm.adjustVolume(bySteps: 2)   // +12
-        XCTAssertEqual(result?.volume, 62)
-        XCTAssertEqual(result?.bundleID, "com.example.spotify")
+        let delta = 2 * tm.volumeStep   // +12
+        let change = await tm.updateVolume { $0 + delta }
+        XCTAssertEqual(change?.volume, 62)
+        XCTAssertEqual(change?.bundleID, "com.example.spotify")
         XCTAssertEqual(app.setVolumeCalls, [62])
     }
 
-    func testAdjustVolumeStepsDown() async {
+    func testUpdateVolumeStepsDown() async {
         let (resolver, app) = makeVolumeTarget(current: 50)
         let tm = makeManager(resolver: resolver, volumeStep: 6)
         tm.selectedTargetID = "spotify"
 
-        let result = await tm.adjustVolume(bySteps: -3)   // -18
-        XCTAssertEqual(result?.volume, 32)
+        let delta = -3 * tm.volumeStep   // -18
+        let change = await tm.updateVolume { $0 + delta }
+        XCTAssertEqual(change?.volume, 32)
         XCTAssertEqual(app.setVolumeCalls, [32])
     }
 
-    func testAdjustVolumeClampsToBounds() async {
+    func testUpdateVolumeStepsClampToBounds() async {
         let (resolver, app) = makeVolumeTarget(current: 95)
         let tm = makeManager(resolver: resolver, volumeStep: 6)
         tm.selectedTargetID = "spotify"
 
-        let result = await tm.adjustVolume(bySteps: 5)   // +30 → clamp 100
-        XCTAssertEqual(result?.volume, 100)
+        let delta = 5 * tm.volumeStep   // +30 → clamp 100
+        let change = await tm.updateVolume { $0 + delta }
+        XCTAssertEqual(change?.volume, 100)
         XCTAssertEqual(app.setVolumeCalls, [100])
     }
 
-    func testAdjustVolumeNoOpForZeroSteps() async {
-        let (resolver, app) = makeVolumeTarget(current: 50)
-        let tm = makeManager(resolver: resolver)
-        tm.selectedTargetID = "spotify"
-
-        let result = await tm.adjustVolume(bySteps: 0)
-        XCTAssertNil(result)
-        XCTAssertTrue(app.setVolumeCalls.isEmpty)
-    }
-
-    func testAdjustVolumeNoOpWhenNotReady() async {
+    func testUpdateVolumeNoOpWhenNotReady() async {
         let (resolver, app) = makeVolumeTarget(current: 50, running: true)
         app.readyValue = false   // running but still launching
         let tm = makeManager(resolver: resolver)
         tm.selectedTargetID = "spotify"
 
-        let result = await tm.adjustVolume(bySteps: 2)
-        XCTAssertNil(result)
+        let change = await tm.updateVolume { $0 + 12 }
+        XCTAssertNil(change)
         XCTAssertTrue(app.setVolumeCalls.isEmpty)
     }
 
-    func testAdjustVolumeNoOpWhenVolumeUnsupported() async {
+    func testUpdateVolumeNoOpWhenVolumeUnsupported() async {
         let resolver = MockResolver()
         let app = MockMediaApp(id: "spotify", isRunning: true)
         app.supportsVolume = false
@@ -227,8 +220,8 @@ final class TargetManagerTests: XCTestCase {
         let tm = makeManager(resolver: resolver)
         tm.selectedTargetID = "spotify"
 
-        let result = await tm.adjustVolume(bySteps: 2)
-        XCTAssertNil(result)
+        let change = await tm.updateVolume { $0 + 12 }
+        XCTAssertNil(change)
         XCTAssertTrue(app.setVolumeCalls.isEmpty)
     }
 

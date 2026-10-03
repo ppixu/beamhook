@@ -80,28 +80,19 @@ public final class TargetManager {
         }
     }
 
-    /// Applies `steps` volume-key presses (positive = up) to the target in a single
-    /// off-main round-trip: read current, clamp, set. Returns the app it acted on and
-    /// the new volume 0...100, or nil if there's nothing to do (no target / not ready /
-    /// no scriptable volume). Returning the bundle id (resolved inside the same off-main
-    /// closure) lets callers key their volume cache to the app actually adjusted, even
-    /// if the selected target changed while this was in flight.
-    ///
-    /// Coalescing note: a burst of N presses is applied as one pre-clamped net delta,
-    /// so the final volume can differ from applying each press individually across the
-    /// 0/100 boundary (e.g. down-then-up near 0). That's intentional and benign for a
-    /// held/bursty key; it keeps holding the key to one round-trip.
-    public func adjustVolume(bySteps steps: Int) async -> (bundleID: String, volume: Int)? {
-        guard steps != 0 else { return nil }
-        let delta = steps * volumeStep
-        guard let change = await updateVolume({ $0 + delta }) else { return nil }
-        return (change.bundleID, change.volume)
-    }
-
     /// Reads the hooked target's volume, sets `transform(current)` clamped to
     /// 0...100, and reports both — one off-main round-trip, so a mute toggle can
     /// decide from the live value without a second Apple event. nil when there's
-    /// no target, it isn't ready, or it has no readable volume.
+    /// no target, it isn't ready, or it has no readable volume. The bundle id is
+    /// resolved inside the same off-main closure, so callers can key their
+    /// volume cache to the app actually changed even if the hooked target
+    /// changed while this was in flight.
+    ///
+    /// Coalescing note: the volume keys apply a burst of N presses as one
+    /// pre-clamped net delta, so the final volume can differ from applying each
+    /// press individually across the 0/100 boundary (e.g. down-then-up near 0).
+    /// That's intentional and benign for a held key; it keeps holding the key
+    /// to one round-trip.
     public func updateVolume(_ transform: @escaping (Int) -> Int) async -> VolumeChange? {
         guard let app = currentTargetApp() else { return nil }
         return await Self.readModifyWrite(app, transform, on: runner)
