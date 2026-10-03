@@ -30,7 +30,8 @@ public enum MediaKey: Equatable, Sendable {
         }
     }
 
-    /// Hardware volume up/down (mute is intentionally left to the system).
+    /// Hardware volume up/down. Mute is separate: plain mute always belongs to
+    /// the system, ⌘+Mute toggles the volume source (see `VolumeKeyAction`).
     public var isVolume: Bool {
         switch self {
         case .volumeUp, .volumeDown: return true

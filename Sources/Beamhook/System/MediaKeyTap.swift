@@ -17,6 +17,8 @@ final class MediaKeyTap: @unchecked Sendable {
     private struct RoutingState {
         var transportKeysHijacked = true
         var volumeKeysHijacked = false
+        var targetHasVolume = false
+        var volumeSessionActive = false
     }
 
     private let handler: Handler
@@ -42,14 +44,26 @@ final class MediaKeyTap: @unchecked Sendable {
         set { withStateLock { routingState.volumeKeysHijacked = newValue } }
     }
 
+    /// Whether the hooked target's volume can be set right now. Gates ⌘+Volume
+    /// (hook off) and ⌘+Mute, so Beamhook never swallows a key it can't act on.
+    var targetHasVolume: Bool {
+        get { withStateLock { routingState.targetHasVolume } }
+        set { withStateLock { routingState.targetHasVolume = newValue } }
+    }
+
+    /// True while the volume-source list is on screen: every volume key and
+    /// ⌘+Mute then goes to the picked source, with or without ⌘.
+    var volumeSessionActive: Bool {
+        get { withStateLock { routingState.volumeSessionActive } }
+        set { withStateLock { routingState.volumeSessionActive = newValue } }
+    }
+
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var thread: Thread?
     private var threadRunLoop: CFRunLoop?
 
-    /// Both handlers are always invoked on the main thread, for fresh (non-repeat)
-    /// key-downs only: `handler` for transport keys the tap swallowed and routed,
-    /// `passthroughHandler` for transport keys it handed back to macOS.
+    /// Both handlers are always invoked on the main thread: `handler` for transport keys the tap swallowed and routed (fresh key-downs only), and for volume keys and ⌘+Mute that `VolumeKeyAction` says Beamhook handles (volume keys including repeats); `passthroughHandler` for transport keys it handed back to macOS (fresh key-downs only).
     init(handler: @escaping Handler, passthroughHandler: Handler? = nil) {
         self.handler = handler
         self.passthroughHandler = passthroughHandler
@@ -138,23 +152,35 @@ final class MediaKeyTap: @unchecked Sendable {
             return nil
         }
 
-        if key.isVolume && volumeKeysHijacked {
-            // Command-volume is an escape hatch to the normal system volume.
-            // Remove Command before passing the event through so macOS receives
-            // an ordinary volume key rather than a modified shortcut.
-            if event.flags.contains(.maskCommand) {
+        if key.isVolume || key == .mute {
+            let state = withStateLock { routingState }
+            let action = VolumeKeyAction.resolve(
+                key: key,
+                commandHeld: event.flags.contains(.maskCommand),
+                hijacked: state.volumeKeysHijacked,
+                targetHasVolume: state.targetHasVolume,
+                sessionActive: state.volumeSessionActive)
+            switch action {
+            case .passThrough:
+                return Unmanaged.passUnretained(event)
+            case .passThroughWithoutCommand:
+                // Command-volume is an escape hatch to the normal system volume.
+                // Remove Command before passing the event through so macOS receives
+                // an ordinary volume key rather than a modified shortcut.
                 event.flags = event.flags.subtracting(.maskCommand)
                 return Unmanaged.passUnretained(event)
+            case .handle:
+                // Volume: key-down AND repeats, so holding the key ramps. Mute:
+                // a fresh key-down only — a held key must not flap the toggle.
+                // Both down and up are swallowed either way.
+                if decoded.isDown && (key.isVolume || !decoded.isRepeat) {
+                    DispatchQueue.main.async { [weak self] in self?.handler(key) }
+                }
+                return nil
             }
-
-            // Forward on key-down AND repeats so holding the key ramps the volume.
-            if decoded.isDown {
-                DispatchQueue.main.async { [weak self] in self?.handler(key) }
-            }
-            return nil
         }
 
-        // Everything else (volume keys when not hijacked, mute, ff/rewind) passes through.
+        // Everything else (ff/rewind) passes through.
         return Unmanaged.passUnretained(event)
     }
 
