@@ -551,20 +551,23 @@ final class HookHUD {
         return panel
     }
 
+    /// An 11pt secondary-label caption, used by every hint row's text
+    /// fragments. Not an accessibility element itself — the row that contains
+    /// it composes one label and speaks for all of its pieces.
+    private static func caption(_ string: String) -> NSTextField {
+        let field = NSTextField(labelWithString: string)
+        field.font = .systemFont(ofSize: 11, weight: .regular)
+        field.textColor = .secondaryLabelColor
+        field.setAccessibilityElement(false)
+        return field
+    }
+
     /// "⌘ + <speaker> for system volume", built as a row so the speaker can be
     /// the real `speaker.wave.2.fill` symbol — the same mark the popover's hint
     /// and the menu bar itself use. An emoji speaker sat here before; it drew in
     /// its own colours and at its own weight, ignoring both the HUD's tint and
     /// the surrounding text.
     private static func makeSystemVolumeHint() -> NSStackView {
-        func caption(_ string: String) -> NSTextField {
-            let field = NSTextField(labelWithString: string)
-            field.font = .systemFont(ofSize: 11, weight: .regular)
-            field.textColor = .secondaryLabelColor
-            field.setAccessibilityElement(false)   // the row speaks for them all
-            return field
-        }
-
         let speaker = NSImageView()
         speaker.image = NSImage(systemSymbolName: "speaker.wave.2.fill",
                                 accessibilityDescription: "Volume")
@@ -587,14 +590,6 @@ final class HookHUD {
     /// "⌘ ↑↓ switch · ⌘ <speaker.slash.fill> mute" — the picker's keys, built
     /// as a row so the mute mark is the real SF Symbol, like the system hint.
     private static func makePickerHint() -> NSStackView {
-        func caption(_ string: String) -> NSTextField {
-            let field = NSTextField(labelWithString: string)
-            field.font = .systemFont(ofSize: 11, weight: .regular)
-            field.textColor = .secondaryLabelColor
-            field.setAccessibilityElement(false)
-            return field
-        }
-
         let muted = NSImageView()
         muted.image = NSImage(systemSymbolName: "speaker.slash.fill",
                               accessibilityDescription: "Mute")
@@ -633,9 +628,8 @@ final class HookHUD {
             icon.image = NSImage(systemSymbolName: "speaker.slash.fill", accessibilityDescription: nil)
             icon.symbolConfiguration = .init(pointSize: 11, weight: .regular)
             icon.contentTintColor = .secondaryLabelColor
-            let text = NSTextField(labelWithString: "muted")
-            text.font = .systemFont(ofSize: 11, weight: .regular)
-            text.textColor = .secondaryLabelColor
+            icon.setAccessibilityElement(false)
+            let text = Self.caption("muted")
             let mutedStack = NSStackView(views: [icon, text])
             mutedStack.orientation = .horizontal
             mutedStack.spacing = 4
