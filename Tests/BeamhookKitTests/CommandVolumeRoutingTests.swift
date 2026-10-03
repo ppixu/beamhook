@@ -76,10 +76,9 @@ final class CommandVolumeRoutingTests: XCTestCase {
 
     // MARK: - Volume-source picker session
 
-    /// While the source list is on screen every volume key follows the picked
-    /// source, whatever the hook, the setting, ⌘ or the hooked app's own
-    /// capability would otherwise say.
-    func testSessionSendsEveryVolumeKeyToThePickedSource() {
+    /// Picker volume follows the selection, retaining Command as the system escape
+    /// when plain volume keys are hooked.
+    func testSessionRoutesVolumeExceptHookedCommandEscape() {
         for command in [true, false] {
             for hijacked in [true, false] {
                 for enabled in [true, false] {
@@ -90,7 +89,7 @@ final class CommandVolumeRoutingTests: XCTestCase {
                                                          commandRoutingEnabled: enabled,
                                                          targetCanTakeVolume: targetCanTake,
                                                          sessionSourceCanTakeVolume: true),
-                            .app,
+                            command && hijacked ? .system : .app,
                             "command=\(command) hijacked=\(hijacked) enabled=\(enabled) target=\(targetCanTake)")
                     }
                 }
@@ -161,7 +160,7 @@ final class CommandVolumeRoutingTests: XCTestCase {
     }
 
     func testSessionCommandMuteTogglesThePickedSource() {
-        XCTAssertEqual(mute(command: true, hijacked: true, session: true), .app)
+        XCTAssertEqual(mute(command: true, hijacked: true, session: true), .system)
         XCTAssertEqual(mute(command: true, hijacked: false, enabled: false,
                             canTakeMute: false, session: true), .app)
     }

@@ -71,10 +71,15 @@ macOS 14.2. Tested on macOS Tahoe 26.5.
 - ⌘ + mute toggles the hooked app's mute, following the same rule as the volume
   keys. The menu-bar icon shows a slash through the hooked app's badge while it
   is muted.
-- **Pick the source from the overlay.** While the volume overlay is showing,
-  ⌘↑ / ⌘↓ switches between the apps and browser tabs that are playing; the
-  volume keys then adjust the one you picked, and ⌘ + Mute mutes it (with the
-  volume keys hooked, plain Mute does the same), until the overlay fades.
+- **Pick the source from the overlay.** Command + volume or Play opens the
+  expanded list. Command-Up/Down selects, Command-Left/Right adjusts volume,
+  Command-Play toggles playback, Command-Mute mutes, and Command-H hooks the
+  selection. With the volume-key toggle on, plain volume keys open the list
+  and these shortcuts work without Command; Command-volume controls system
+  volume. The legend follows the toggle.
+- Lists focus on recently sounding apps, with **Show all** in the menu for
+  the rest. Spotify's current artist and song appear beside its name and under
+  the title in its small playback overlay.
 - If the hooked app isn't running, play/pause starts it and begins playback. Can
   be turned off in Settings. (A menu-driven app launched with an empty queue —
   TIDAL, for instance — has nothing to play.)

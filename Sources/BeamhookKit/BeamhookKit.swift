@@ -45,13 +45,9 @@ public enum VolumeKeyRouting {
     ///   - targetCanTakeVolume: the target exposes a volume Beamhook can drive
     ///     AND is running. When it can't take the key we never swallow it —
     ///     a press that would otherwise die silently reaches the system instead.
-    ///   - sessionSourceCanTakeVolume: nil outside a volume-source picker
-    ///     session. Inside one (the source list is on screen) every volume key,
-    ///     with or without ⌘, goes to the picked source — otherwise a user still
-    ///     holding ⌘ after picking would hit the system volume with the hook
-    ///     on. The value says whether that source can take a volume step right
-    ///     now; when it can't (it quit, or the list is empty) the key reaches
-    ///     the system rather than being swallowed for nothing.
+    ///   - sessionSourceCanTakeVolume: nil outside the picker. In a session,
+    ///     volume follows the selection, except Command with hijacking enabled
+    ///     always escapes to system volume.
     public static func destination(
         commandHeld: Bool,
         hijacked: Bool,
@@ -59,6 +55,7 @@ public enum VolumeKeyRouting {
         targetCanTakeVolume: Bool,
         sessionSourceCanTakeVolume: Bool? = nil
     ) -> VolumeKeyDestination {
+        if hijacked && commandHeld { return .system }
         if let sessionSourceCanTakeVolume {
             return sessionSourceCanTakeVolume ? .app : .system
         }
@@ -86,6 +83,7 @@ public enum VolumeKeyRouting {
         targetCanTakeMute: Bool,
         sessionSourceCanTakeMute: Bool? = nil
     ) -> VolumeKeyDestination {
+        if hijacked && commandHeld { return .system }
         if let sessionSourceCanTakeMute, commandHeld || hijacked {
             return sessionSourceCanTakeMute ? .app : .system
         }

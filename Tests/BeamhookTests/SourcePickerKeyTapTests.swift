@@ -25,8 +25,28 @@ final class SourcePickerKeyTapTests: XCTestCase {
         XCTAssertNil(tap.handle(type: .keyDown, event: keyEvent(123)))
         XCTAssertNil(tap.handle(type: .keyDown, event: keyEvent(124)))
 
+        XCTAssertNil(tap.handle(type: .keyDown, event: keyEvent(4)))
         drainMainQueue()
-        XCTAssertEqual(keys, [.previous, .next, .volumeDown, .volumeUp])
+        XCTAssertEqual(keys, [.previous, .next, .volumeDown, .volumeUp, .hook])
+    }
+
+    func testPlainModeHandlesArrowsAndHookButPassesCommandChords() {
+        var keys: [SourcePickerKey] = []
+        let tap = SourcePickerKeyTap { keys.append($0) }
+        tap.requiresCommand = false
+        for code: CGKeyCode in [126, 125, 123, 124, 4] {
+            XCTAssertNil(tap.handle(type: .keyDown, event: keyEvent(code, flags: [])))
+            let commandEvent = keyEvent(code)
+            withExtendedLifetime(commandEvent) {
+                XCTAssertNotNil(tap.handle(type: .keyDown, event: commandEvent))
+            }
+        }
+        let shifted = keyEvent(4, flags: .maskShift)
+        withExtendedLifetime(shifted) {
+            XCTAssertNotNil(tap.handle(type: .keyDown, event: shifted))
+        }
+        drainMainQueue()
+        XCTAssertEqual(keys, [.previous, .next, .volumeDown, .volumeUp, .hook])
     }
 
     func testFnAndNumericPadFlagsAreIgnored() {

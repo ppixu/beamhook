@@ -7,185 +7,43 @@ private struct MenuRefreshContext: Hashable {
     let isVisible: Bool
 }
 
-private struct PlaybackPollContext: Hashable {
-    let target: PlaybackTargetContext
-    let isVisible: Bool
-}
-
+/// The NSPopover supplies the system's glass material. Keep the content transparent
+/// so the compact rows inherit the same Liquid Glass appearance as the old menu.
 struct MenuContentView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var updater: UpdaterModel
-    @State private var playback = PlaybackStatus()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
+            header
             if !state.hasAccessibility {
                 permissionBanner
-                Divider()
+                Divider().padding(.horizontal, 8)
             }
-
-            Text("Hook media keys to:")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-            Menu {
-                Button {
-                    state.setTarget(nil)
-                } label: {
-                    if state.selectedTargetID == nil {
-                        Label("Nothing", systemImage: "checkmark")
-                    } else {
-                        Text("Nothing")
-                    }
-                }
-                Divider()
-                ForEach(state.availableApps) { app in
-                    Button {
-                        state.setTarget(app.id)
-                    } label: {
-                        Group {
-                            if app.id == state.selectedTargetID {
-                                Label(app.displayName, systemImage: "checkmark")
-                            } else {
-                                Text(app.displayName)
-                            }
-                        }
-                        .foregroundStyle(state.isRunning(bundleID: app.bundleID) ? .primary : .secondary)
-                    }
-                    // An app that isn't on this Mac can't be hooked to anything,
-                    // and disabling is also the only styling a menu item honours
-                    // here — the foregroundStyle above has no effect on macOS 26.
-                    .disabled(!state.isInstalled(bundleID: app.bundleID))
-                }
-            } label: {
-                Text(targetName)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
-            }
-            .menuStyle(.borderlessButton)
-            // 21pt is the play/pause button's measured height. The borderless
-            // menu style adds no padding of its own, leaving the row 16pt, so the
-            // hover pill came out visibly shorter than the button below it. Grow
-            // the control rather than just the wash, so the highlight and the
-            // area that responds to the pointer stay the same shape.
-            .frame(maxWidth: .infinity, minHeight: 21)
-            // Behind, not over: this is bare text, and a wash on top would tint
-            // the label along with the background.
-            .hoverHighlight(cornerRadius: 7, behind: true)
-            .accessibilityLabel("Hook media keys to \(targetName)")
-
-            playPauseButton
-
-            if state.selectedTargetIsBrowser {
-                if state.browserMediaInjectionAvailable == true {
-                    if state.browserMediaCandidates.isEmpty {
-                        Text("No playable browser tabs found.")
-                            .font(.caption2).foregroundStyle(.secondary)
-                    } else {
-                        Picker("Browser player", selection: Binding(
-                            get: { state.selectedBrowserMediaID ?? state.browserMediaCandidates.first?.id ?? "" },
-                            set: { state.selectBrowserMedia($0) })) {
-                            ForEach(state.browserMediaCandidates) { candidate in
-                                Text((candidate.isPlaying ? "▶ " : "") + candidate.label)
-                                    .tag(candidate.id)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .controlSize(.small)
-                    }
-                } else if state.browserTargetRunning == false {
-                    Text("\(targetName) is not running. macOS will handle play/pause normally.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else if state.browserMediaInjectionAvailable == false {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("macOS is choosing the browser player. Enable JavaScript from Apple Events to pick a specific tab in Beamhook.")
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if let helpURL = appleEventsHelpURL {
-                            Link("How to enable it", destination: helpURL)
-                        }
-                    }
-                    .font(.caption2)
-                }
-            }
-
-            // Playing-apps section renders its own leading divider + rows, and
-            // nothing at all when nothing is playing.
             PlayingAppsList()
-
-            Divider()
-            HStack(spacing: 6) {
-                Image("MenuBarIcon")
-                    .resizable()
-                    .renderingMode(.template)
-                    .frame(width: 14, height: 14)
-                    .accessibilityHidden(true)
-                // Always the product name, never the running build's bundle
-                // name: "Beamhookdev" is long enough to truncate this row, and
-                // the dev build is already identifiable by its app name
-                // everywhere macOS lists it.
-                Text("Beamhook")
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                Text("v\(shortVersion)")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                Spacer(minLength: 4)
-                Button {
-                    SettingsWindow.shared.show(state: state)
-                } label: {
-                    Image(systemName: "gearshape")
-                }
-                .buttonStyle(.borderless)
-                .help("Settings")
-                Button("Quit") { NSApplication.shared.terminate(nil) }
-                    .fixedSize()
+            Button(state.showAllMenuApps ? "Show less" : "Show all") {
+                state.showAllMenuApps.toggle()
             }
+            .buttonStyle(.plain)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            browserNotice
+            Divider().padding(.horizontal, 8)
+            volumeKeyControls
         }
-        .padding(12)
-        // Wide enough for the footer to fit rather than overflow. That row's
-        // ideal width is 199pt (icon + "Beamhook" + version + gear + fixedSize
-        // Quit + spacings), so 12pt of padding each side puts the floor at
-        // 223pt. Narrower and the row draws outside the frame, which is what
-        // pushed Quit past the right margin every other control lines up on —
-        // Quit is fixedSize, so it overflows instead of truncating. The few
-        // points of slack land in the footer's Spacer, keeping the alignment
-        // stable if the version string grows a digit.
-        .frame(width: 228)
-        .onChange(of: state.playbackTargetContext, initial: true) { _, context in
-            playback.reset(for: context)
-        }
-        .task(id: PlaybackPollContext(
-            target: state.playbackTargetContext,
-            isVisible: state.isMenuVisible
-        )) {
-            let context = state.playbackTargetContext
-            playback.reset(for: context)
-            guard state.isMenuVisible, context.targetID != nil else { return }
+        .padding(8)
+        .frame(width: 300)
+        .task(id: state.isMenuVisible) {
+            guard state.isMenuVisible else { return }
             while !Task.isCancelled {
-                guard let observation = playback.observation(for: context) else {
-                    try? await Task.sleep(nanoseconds: 100_000_000)
-                    continue
-                }
-                let latest = await state.isTargetPlaying(in: context)
-                guard !Task.isCancelled, context == state.playbackTargetContext else {
-                    return
-                }
-                playback.accept(latest, from: observation)
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                await state.refreshSpotifyTrack()
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
             }
         }
-        .task(id: MenuRefreshContext(
-            targetID: state.selectedTargetID,
-            isVisible: state.isMenuVisible
-        )) {
+        .task(id: MenuRefreshContext(targetID: state.selectedTargetID,
+                                     isVisible: state.isMenuVisible)) {
             guard state.isMenuVisible else { return }
             while !Task.isCancelled {
                 await state.refreshBrowserMedia()
@@ -194,80 +52,132 @@ struct MenuContentView: View {
         }
     }
 
-    private var targetName: String {
-        let id = state.selectedTargetID
-        return state.availableApps.first { $0.id == id }?.displayName ?? "Nothing"
+    private var target: AppDefinition? {
+        state.availableApps.first { $0.id == state.selectedTargetID }
     }
 
-    /// Deep-links to the section for the selected browser: the guide covers Safari
-    /// separately from the Chromium browsers, which all share one menu path.
-    private var appleEventsHelpURL: URL? {
-        let anchor = BrowserKind.target(id: state.selectedTargetID) == .safari ? "safari" : "chrome"
-        return URL(string: "https://beamhook.app/help/#\(anchor)")
-    }
-
-    private var shortVersion: String {
-        let components = updater.version.split(separator: ".", omittingEmptySubsequences: false)
-        guard components.count == 3, components.last == "0" else { return updater.version }
-        return components.dropLast().joined(separator: ".")
-    }
-
-    private var playPauseButton: some View {
-        Button {
-            let context = state.playbackTargetContext
-            let previousState = playback.isPlaying
-            guard playback.beginToggle(for: context) else { return }
-            // The click is the freshest knowledge: let the speaker animation
-            // flip with it, not with the settled read that follows.
-            if let previousState,
-               let bundleID = state.availableApps.first(where: { $0.id == context.targetID })?.bundleID {
-                state.notePlayback(bundleID: bundleID, playing: !previousState)
-            }
-            Task {
-                let succeeded = await state.togglePlayPauseTarget(in: context)
-                let confirmedState = succeeded
-                    ? await state.confirmTargetPlaying(in: context, after: previousState)
-                    : nil
-                guard context == state.playbackTargetContext else {
-                    return
-                }
-                playback.finishToggle(
-                    succeeded: succeeded,
-                    confirmedState: confirmedState,
-                    previousState: previousState,
-                    for: context
-                )
-            }
-        } label: {
-            Image(systemName: playback.isPlaying == true ? "pause.fill" : "play.fill")
-                .frame(maxWidth: .infinity)
+    private var header: some View {
+        HStack {
+            Text("Beamhook").font(.caption.weight(.medium)).foregroundStyle(.secondary)
+            Spacer()
+            moreOptions
         }
-        .controlSize(.regular)
-        .disabled(state.selectedTargetID == nil
-                  || !state.selectedBrowserSourceSupportsTransport
-                  || playback.commandInFlight)
-        .help(state.selectedBrowserSourceSupportsTransport
-              ? (playback.isPlaying == true ? "Pause \(targetName)" : "Play \(targetName)")
-              : "This tab is a call, which has no play/pause. Volume still works.")
+        .padding(.leading, 9)
+        .padding(.trailing, 3)
+    }
+
+    private var moreOptions: some View {
+        StableOptionsButton(state: state, version: updater.version)
+            .frame(width: 24, height: 24)
+    }
+
+    private var volumeKeysOn: Bool {
+        target.map { state.volumeKeysEnabled(bundleID: $0.bundleID) } ?? false
+    }
+
+    private var volumeKeyControls: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Volume keys").font(.system(size: 12))
+                if (state.commandVolumeRouting || volumeKeysOn), target != nil {
+                    let name = volumeTargetName
+                    HStack(spacing: 3) {
+                        if !volumeKeysOn { Text("⌘ +") }
+                        Image(systemName: "speaker.wave.2.fill")
+                        Text("→ \(name)").lineLimit(1).truncationMode(.tail)
+                    }
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(volumeKeysOn ? "" : "Command plus ")Volume for \(name)")
+                    .help("\(volumeKeysOn ? "" : "Command plus ")Volume for \(name)")
+                } else if target == nil {
+                    Text("Hook an app to route volume keys")
+                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+            Toggle("Volume keys", isOn: Binding(
+                get: { volumeKeysOn },
+                set: { enabled in
+                    if let target { state.setVolumeKeysEnabled(enabled, bundleID: target.bundleID) }
+                }))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .disabled(!state.targetCanTakeVolume)
+                .help("Route volume keys to the hooked app; Command + volume controls system volume")
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+    }
+
+    private var volumeTargetName: String {
+        if state.selectedTargetIsBrowser,
+           let tab = state.browserMediaCandidates.first(where: { $0.id == state.selectedBrowserMediaID }) {
+            return tab.label
+        }
+        return target?.displayName ?? "app"
+    }
+
+    @ViewBuilder private var browserNotice: some View {
+        if state.selectedTargetIsBrowser {
+            if state.browserTargetRunning == false {
+                Text("\(target?.displayName ?? "Browser") is not running. macOS handles play/pause.")
+                    .font(.caption2).foregroundStyle(.secondary).padding(8)
+            } else if state.browserMediaInjectionAvailable == false {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Enable JavaScript from Apple Events to control individual tabs. macOS handles play/pause until then.")
+                        .foregroundStyle(.secondary)
+                    let anchor = BrowserKind.target(id: state.selectedTargetID) == .safari ? "safari" : "chrome"
+                    Link("How to enable it", destination: URL(string: "https://beamhook.app/help/#\(anchor)")!)
+                }
+                .font(.caption2).fixedSize(horizontal: false, vertical: true).padding(8)
+            } else if state.browserMediaInjectionAvailable == true && state.browserMediaCandidates.isEmpty {
+                Text("No playable browser tabs found.")
+                    .font(.caption2).foregroundStyle(.secondary).padding(8)
+            }
+        }
     }
 
     private var permissionBanner: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Accessibility permission needed").font(.headline).foregroundStyle(.red)
-            Text("Beamhook needs Accessibility access to capture the media keys.")
-                .font(.caption)
+            Text("Beamhook needs Accessibility access to capture the media keys.").font(.caption)
             HStack {
                 Button("Open Settings") { state.permissions.openAccessibilitySettings() }
                 Button("Re-check") { state.refreshPermission() }
             }
         }
+        .padding(8)
     }
 }
 
 private struct PlayingAppsList: View {
+    @EnvironmentObject var state: AppState
     var body: some View {
         if #available(macOS 14.2, *) {
             PlayingAppsListAvailable()
+        } else {
+            MenuAppRows(apps: state.showAllMenuApps ? state.menuAppRows([]) : state.recentAppRows(state.menuAppRows([])), emittingIDs: [])
+        }
+    }
+}
+
+private struct MenuAppRows: View {
+    let apps: [PlayingApp]
+    let emittingIDs: Set<String>
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if apps.isEmpty {
+                Text("No audio apps open")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(9)
+            }
+            ForEach(apps) { app in
+                AppVolumeRow(playing: app, isEmitting: emittingIDs.contains(app.bundleID))
+            }
         }
     }
 }
@@ -277,531 +187,454 @@ private struct PlayingAppsListAvailable: View {
     @EnvironmentObject var state: AppState
     @StateObject private var monitor = AudioProcessMonitor()
 
-    private var targetBundleID: String? {
-        guard let id = state.selectedTargetID else { return nil }
-        return state.availableApps.first { $0.id == id }?.bundleID
-    }
-
+    private var rows: [PlayingApp] { state.menuAppRows(monitor.playingApps) }
     private var activeBrowserBundleIDs: Set<String> {
-        Set(monitor.playingApps.compactMap {
-            BrowserKind.browser(bundleID: $0.bundleID)?.bundleID
-        })
+        Set(rows.compactMap { BrowserKind.browser(bundleID: $0.bundleID)?.bundleID })
     }
-
     private var browserRefreshID: String {
-        ([state.isMenuVisible ? "visible" : "hidden"] + activeBrowserBundleIDs.sorted())
-            .joined(separator: ":")
+        ([state.isMenuVisible ? "visible" : "hidden"] + activeBrowserBundleIDs.sorted()).joined(separator: ":")
     }
-
-    /// What to show, deduplicated with currently-playing apps first:
-    ///   1. apps with a live audio stream (from Core Audio), plus
-    ///   2. known volume-scriptable apps (Spotify, Apple Music, VLC, …) that are
-    ///      running — so their volume slider stays available while the app is open,
-    ///      not only while it's actively making sound.
-    /// Non-scriptable apps ("system volume only") appear only while they're
-    /// actually emitting audio. Supported browsers resolve to their YouTube
-    /// definitions in AudioProcessMonitor, including Safari's WebKit helper.
-    private var rows: [PlayingApp] {
-        state.playingAppRows(monitor.playingApps)
+    private var meterWatchlist: Set<String> {
+        guard state.perAppMuteEnabled else { return [] }
+        return Set(rows.map(\.bundleID).filter {
+            !state.mutedApps.contains($0)
+        })
     }
 
     var body: some View {
-        // The popover content stays mounted while hidden, so explicitly bind the
-        // monitor to its visible lifetime instead of relying on view appearance.
-        VStack(alignment: .leading, spacing: 8) {
-            let list = rows
-            let emittingIDs = Set(monitor.playingApps.map(\.bundleID))
-            if !list.isEmpty {
-                Divider()
-                ForEach(Array(list.enumerated()), id: \.element.id) { index, app in
-                    AppVolumeRow(playing: app,
-                                 isEmitting: emittingIDs.contains(app.bundleID))
-                    if index == 0, app.bundleID == targetBundleID, list.count > 1 {
-                        Divider()
-                    }
+        MenuAppRows(apps: state.showAllMenuApps ? rows : state.recentAppRows(rows),
+                    emittingIDs: Set(monitor.playingApps.map(\.bundleID)))
+            .task(id: state.isMenuVisible) {
+                if state.isMenuVisible { monitor.start() } else { monitor.stop() }
+            }
+            .task(id: "\(state.isMenuVisible):\(meterWatchlist.sorted().joined(separator: ","))") {
+                state.setMeterWatchlist(state.isMenuVisible ? meterWatchlist : [])
+            }
+            .task(id: browserRefreshID) {
+                guard state.isMenuVisible else { return }
+                while !Task.isCancelled {
+                    await state.refreshActiveBrowserMedia(bundleIDs: activeBrowserBundleIDs)
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
                 }
             }
-        }
-        .task(id: state.isMenuVisible) {
-            if state.isMenuVisible {
-                monitor.start()
-            } else {
+            .onDisappear {
                 monitor.stop()
+                state.setMeterWatchlist([])
             }
-        }
-        // Rows with no play-state source (no scripting, no tabs) get their EQ
-        // animation from the live meter; keep its watchlist matched to the
-        // rows on screen, and empty the moment the menu closes.
-        .task(id: "\(state.isMenuVisible):\(meterWatchlist.sorted().joined(separator: ","))") {
-            state.setMeterWatchlist(state.isMenuVisible ? meterWatchlist : [])
-        }
-        .task(id: browserRefreshID) {
-            guard state.isMenuVisible else { return }
-            while !Task.isCancelled {
-                await state.refreshActiveBrowserMedia(bundleIDs: activeBrowserBundleIDs)
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-            }
-        }
-        .onDisappear {
-            monitor.stop()
-            state.setMeterWatchlist([])
-        }
-    }
-
-    /// Apps whose sound-emission truth needs the meter: no play/pause script
-    /// (those report their own state), not muted (arcs are suppressed for
-    /// muted rows anyway). Browsers are included on purpose — their tabs
-    /// report play state, but a tab with no media element (a Web Audio chime,
-    /// a voice chat) is invisible to the scan, and only the meter hears it.
-    private var meterWatchlist: Set<String> {
-        guard state.perAppMuteEnabled else { return [] }
-        return Set(rows.map(\.bundleID).filter { bid in
-            !state.availableApps.contains { $0.bundleID == bid && !$0.playPauseScript.isEmpty }
-                && !state.mutedApps.contains(bid)
-        })
     }
 }
 
-@available(macOS 14.2, *)
+/// The same template asset used by the overlay, with an always-visible dim state.
+private struct HookRowLabel: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let name: String
+    let hooked: Bool
+    var indented = false
+    var track: String? = nil
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image("HookGlyph")
+                .resizable().renderingMode(.template).scaledToFit()
+                .frame(width: 13, height: 16)
+                // Scale inside the fixed slot so names and controls stay aligned.
+                .scaleEffect(hooked ? 1.35 : 1)
+                .animation(reduceMotion ? nil : (hooked
+                    ? .spring(response: 0.35, dampingFraction: 0.45)
+                    : .easeOut(duration: 0.16)), value: hooked)
+                .foregroundStyle(hooked ? Color.white : Color.primary)
+                .opacity(hooked ? 1 : 0.28)
+                .accessibilityHidden(true)
+            Text(name)
+                .font(.system(size: indented ? 11 : 12, weight: hooked ? .semibold : .regular))
+                .lineLimit(1).truncationMode(.tail)
+            if let track {
+                HookHUD.TrackTicker(text: track)
+                    .frame(maxWidth: .infinity, minHeight: 18, maxHeight: 18)
+            } else {
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+}
+
 private struct AppVolumeRow: View {
     @EnvironmentObject var state: AppState
     let playing: PlayingApp
-    /// Whether Core Audio currently reports this app with a live output stream
-    /// (drives the speaker icon's radiating-arcs animation). Trails reality by
-    /// up to one 2s monitor refresh, and a paused app can keep its stream open
-    /// for a moment — both fine for an at-a-glance indicator.
     let isEmitting: Bool
     @State private var volume: Double = 50
+    @State private var isEditing = false
     @State private var availability: VolumeAvailability = .systemVolumeOnly
-    @State private var appIsPlaying: Bool?
-    @State private var playPauseInFlight = false
+    @State private var playback = PlaybackStatus()
 
-    private var scriptable: Bool {
-        state.usesProcessVolume(bundleID: playing.bundleID)
-            || (!isBrowser && state.volumeScriptable(bundleID: playing.bundleID) && availability == .slider)
+    private var isTarget: Bool { state.targetManager.targetBundleID == playing.bundleID }
+    private var isBrowser: Bool { BrowserKind.browser(bundleID: playing.bundleID) != nil }
+    private var isHooked: Bool { isTarget }
+    private var canPlayPause: Bool { state.canPlayPauseVolumeSource(.app(bundleID: playing.bundleID)) }
+    private var canChangeVolume: Bool {
+        state.isRunning(bundleID: playing.bundleID) && state.canControlVolume(bundleID: playing.bundleID)
+            && (state.usesProcessVolume(bundleID: playing.bundleID) || availability == .slider)
     }
-
-    private var isTarget: Bool {
-        guard let id = state.selectedTargetID,
-              let def = state.availableApps.first(where: { $0.id == id }) else { return false }
-        return def.bundleID == playing.bundleID
+    private var isMuted: Bool { state.isAppMuted(playing.bundleID) || volume == 0 }
+    private var playbackContext: PlaybackTargetContext {
+        PlaybackTargetContext(targetID: playing.bundleID, browserMediaID: nil, revision: 0)
     }
-
-    private var isBrowser: Bool {
-        BrowserKind.browser(bundleID: playing.bundleID) != nil
-    }
-
     private var browserSources: [BrowserMediaCandidate] {
         guard let browser = BrowserKind.browser(bundleID: playing.bundleID) else { return [] }
-        // AppState has already ranked and capped each browser's sources by recency.
-        return state.activeBrowserMediaCandidates.filter { $0.browser == browser }
-    }
-
-    private var supportsDirectPlayPause: Bool {
-        !isBrowser && state.availableApps.contains {
-            $0.bundleID == playing.bundleID && !$0.playPauseScript.isEmpty
+        var sources = state.activeBrowserMediaCandidates.filter { $0.browser == browser }
+        // Keep an explicitly hooked tab visible even before the active-source scan
+        // catches up, or when its player does not expose a volume property.
+        if isTarget, let selected = state.browserMediaCandidates.first(where: { $0.id == state.selectedBrowserMediaID }),
+           !sources.contains(where: { $0.id == selected.id }) {
+            sources.append(selected)
         }
-    }
-
-    /// Shown when macOS is blocking the Apple events this app's volume needs —
-    /// otherwise a denied permission is indistinguishable from an app that simply
-    /// has no volume control, and the fix is two panes deep in System Settings.
-    private var permissionHint: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("Beamhook isn't allowed to control \(playing.displayName), so its volume is unavailable. The media keys still work.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Button("Allow in System Settings…") {
-                state.permissions.openAutomationSettings()
-            }
-            .buttonStyle(.link)
-            .font(.caption2)
-        }
+        return sources.sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                if !isTarget && supportsDirectPlayPause {
-                    compactPlayPauseButton
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Button(action: hook) {
+                    HookRowLabel(name: playing.displayName, hooked: isHooked,
+                                 track: playing.bundleID == "com.spotify.client"
+                                     ? (state.isMenuVisible ? state.spotifyTrack : "") : nil)
                 }
-                // The hooked app's title is fully opaque; the rest sit back a bit.
-                Text(playing.displayName).font(.subheadline)
-                    .opacity(isTarget ? 1 : 0.55)
-                    .lineLimit(1)
-                    // The name is the "go there" control, and covers only the
-                    // glyphs — a stray click in the gap beside it does nothing.
-                    .overlay(ClickableName { state.activate(bundleID: playing.bundleID) })
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityAction { state.activate(bundleID: playing.bundleID) }
-                    .help("Show \(playing.displayName)")
-                Spacer(minLength: 2)
-                // Browser parents adjust the whole browser; child rows below
-                // continue to adjust only their named tab.
-                if scriptable && (!isTarget || isBrowser) {
-                    compactSlider
+                .buttonStyle(.plain)
+                .hoverHighlight(cornerRadius: 6, behind: true)
+                .help(isTarget ? "Release media keys from \(playing.displayName)" : "Hook media keys to \(playing.displayName)")
+                .accessibilityLabel(isHooked ? "\(playing.displayName), hooked. Release media keys" : "Hook media keys to \(playing.displayName)")
+                .contextMenu {
+                    Button("Show \(playing.displayName)") { state.activate(bundleID: playing.bundleID) }
                 }
-                if state.perAppMuteEnabled {
-                    muteButton
+                if canPlayPause {
+                    playPauseButton
+                } else {
+                    Color.clear.frame(width: 22, height: 22).accessibilityHidden(true)
                 }
-                Button(isTarget ? "Unhook" : "Hook") {
-                    if isTarget {
-                        state.setTarget(nil)
-                    } else {
-                        hook()
-                    }
-                }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .hoverHighlight(cornerRadius: 5)
-                    .help(isTarget ? "Return media-key control to macOS"
-                                   : "Send the media keys to this app")
-            }
-            if scriptable && isTarget && !isBrowser {
+                muteButton
                 Slider(value: $volume, in: 0...100) { editing in
+                    isEditing = editing
                     if !editing { state.setVolume(Int(volume), for: playing.bundleID) }
                 }
-                volumeKeyControls
-            } else if isTarget && !isBrowser && browserSources.isEmpty {
-                if availability == .permissionDenied {
-                    permissionHint
-                } else {
-                    Text("system volume only").font(.caption2).foregroundStyle(.secondary)
-                }
+                .controlSize(.mini).tint(.gray).frame(width: 64)
+                .disabled(!canChangeVolume)
+                .accessibilityLabel("\(playing.displayName) volume\(isBrowser ? ", all tabs" : "")")
+                .help(canChangeVolume ? "\(playing.displayName) volume: \(Int(volume))%" : "Volume unavailable")
+            }
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .background(Color.primary.opacity(isHooked ? 0.08 : 0), in: RoundedRectangle(cornerRadius: 9))
+
+            if isTarget && !state.isRunning(bundleID: playing.bundleID) && !isBrowser {
+                Text(state.launchTargetOnPlay ? "Play to launch \(playing.displayName)" : "\(playing.displayName) is not running")
+                    .font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 9)
+            }
+            if availability == .permissionDenied {
+                Button("Allow control of \(playing.displayName)…") { state.permissions.openAutomationSettings() }
+                    .buttonStyle(.link).font(.caption2).padding(.horizontal, 9)
             }
             if let error = state.processVolumeErrors[playing.bundleID] {
-                Text(error).font(.caption2).foregroundStyle(.secondary)
+                Text(error).font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 9)
             }
             if state.usesProcessVolume(bundleID: playing.bundleID), state.mutePermissionGranted == false {
                 Button("Allow System Audio Recording…") { state.permissions.openAudioCaptureSettings() }
-                    .buttonStyle(.link).font(.caption2)
+                    .buttonStyle(.link).font(.caption2).padding(.horizontal, 9)
             }
-            ForEach(browserSources) { candidate in
-                BrowserVolumeRow(candidate: candidate)
-            }
-            // Audible, but no scanned tab is playing: the sound comes from a
-            // page with no media element (Web Audio), which no tab row can
-            // represent. Say so rather than leave the animation unexplained.
-            if isBrowser && !isMuted && state.audibleApps.contains(playing.bundleID)
-                && !browserSources.contains(where: \.isPlaying) {
-                Text("Sound from a tab with no media player")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .padding(.leading, 8)
-            }
-            if isTarget && isBrowser && state.targetCanTakeVolume {
-                volumeKeyControls
-            }
+            ForEach(browserSources) { candidate in BrowserVolumeRow(candidate: candidate) }
         }
         .task(id: "\(state.isMenuVisible):\(state.perAppMuteEnabled)") {
             guard state.isMenuVisible else { return }
-            if isBrowser && !state.usesProcessVolume(bundleID: playing.bundleID) {
-                // Browser volume is source-specific. We only need the capability
-                // flag here; BrowserVolumeRow obtains each source's live volume.
-                availability = state.volumeScriptable(bundleID: playing.bundleID)
-                    ? .slider : .systemVolumeOnly
-                return
-            }
-            if state.usesProcessVolume(bundleID: playing.bundleID),
-               let level = await state.volume(for: playing.bundleID) {
-                volume = Double(level); availability = .slider
-            } else if let cached = state.volumeByBundle[playing.bundleID],
-                      state.volumeScriptable(bundleID: playing.bundleID) {
-                volume = Double(cached); availability = .slider
+            if let value = await state.volume(for: playing.bundleID) {
+                if !isEditing { volume = Double(value) }
+                availability = .slider
             } else {
-                if let v = await state.volume(for: playing.bundleID) {
-                    volume = Double(v); availability = .slider
-                    state.volumeByBundle[playing.bundleID] = v
-                } else {
-                    // The read failed. Find out whether that is the app's nature or
-                    // a permission the user can give back.
-                    availability = await state.volumeAvailability(for: playing.bundleID)
-                }
+                availability = await state.volumeAvailability(for: playing.bundleID)
             }
         }
-        .onChange(of: state.volumeByBundle[playing.bundleID]) { _, newVal in
-            if let v = newVal { volume = Double(v) }
+        .onChange(of: state.volumeByBundle[playing.bundleID]) { _, value in
+            if !isEditing, let value { volume = Double(value) }
         }
-        .task(id: "\(state.isMenuVisible):\(isTarget):\(playing.bundleID)") {
-            // Target rows poll too (the popover polls the target separately,
-            // but that state lives in MenuContentView): the arcs need a play
-            // state for every scriptable row, hooked or not.
-            guard state.isMenuVisible, supportsDirectPlayPause else {
-                appIsPlaying = nil
-                return
-            }
+        .onChange(of: state.processVolumeLevels[playing.bundleID]) { _, value in
+            if !isEditing, let value { volume = Double(value) }
+        }
+        .task(id: state.isMenuVisible) {
+            let context = playbackContext
+            playback.reset(for: context)
+            guard state.isMenuVisible, canPlayPause else { return }
             while !Task.isCancelled {
-                let latest = await state.isPlaying(bundleID: playing.bundleID)
-                if !playPauseInFlight {
-                    appIsPlaying = latest
-                    // Polls are what keep the hint truthful — it never ages out.
-                    if let latest { state.notePolledPlayback(bundleID: playing.bundleID, playing: latest) }
+                if let observation = playback.observation(for: context) {
+                    let latest = await state.isPlaying(bundleID: playing.bundleID)
+                    guard !Task.isCancelled else { return }
+                    playback.accept(latest, from: observation)
+                    if let current = playback.isPlaying, !playback.commandInFlight {
+                        state.notePolledPlayback(bundleID: playing.bundleID, playing: current)
+                    }
                 }
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
             }
         }
     }
 
-    private var compactPlayPauseButton: some View {
+    private var playPauseButton: some View {
         Button {
-            guard !playPauseInFlight else { return }
-            let wasPlaying = appIsPlaying == true
-            appIsPlaying = !wasPlaying
-            // The click is the freshest knowledge there is; without this the
-            // hint from an earlier poll would outrank it for a few seconds.
-            state.notePlayback(bundleID: playing.bundleID, playing: !wasPlaying)
-            playPauseInFlight = true
+            let context = playbackContext
+            let previous = playback.isPlaying
+            guard playback.beginToggle(for: context) else { return }
+            if let previous { state.notePlayback(bundleID: playing.bundleID, playing: !previous) }
+            let targetContext = state.playbackTargetContext
+            let wasTarget = isTarget
             Task {
-                if !(await state.togglePlayPause(bundleID: playing.bundleID)) {
-                    appIsPlaying = wasPlaying
-                    state.notePlayback(bundleID: playing.bundleID, playing: wasPlaying)
-                }
-                playPauseInFlight = false
+                let succeeded = wasTarget
+                    ? await state.togglePlayPauseTarget(in: targetContext)
+                    : await state.togglePlayPause(bundleID: playing.bundleID)
+                let confirmed = succeeded && wasTarget
+                    ? await state.confirmTargetPlaying(in: targetContext, after: previous) : nil
+                playback.finishToggle(succeeded: succeeded, confirmedState: confirmed,
+                                      previousState: previous, for: context)
+                if !succeeded, let previous { state.notePlayback(bundleID: playing.bundleID, playing: previous) }
             }
         } label: {
-            Image(systemName: appIsPlaying == true ? "pause.fill" : "play.fill")
-                .font(.system(size: 8, weight: .semibold))
-                .frame(width: 14, height: 14)
+            Image(systemName: playback.isPlaying == true ? "pause.fill" : "play.fill")
+                .font(.system(size: 10, weight: .semibold)).frame(width: 22, height: 26)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .disabled(playPauseInFlight)
-        .foregroundStyle(.secondary)
-        .accessibilityLabel(appIsPlaying == true
-                            ? "Pause \(playing.displayName)"
-                            : "Play \(playing.displayName)")
-        .help(appIsPlaying == true
-              ? "Pause \(playing.displayName)"
-              : "Play \(playing.displayName)")
+        .buttonStyle(.plain).hoverHighlight(cornerRadius: 5, behind: true)
+        .disabled(playback.commandInFlight)
+        .accessibilityLabel("\(playback.isPlaying == true ? "Pause" : "Play") \(playing.displayName)")
+        .help("\(playback.isPlaying == true ? "Pause" : "Play") \(playing.displayName)")
     }
 
-    private var compactSlider: some View {
-        Slider(value: $volume, in: 0...100) { editing in
-            if !editing { state.setVolume(Int(volume), for: playing.bundleID) }
-        }
-        .controlSize(.mini)
-        .tint(.gray)
-        .frame(width: 52)
-        .accessibilityLabel("\(playing.displayName) volume\(isBrowser ? ", all tabs" : "")")
-        .help("\(playing.displayName)\(isBrowser ? " — all tabs" : "") volume: \(Int(volume))%")
-    }
-
-    private var isMuted: Bool { state.isAppMuted(playing.bundleID) }
-
-    /// Whether the EQ animation runs: the best available "making sound right
-    /// now" signal per kind of app. Core Audio's stream flag (`isEmitting`)
-    /// alone is too sticky — a paused player keeps its stream open, and Unity
-    /// holds a silent one for a whole play-mode session — so it only gates,
-    /// never decides by itself when something better exists:
-    ///   browser    → its scanned tabs' play state, or the meter
-    ///   scriptable → its polled play state, gated by the stream flag
-    ///   the rest   → the live audio meter (see meterWatchlist)
     private var showsEmittingArcs: Bool {
         guard !isMuted else { return false }
-        if isBrowser {
-            // A playing tab answers instantly and per tab. The meter catches
-            // sound from tabs the scan can't see — Web Audio chimes, voice
-            // chats — which have no media element to report.
-            return browserSources.contains { $0.isPlaying }
-                || state.audibleApps.contains(playing.bundleID)
-        }
-        if supportsDirectPlayPause {
-            // Freshest first: a state learned from a toggle or click seconds
-            // ago beats this row's own 1.5s poll.
-            if let hinted = state.playbackHint(for: playing.bundleID) { return hinted }
-            guard let playing = appIsPlaying else { return isEmitting }
-            return playing
-        }
+        if isBrowser { return browserSources.contains(where: \.isPlaying) || state.audibleApps.contains(playing.bundleID) }
+        if canPlayPause { return state.playbackHint(for: playing.bundleID) ?? playback.isPlaying ?? isEmitting }
         return state.audibleApps.contains(playing.bundleID)
     }
 
-    /// Process-tap mute: silences the whole app at the audio HAL, so it works on
-    /// apps with no scripting at all. Browser tabs still get their own sliders —
-    /// this button mutes the entire browser.
-    ///
-    /// Muted wins over emitting: a muted app still renders audio (into the
-    /// tap), but animating its icon would suggest the mute isn't working.
     private var muteButton: some View {
-        Button {
-            state.setAppMuted(!isMuted, bundleID: playing.bundleID)
-        } label: {
+        Button { state.setAppMuted(!state.isAppMuted(playing.bundleID), bundleID: playing.bundleID) } label: {
             Group {
-                if isMuted {
-                    Image(systemName: "speaker.slash.fill")
-                } else if showsEmittingArcs {
-                    EmittingSpeakerIcon(seed: playing.bundleID)
-                } else {
-                    Image(systemName: "speaker.fill")
-                }
+                if isMuted { Image(systemName: "speaker.slash.fill") }
+                else if showsEmittingArcs { EmittingSpeakerIcon(seed: playing.bundleID) }
+                else { Image(systemName: "speaker.fill") }
             }
-            .font(.system(size: 9, weight: .semibold))
-            .frame(width: 16, height: 16)
+            .font(.system(size: 9, weight: .semibold)).frame(width: 22, height: 26)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(isMuted ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
-        .hoverHighlight(cornerRadius: 4)
-        .accessibilityLabel(isMuted
-                            ? "Unmute \(playing.displayName)"
-                            : "Mute \(playing.displayName)")
-        .help(isMuted
-              ? "Unmute \(playing.displayName)"
-              : "Mute \(playing.displayName) — silences only this app")
+        .buttonStyle(.plain).foregroundStyle(.secondary)
+        .hoverHighlight(cornerRadius: 5, behind: true)
+        .disabled(!state.perAppMuteEnabled || !state.isRunning(bundleID: playing.bundleID))
+        .accessibilityLabel("\(state.isAppMuted(playing.bundleID) ? "Unmute" : "Mute") \(playing.displayName)")
+        .help(state.perAppMuteEnabled ? "\(state.isAppMuted(playing.bundleID) ? "Unmute" : "Mute") \(playing.displayName)" : "Enable per-app volume and mute in Settings")
     }
 
-    private var volumeKeyControls: some View {
-        HStack(spacing: 6) {
-            Toggle("Volume keys", isOn: Binding(
-                get: { state.volumeKeysEnabled(bundleID: playing.bundleID) },
-                set: { state.setVolumeKeysEnabled($0, bundleID: playing.bundleID) }))
-                .toggleStyle(.checkbox)
-                .controlSize(.small)
-                .font(.caption)
-                .help("Route the hardware volume keys to this app while it's the hooked target")
-            // ⌘ always leads to the volume the plain keys don't: the system
-            // while this app is hooked, this app while it isn't.
-            if let hint = state.commandVolumeHint {
-                let target = hint == .system ? "system" : playing.displayName
-                HStack(spacing: 2) {
-                    Text("⌘ +").fixedSize()
-                    Image(systemName: "speaker.wave.2.fill").fixedSize()
-                    Text("for \(target)").lineLimit(1).truncationMode(.tail)
-                }
-                .font(.system(size: 9))
-                .foregroundStyle(.tertiary)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Command plus Volume for \(target)")
-            }
-        }
-    }
-
-    /// Hook the media keys to this app. If it's a known app, just select it;
-    /// otherwise open the Add-an-app window prefilled with its details.
     private func hook() {
-        if let def = state.availableApps.first(where: { $0.bundleID == playing.bundleID }) {
-            state.setTarget(def.id)
+        if isTarget { state.setTarget(nil) }
+        else if let definition = state.availableApps.first(where: { $0.bundleID == playing.bundleID }) {
+            state.setTarget(definition.id)
         } else {
-            AddAppWindow.shared.show(state: state,
-                                     prefillName: playing.displayName,
-                                     prefillBundleID: playing.bundleID)
+            AddAppWindow.shared.show(state: state, prefillName: playing.displayName, prefillBundleID: playing.bundleID)
         }
     }
 }
 
-/// The "this is making sound" indicator: a speaker whose arcs jump like an EQ
-/// meter. SF Symbols' `variableValue` lights 0–3 arcs while keeping the
-/// symbol's geometry stable, so the flicker never shifts the row's layout.
-/// The levels are a fixed loop (cheap, deterministic); `seed` offsets each
-/// icon's position in it so neighboring rows don't pulse in lockstep.
+/// A speaker whose arcs jump like an EQ meter. The symbol geometry stays stable.
 struct EmittingSpeakerIcon: View {
     let seed: String
-
     private static let levels: [Double] = [0.67, 1.0, 0.34, 0.67, 1.0, 0.67, 0.34, 1.0, 0.67, 0.34]
-
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.15)) { context in
             let tick = Int(context.date.timeIntervalSinceReferenceDate / 0.15) + abs(seed.hashValue)
-            Image(systemName: "speaker.wave.3.fill",
-                  variableValue: Self.levels[tick % Self.levels.count])
+            Image(systemName: "speaker.wave.3.fill", variableValue: Self.levels[tick % Self.levels.count])
         }
     }
 }
 
-@available(macOS 14.2, *)
 private struct BrowserVolumeRow: View {
     @EnvironmentObject var state: AppState
     let candidate: BrowserMediaCandidate
     @State private var volume: Double = 50
+    @State private var restoreVolume: Double = 50
     @State private var isEditing = false
     @State private var sourceIsPlaying = false
     @State private var playPauseInFlight = false
+    @State private var hookInFlight = false
 
-    private var browserIsTarget: Bool {
-        BrowserKind.target(id: state.selectedTargetID) == candidate.browser
+    private var isHooked: Bool {
+        BrowserKind.target(id: state.selectedTargetID) == candidate.browser && state.selectedBrowserMediaID == candidate.id
     }
-
-    private func focus() {
-        Task { await state.focusBrowserSource(candidate) }
-    }
+    private var isMuted: Bool { volume == 0 }
 
     var body: some View {
-        HStack(spacing: 6) {
-            // A call tab keeps its slider but never gets a play/pause button:
-            // pausing a live MediaStream would only freeze the meeting.
-            if !browserIsTarget && candidate.supportsTransport {
-                compactPlayPauseButton
+        HStack(spacing: 4) {
+            Button {
+                if isHooked { state.setTarget(nil) }
+                else {
+                    hookInFlight = true
+                    Task {
+                        _ = await state.hookBrowserMedia(candidate)
+                        hookInFlight = false
+                    }
+                }
+            } label: {
+                HookRowLabel(name: candidate.label, hooked: isHooked, indented: true)
             }
-            Text(candidate.label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .overlay(ClickableName { focus() })
-                .accessibilityAddTraits(.isButton)
-                .accessibilityAction { focus() }
-                // Titles truncate here, so the tooltip still has to carry the full
-                // one — it gains the action rather than being replaced by it.
-                .help("Switch to this tab: \(candidate.label)")
-            if sourceIsPlaying {
-                EmittingSpeakerIcon(seed: candidate.sourceID)
-                    .font(.system(size: 8))
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("Playing")
+            .buttonStyle(.plain).hoverHighlight(cornerRadius: 6, behind: true)
+            .disabled(hookInFlight)
+            .accessibilityLabel(isHooked ? "\(candidate.label), hooked. Release media keys" : "Hook media keys to \(candidate.label)")
+            .help(isHooked ? "Release media keys from \(candidate.label)" : "Hook media keys to \(candidate.label)")
+            .contextMenu {
+                Button("Show this tab") { Task { await state.focusBrowserSource(candidate) } }
             }
-            Spacer(minLength: 2)
+            // Live calls expose volume but must never expose a pause action.
+            if candidate.supportsTransport {
+                playPauseButton
+            } else {
+                Color.clear.frame(width: 22, height: 22).accessibilityHidden(true)
+            }
+            Button {
+                if isMuted { volume = restoreVolume }
+                else { restoreVolume = volume; volume = 0 }
+                state.setBrowserVolume(Int(volume), for: candidate)
+            } label: {
+                Group {
+                    if isMuted { Image(systemName: "speaker.slash.fill") }
+                    else if sourceIsPlaying { EmittingSpeakerIcon(seed: candidate.sourceID) }
+                    else { Image(systemName: "speaker.fill") }
+                }
+                .font(.system(size: 9, weight: .semibold)).frame(width: 22, height: 26)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).foregroundStyle(.secondary)
+            .hoverHighlight(cornerRadius: 5, behind: true)
+            .disabled(candidate.volume == nil)
+            .accessibilityLabel("\(isMuted ? "Unmute" : "Mute") \(candidate.label)")
+            .help("\(isMuted ? "Unmute" : "Mute") \(candidate.label)")
             Slider(value: $volume, in: 0...100) { editing in
                 isEditing = editing
-                if !editing {
-                    state.setBrowserVolume(Int(volume), for: candidate)
-                }
+                if !editing { state.setBrowserVolume(Int(volume), for: candidate) }
             }
-            .controlSize(.mini)
-            .tint(.gray)
-            .frame(width: 58)
+            .controlSize(.mini).tint(.gray).frame(width: 64)
+            .disabled(candidate.volume == nil)
             .accessibilityLabel("\(candidate.label) volume")
-            .help(candidate.isPlaying
-                  ? "\(candidate.label) volume: \(Int(volume))%"
-                  : "\(candidate.label) volume while paused: \(Int(volume))%")
+            .help("\(candidate.label) volume: \(Int(volume))%")
         }
-        .padding(.leading, 8)
+        .padding(.leading, 23).padding(.trailing, 7).padding(.vertical, 1)
+        .background(Color.primary.opacity(isHooked ? 0.08 : 0), in: RoundedRectangle(cornerRadius: 9))
         .task(id: candidate.id) {
             sourceIsPlaying = candidate.isPlaying
-            if let value = candidate.volume { volume = Double(value) }
+            if let value = candidate.volume {
+                volume = Double(value)
+                if value > 0 { restoreVolume = Double(value) }
+            }
         }
-        .onChange(of: candidate.isPlaying) { _, newValue in
-            if !playPauseInFlight { sourceIsPlaying = newValue }
+        .onChange(of: candidate.isPlaying) { _, value in
+            if !playPauseInFlight { sourceIsPlaying = value }
         }
-        .onChange(of: candidate.volume) { _, newValue in
-            if !isEditing, let newValue { volume = Double(newValue) }
+        .onChange(of: candidate.volume) { _, value in
+            if !isEditing, let value {
+                if volume > 0 && value == 0 { restoreVolume = volume }
+                volume = Double(value)
+            }
         }
     }
 
-    private var compactPlayPauseButton: some View {
+    private var playPauseButton: some View {
         Button {
             guard !playPauseInFlight else { return }
             let previous = sourceIsPlaying
             sourceIsPlaying.toggle()
             playPauseInFlight = true
             Task {
-                if !(await state.toggleBrowserPlayPause(candidate)) {
-                    sourceIsPlaying = previous
-                }
+                if !(await state.toggleBrowserPlayPause(candidate)) { sourceIsPlaying = previous }
                 playPauseInFlight = false
             }
         } label: {
             Image(systemName: sourceIsPlaying ? "pause.fill" : "play.fill")
-                .font(.system(size: 8, weight: .semibold))
-                .frame(width: 14, height: 14)
+                .font(.system(size: 10, weight: .semibold)).frame(width: 22, height: 26)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).hoverHighlight(cornerRadius: 5, behind: true)
         .disabled(playPauseInFlight)
-        .foregroundStyle(.secondary)
-        .accessibilityLabel(sourceIsPlaying
-                            ? "Pause \(candidate.label)"
-                            : "Play \(candidate.label)")
-        .help(sourceIsPlaying
-              ? "Pause \(candidate.label)"
-              : "Play \(candidate.label)")
+        .accessibilityLabel("\(sourceIsPlaying ? "Pause" : "Play") \(candidate.label)")
+        .help("\(sourceIsPlaying ? "Pause" : "Play") \(candidate.label)")
+    }
+}
+
+/// Snapshot options when clicked. SwiftUI's live Menu can replace its submenu
+/// during meter/playback updates; a tracked NSMenu keeps its items stable.
+private struct StableOptionsButton: NSViewRepresentable {
+    let state: AppState
+    let version: String
+
+    func makeCoordinator() -> Coordinator { Coordinator(state: state, version: version) }
+
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton(image: NSImage(systemSymbolName: "ellipsis", accessibilityDescription: nil)!,
+                              target: context.coordinator, action: #selector(Coordinator.openMenu(_:)))
+        button.isBordered = false
+        button.toolTip = "More Beamhook options"
+        button.setAccessibilityLabel("More Beamhook options")
+        return button
+    }
+
+    func updateNSView(_ button: NSButton, context: Context) {
+        context.coordinator.state = state
+        context.coordinator.version = version
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        var state: AppState
+        var version: String
+
+        init(state: AppState, version: String) {
+            self.state = state
+            self.version = version
+        }
+
+        @objc func openMenu(_ sender: NSButton) {
+            let menu = NSMenu()
+            menu.autoenablesItems = false
+            func add(_ title: String, action: Selector, key: String = "") -> NSMenuItem {
+                let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+                item.target = self
+                menu.addItem(item)
+                return item
+            }
+            add("Release media keys", action: #selector(releaseKeys)).isEnabled = state.selectedTargetID != nil
+            let apps = NSMenu(title: "Hook another app")
+            apps.autoenablesItems = false
+            for app in state.availableApps {
+                let item = NSMenuItem(title: app.displayName, action: #selector(hookApp(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = app.id
+                item.state = app.id == state.selectedTargetID ? .on : .off
+                item.isEnabled = state.isInstalled(bundleID: app.bundleID)
+                apps.addItem(item)
+            }
+            let appMenu = NSMenuItem(title: "Hook another app", action: nil, keyEquivalent: "")
+            appMenu.submenu = apps
+            menu.addItem(appMenu)
+            _ = add("Add app…", action: #selector(addApp))
+            menu.addItem(.separator())
+            _ = add("Settings…", action: #selector(settings), key: ",")
+            _ = add("Quit Beamhook", action: #selector(quit), key: "q")
+            menu.addItem(.separator())
+            let versionItem = NSMenuItem(title: "Beamhook \(version)", action: nil, keyEquivalent: "")
+            versionItem.isEnabled = false
+            menu.addItem(versionItem)
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY), in: sender)
+        }
+
+        @objc private func hookApp(_ sender: NSMenuItem) {
+            guard let id = sender.representedObject as? String else { return }
+            state.setTarget(id)
+        }
+        @objc private func releaseKeys() { state.setTarget(nil) }
+        @objc private func addApp() { AddAppWindow.shared.show(state: state) }
+        @objc private func settings() { SettingsWindow.shared.show(state: state) }
+        @objc private func quit() { NSApplication.shared.terminate(nil) }
     }
 }

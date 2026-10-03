@@ -4,7 +4,7 @@ import os
 import BeamhookKit
 
 /// A keyboard tap that exists only while any Beamhook HUD is on screen. It
-/// swallows Command-arrow keys (and the ⌘PgUp/⌘PgDn aliases) for the volume-source picker
+/// swallows picker shortcuts, requiring Command unless volume keys are hooked,
 /// and hands every other keystroke back untouched. Between `disarm()` and the
 /// next `arm()` there is no keyboard tap at all, so Beamhook never sees ordinary
 /// typing.
@@ -20,6 +20,12 @@ final class SourcePickerKeyTap: @unchecked Sendable {
 
     private let handler: Handler
     private let lock = NSLock()
+    private var plainShortcuts = false
+    var requiresCommand: Bool {
+        get { lock.withLock { !plainShortcuts } }
+        set { lock.withLock { plainShortcuts = !newValue } }
+    }
+
     private var runLoop: CFRunLoop?          // guarded by `lock`
     private var thread: Thread?              // main thread only
     private var eventTap: CFMachPort?        // tap thread only
@@ -50,7 +56,7 @@ final class SourcePickerKeyTap: @unchecked Sendable {
         let flags = event.flags
         guard let key = SourcePickerKey.match(
             keyCode: Int(event.getIntegerValueField(.keyboardEventKeycode)),
-            command: flags.contains(.maskCommand),
+            command: flags.contains(.maskCommand) == requiresCommand,
             shift: flags.contains(.maskShift),
             option: flags.contains(.maskAlternate),
             control: flags.contains(.maskControl))

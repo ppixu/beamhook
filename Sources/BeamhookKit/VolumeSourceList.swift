@@ -50,6 +50,10 @@ public struct VolumeSourceList: Equatable, Sendable {
         selectedIndex = entries.firstIndex { $0.source == target?.source } ?? 0
     }
 
+    public mutating func select(_ source: VolumeSource) {
+        if let index = entries.firstIndex(where: { $0.source == source }) { selectedIndex = index }
+    }
+
     public mutating func selectNext() {
         guard !entries.isEmpty else { return }
         selectedIndex = (selectedIndex + 1) % entries.count

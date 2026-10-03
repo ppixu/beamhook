@@ -6,6 +6,41 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-10-03
+
+### Added
+
+- Spotify artist and song tickers in the menu and expanded overlay, plus a
+  smaller track subtitle in the playback overlay.
+- Hook the selected overlay source with Command-H.
+- When a browser has no remembered media tabs, Play can discover a playable
+  video or audio tab and start it.
+
+### Changed
+
+- Restored the volume-key toggle at the bottom right of the menu, with options
+  back at the top right. When enabled, plain volume keys open the expanded
+  selector, its shortcuts work without Command, and Command-volume controls
+  system volume even while the selector is open. With the toggle off, the
+  existing Command shortcuts remain.
+- Menus and the expanded overlay focus on apps producing sound or heard within
+  the last two hours, while keeping the hooked source available. Use Show all
+  in the menu to see the remaining apps.
+- Browser tabs use smaller, single-line overlay rows. Refined selection and mute
+  contrast, hook indicators, shortcut spacing, and playback feedback.
+
+### Fixed
+
+- Hooked Safari tab volume now uses the exact tab's cached level and a targeted
+  write instead of rediscovering browser media for each read and write.
+- Raising an app or tab's volume clears its mute.
+- Idle browser audio helpers no longer disable volume controls for temporary
+  stream-format failures. Improved audio setup diagnostics and error wording.
+- Keep Safari visible consistently in both lists when it has a remembered tab,
+  and keep both browser and selected-tab hook indicators active.
+- Dismiss the menu before positioning the expanded overlay, prevent the options
+  menu from flickering, and update overlay playback feedback promptly.
+
 ## [1.3.0] — 2026-10-03
 
 ### Added

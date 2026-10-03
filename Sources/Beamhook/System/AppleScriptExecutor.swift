@@ -169,6 +169,15 @@ final class BrowserMediaController: @unchecked Sendable {
         executor.run(volumeScript(percent, candidate: candidate)).succeeded
     }
 
+    /// Discovery is an explicit request to start playback, never to toggle a
+    /// source that may have started since the scan completed.
+    func play(_ candidate: BrowserMediaCandidate) -> Bool {
+        let js = """
+        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; \(BrowserJS.pick) const p = bhPick(); if (!p || p.live) return 'NO'; if (p.el.paused || p.el.ended) void p.el.play(); return 'MATCH'; })()
+        """
+        return executor.run(targetedActionScript(js, candidate: candidate)).succeeded
+    }
+
     func togglePlayPause(_ candidate: BrowserMediaCandidate) -> Bool {
         perform(.playPause, on: candidate)
     }

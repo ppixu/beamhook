@@ -102,35 +102,61 @@ final class ProcessVolumeRenderer {
         }
     }
 
-    /// Validate every stream, not just the first buffer's apparent byte count.
-    static func configuration(device: AudioObjectID) -> (sampleRate: Double, outputChannels: Int)? {
-        func formats(scope: AudioObjectPropertyScope) -> [AudioStreamBasicDescription]? {
+    /// Reports the actual stream descriptions and the exact rejected check.
+    /// Kept separate from rendering: diagnostics run only on the engine queue.
+    static func configuration(device: AudioObjectID,
+                              diagnostic: (String) -> Void = { _ in }) -> (sampleRate: Double, outputChannels: Int)? {
+        func formats(scope: AudioObjectPropertyScope, name: String) -> [AudioStreamBasicDescription]? {
             var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreams,
                                                      mScope: scope, mElement: kAudioObjectPropertyElementMain)
             var size: UInt32 = 0
-            guard AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size) == noErr, size > 0 else { return nil }
+            let sizeStatus = AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size)
+            guard sizeStatus == noErr, size > 0 else {
+                diagnostic("\(name) stream list size: status=\(sizeStatus), bytes=\(size)")
+                return nil
+            }
             var streams = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
-            guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &streams) == noErr else { return nil }
+            let listStatus = AudioObjectGetPropertyData(device, &address, 0, nil, &size, &streams)
+            guard listStatus == noErr else {
+                diagnostic("\(name) stream list: status=\(listStatus)")
+                return nil
+            }
             var result: [AudioStreamBasicDescription] = []
+            var valid = true
             for stream in streams {
                 address = AudioObjectPropertyAddress(mSelector: kAudioStreamPropertyVirtualFormat,
                                                      mScope: kAudioObjectPropertyScopeGlobal,
                                                      mElement: kAudioObjectPropertyElementMain)
                 var format = AudioStreamBasicDescription()
                 size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
-                guard AudioObjectGetPropertyData(stream, &address, 0, nil, &size, &format) == noErr,
-                      isSupported(format) else { return nil }
+                let status = AudioObjectGetPropertyData(stream, &address, 0, nil, &size, &format)
+                diagnostic("\(name) stream=\(stream), status=\(status), rate=\(format.mSampleRate), channels=\(format.mChannelsPerFrame), bits=\(format.mBitsPerChannel), bytesPerFrame=\(format.mBytesPerFrame), formatID=\(format.mFormatID), flags=\(format.mFormatFlags)")
+                if status != noErr || !isSupported(format) {
+                    diagnostic("\(name) stream \(stream): unreadable or unsupported PCM layout")
+                    valid = false
+                }
                 result.append(format)
             }
-            return result
+            return valid ? result : nil
         }
-        guard let inputs = formats(scope: kAudioDevicePropertyScopeInput),
-              let outputs = formats(scope: kAudioDevicePropertyScopeOutput),
-              let rate = inputs.first?.mSampleRate,
-              inputs.reduce(0, { $0 + $1.mChannelsPerFrame }) == 2,
-              (inputs + outputs).allSatisfy({ $0.mSampleRate == rate }) else { return nil }
+        // Read both scopes even when one fails so diagnostics include the output.
+        let inputs = formats(scope: kAudioDevicePropertyScopeInput, name: "input")
+        let outputs = formats(scope: kAudioDevicePropertyScopeOutput, name: "output")
+        guard let inputs, let outputs, let rate = inputs.first?.mSampleRate else { return nil }
+        let inputChannels = inputs.reduce(0, { $0 + $1.mChannelsPerFrame })
+        guard inputChannels == 2 else {
+            diagnostic("tap input channel count: expected=2, actual=\(inputChannels)")
+            return nil
+        }
+        guard (inputs + outputs).allSatisfy({ $0.mSampleRate == rate }) else {
+            diagnostic("stream sample rates differ from tap rate \(rate)")
+            return nil
+        }
         let channels = Int(outputs.reduce(0, { $0 + $1.mChannelsPerFrame }))
-        guard channels == 1 || channels == 2 else { return nil }
+        guard channels == 1 || channels == 2 else {
+            diagnostic("output channel count: expected=1 or 2, actual=\(channels)")
+            return nil
+        }
         return (rate, channels)
     }
 }

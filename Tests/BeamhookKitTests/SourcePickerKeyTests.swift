@@ -29,6 +29,14 @@ final class SourcePickerKeyTests: XCTestCase {
         XCTAssertNil(match(126, control: true))
     }
 
+    func testHookShortcutRequiresOnlyCommand() {
+        XCTAssertEqual(match(4), .hook)
+        XCTAssertNil(match(4, command: false))
+        XCTAssertNil(match(4, shift: true))
+        XCTAssertNil(match(4, option: true))
+        XCTAssertNil(match(4, control: true))
+    }
+
     func testOtherKeysDoNotMatch() {
         XCTAssertEqual(match(123), .volumeDown)   // ←
         XCTAssertEqual(match(124), .volumeUp)   // →

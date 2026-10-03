@@ -436,23 +436,44 @@ final class MediaKeyTapTests: XCTestCase {
 
     // MARK: - Volume-source picker session
 
-    /// While the source list is on screen, every volume key goes to the picked
-    /// source — ⌘ included, even with the hook on where ⌘ would otherwise be the
-    /// escape to the system.
-    func testSessionRoutesCommandVolumeEvenWithTheHookOn() {
-        var handled: [MediaKey] = []
-        let tap = MediaKeyTap(handler: { handled.append($0) })
+    func testHookedSessionCommandVolumeEscapesWithoutOpeningPicker() {
+        var events: [String] = []
+        let tap = MediaKeyTap(handler: { _ in events.append("step") },
+                             commandVolumeHandler: { events.append("picker") })
         tap.volumeKeysHijacked = true
         tap.targetCanTakeVolume = true
         tap.volumeSessionActive = true
         tap.volumeSessionCanTakeVolume = true
-
-        let result = tap.handle(type: systemDefinedType,
-                                event: mediaKeyEvent(keyCode: 1, isDown: true, command: true))
-
-        XCTAssertNil(result)
+        let event = mediaKeyEvent(keyCode: volumeUpKeyCode, isDown: true, command: true)
+        XCTAssertNotNil(tap.handle(type: systemDefinedType, event: event))
+        XCTAssertFalse(event.flags.contains(.maskCommand))
         drainMainQueue()
-        XCTAssertEqual(handled, [.volumeDown])
+        XCTAssertTrue(events.isEmpty)
+    }
+
+    func testHookedPlainVolumeOpensPickerBeforeStep() {
+        var events: [String] = []
+        let tap = MediaKeyTap(handler: { _ in events.append("step") },
+                             commandVolumeHandler: { events.append("picker") })
+        tap.volumeKeysHijacked = true
+        tap.targetCanTakeVolume = true
+        XCTAssertNil(tap.handle(type: systemDefinedType,
+                               event: mediaKeyEvent(keyCode: volumeUpKeyCode, isDown: true)))
+        drainMainQueue()
+        XCTAssertEqual(events, ["picker", "step"])
+    }
+
+    func testHookedPlainPlayControlsPickerSelection() {
+        var events: [String] = []
+        let tap = MediaKeyTap(handler: { _ in XCTFail("Expected picker playback") },
+                             commandVolumeHandler: { events.append("picker") },
+                             pickerPlayPauseHandler: { events.append("play") })
+        tap.volumeKeysHijacked = true
+        tap.volumeSessionActive = true
+        XCTAssertNil(tap.handle(type: systemDefinedType,
+                               event: mediaKeyEvent(keyCode: 16, isDown: true)))
+        drainMainQueue()
+        XCTAssertEqual(events, ["picker", "play"])
     }
 
     func testSessionRoutesPlainVolumeEvenWithTheHookOff() {
@@ -508,22 +529,18 @@ final class MediaKeyTapTests: XCTestCase {
         XCTAssertTrue(handled.isEmpty)
     }
 
-    /// With the hook on, ⌘ + Mute normally escapes to the system; in a session
-    /// it toggles the picked source instead.
-    func testSessionRoutesCommandMuteToThePickedSource() {
+    func testHookedSessionCommandMuteEscapesToSystem() {
         var handled: [MediaKey] = []
         let tap = MediaKeyTap(handler: { handled.append($0) })
         tap.volumeKeysHijacked = true
         tap.targetCanTakeMute = true
         tap.volumeSessionActive = true
         tap.volumeSessionCanTakeMute = true
-
-        let result = tap.handle(type: systemDefinedType,
-                                event: mediaKeyEvent(keyCode: muteKeyCode, isDown: true, command: true))
-
-        XCTAssertNil(result)
+        let event = mediaKeyEvent(keyCode: muteKeyCode, isDown: true, command: true)
+        XCTAssertNotNil(tap.handle(type: systemDefinedType, event: event))
+        XCTAssertFalse(event.flags.contains(.maskCommand))
         drainMainQueue()
-        XCTAssertEqual(handled, [.mute])
+        XCTAssertTrue(handled.isEmpty)
     }
 
     /// A browser tab can be muted (through its volume) even with per-app mute

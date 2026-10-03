@@ -87,4 +87,30 @@ final class ProcessVolumeRoutingTests: XCTestCase {
                        "Browser parents must not imply playback control over all tabs")
     }
 
+    func testPositiveVolumeClearsMuteButZeroRemainsMuted() throws {
+        guard #available(macOS 14.2, *) else { throw XCTSkip("Process taps require macOS 14.2") }
+        let defaults = UserDefaults.standard
+        let keys = [PerAppMutePreference.mutedAppsKey, PerAppMutePreference.volumesKey]
+        let saved = keys.map { defaults.object(forKey: $0) }
+        let state = AppState()
+        state.perAppMuteEnabled = true
+        let bundleID = "com.example.beamhook-volume-unmute-test"
+        defer {
+            state.setAppMuted(false, bundleID: bundleID)
+            for (key, value) in zip(keys, saved) {
+                if let value { defaults.set(value, forKey: key) }
+                else { defaults.removeObject(forKey: key) }
+            }
+        }
+        state.setAppMuted(true, bundleID: bundleID)
+        state.setVolume(0, for: bundleID)
+        XCTAssertTrue(PerAppMutePreference.mutedBundleIDs(defaults).contains(bundleID))
+        state.setVolume(45, for: bundleID)
+        XCTAssertFalse(PerAppMutePreference.mutedBundleIDs(defaults).contains(bundleID))
+        state.setAppMuted(true, bundleID: bundleID)
+        state.setVolume(45, for: bundleID)
+        XCTAssertFalse(PerAppMutePreference.mutedBundleIDs(defaults).contains(bundleID),
+                       "Even an adjustment at the saved level must restore sound")
+    }
+
 }

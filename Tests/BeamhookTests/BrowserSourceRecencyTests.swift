@@ -64,4 +64,16 @@ final class BrowserSourceRecencyTests: XCTestCase {
         XCTAssertEqual(state.recentBrowserSources(from: [selected, tab("unplayed")], browser: .safari,
             now: start), [selected])
     }
+    func testDiscoveryPrefersPlayingMediaAndSkipsCalls() {
+        let paused = tab("video")
+        let playing = tab("playing", playing: true)
+        let call = BrowserMediaCandidate(browser: .safari, sourceID: "call", windowIndex: 1,
+            tabIndex: 1, title: "Call", artist: "", host: "example.com", isPlaying: true,
+            isSelected: false, supportsTransport: false, volume: 50)
+        XCTAssertEqual(AppState.discoveredPlaybackCandidate([call, paused, playing]), playing)
+        XCTAssertEqual(AppState.discoveredPlaybackCandidate([call, paused]), paused)
+        XCTAssertNil(AppState.discoveredPlaybackCandidate([call]))
+        XCTAssertNil(AppState.discoveredPlaybackCandidate([]))
+    }
+
 }

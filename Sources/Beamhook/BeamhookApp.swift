@@ -63,6 +63,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             return self.popover.contentViewController?.view.window?.frame
         }
         HookHUD.shared.onPresent = { [weak self] in self?.bobStatusIcon() }
+        state.dismissMenuForOverlay = { [weak self] in
+            guard let self, self.popover.isShown else { return }
+            // An animated dismissal leaves isShown and the popover frame alive
+            // while the HUD is positioned, causing it to jump on the next refresh.
+            let animated = self.popover.animates
+            self.popover.animates = false
+            self.popover.close()
+            self.popover.animates = animated
+        }
         // Fully initialize the glass compositor before input startup can emit
         // its first hook notification. This keeps the launch HUD from being
         // dropped or drawing an uninitialized black frame.

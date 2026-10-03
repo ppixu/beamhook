@@ -104,7 +104,9 @@ final class AppState: ObservableObject {
     /// poll, initial volume reads, browser-selection bookkeeping). Kept apart from
     /// `scripting` so slow maintenance can never sit in front of a user's key press.
     private let pollRunner = ScriptRunner()
-    private let browserMediaController = BrowserMediaController()
+    private let metadataRunner = ScriptRunner()
+    private let browserMediaController: BrowserMediaController
+    private var menuBrowserHookRevision: UInt64 = 0
     /// Launches the hooked app for a play/pause press it would otherwise swallow.
     private let targetLauncher: TargetLauncher
     /// Per-browser playback recency used to keep the menu bounded to the three
@@ -160,8 +162,32 @@ final class AppState: ObservableObject {
         }
     }
     private var menuMeterWatchlist: Set<String> = []
+    @Published var showAllMenuApps = false
+    private var recentAppPlayback: [String: Date] = [:]
+
+    func recordAppPlayback(_ bundleIDs: Set<String>, now: Date = Date()) {
+        for id in bundleIDs { recentAppPlayback[id] = now }
+    }
+
+    func recentlyActiveAppIDs(now: Date = Date()) -> Set<String> {
+        recentAppPlayback = recentAppPlayback.filter { now.timeIntervalSince($0.value) < 2 * 60 * 60 }
+        // A displayed tab also keeps its browser parent visible. In particular,
+        // an explicitly selected paused tab can survive without playback history;
+        // the overlay already includes that parent when grouping its tab rows.
+        let tabParents = Set(activeBrowserMediaCandidates.filter { $0.volume != nil }.map { $0.browser.bundleID })
+        return Set(recentAppPlayback.keys).union(audibleApps)
+            .union(recentBrowserBundleIDs(now: now)).union(tabParents)
+    }
+
+    func recentAppRows(_ rows: [PlayingApp], now: Date = Date()) -> [PlayingApp] {
+        let recent = recentlyActiveAppIDs(now: now)
+        return rows.filter { recent.contains($0.bundleID) || $0.bundleID == targetManager.targetBundleID }
+    }
+
     /// The session's background refresh (volumes, browser tabs).
     private var volumeSessionRefresh: Task<Void, Never>?
+    private var spotifyTrackRefresh: Task<Void, Never>?
+    @Published private(set) var spotifyTrack = ""
     /// Whether the volume HUD is currently on screen. Guards against a ⌘↑/⌘↓
     /// that reaches the main queue just after the HUD hid and the picker tap
     /// was disarmed — without this, a stale key would open a session and
@@ -191,6 +217,8 @@ final class AppState: ObservableObject {
     /// results. Keeping the real popover lifecycle here prevents a newly launched
     /// target from causing an Automation permission prompt in the background.
     @Published private(set) var isMenuVisible: Bool = false
+    /// Synchronously close the menu before the picker measures its position.
+    var dismissMenuForOverlay: (() -> Void)?
     @Published var loginItemEnabled: Bool = LoginItem.isEnabled
     /// Whether play/pause may start the hooked app when it isn't running.
     @Published var launchTargetOnPlay: Bool = LaunchOnPlayPreference.isEnabled(.standard)
@@ -268,7 +296,8 @@ final class AppState: ObservableObject {
     private static let legacyVolumeHookKey = "volumeHookBundleIDs"
     private static let log = Logger(subsystem: "com.github.ppixu.beamhook", category: "HUD")
 
-    init() {
+    init(browserMediaController: BrowserMediaController = BrowserMediaController()) {
+        self.browserMediaController = browserMediaController
         let scripting = ScriptRunner()
         self.scripting = scripting
 
@@ -430,7 +459,18 @@ final class AppState: ObservableObject {
         // corrects the hint if the guess above was wrong.
         let isPlaying = await confirmTargetPlaying(in: context, after: previous)
         guard showPlayPauseHUD, context == playbackTargetContext else { return }
-        HookHUD.shared.showPlayback(appName: def.displayName, isPlaying: isPlaying)
+        showPlaybackHUD(appName: def.displayName, bundleID: def.bundleID, isPlaying: isPlaying)
+    }
+
+    private func showPlaybackHUD(appName: String, bundleID: String, isPlaying: Bool?) {
+        let isSpotify = bundleID == "com.spotify.client"
+        let generation = HookHUD.shared.showPlayback(appName: appName, isPlaying: isPlaying,
+                                                     subtitle: isSpotify ? spotifyTrack : "")
+        guard isSpotify else { return }
+        Task {
+            await refreshSpotifyTrack()
+            HookHUD.shared.updatePlaybackSubtitle(spotifyTrack, generation: generation)
+        }
     }
 
     /// Start the hooked app, wait for it, then play. Browser targets are
@@ -460,7 +500,7 @@ final class AppState: ObservableObject {
             // and playing. No state read needed — the launcher only reports
             // .played once it has sent play to a ready app.
             if showPlayPauseHUD, selectedTargetID == id {
-                HookHUD.shared.showPlayback(appName: displayName, isPlaying: true)
+                showPlaybackHUD(appName: displayName, bundleID: app.bundleID, isPlaying: true)
             }
         case .skipped, .alreadyPlaying:
             break
@@ -628,6 +668,7 @@ final class AppState: ObservableObject {
 
     /// Authoritative: a click, a key press, or a settled confirm read.
     func notePlayback(bundleID: String, playing: Bool) {
+        if playing || playbackHints[bundleID]?.playing == true { recordAppPlayback([bundleID]) }
         playbackHints[bundleID] = PlaybackHint(playing: playing, at: Date())
         refreshVolumeSourceActivity()
     }
@@ -800,7 +841,8 @@ final class AppState: ObservableObject {
         return performed
     }
 
-    func setTarget(_ id: String?) {
+    func setTarget(_ id: String?, showConfirmation: Bool = true) {
+        menuBrowserHookRevision &+= 1
         selectedTargetID = id
         targetManager.selectedTargetID = id
         configureBrowserTransportForPendingScan()
@@ -814,7 +856,7 @@ final class AppState: ObservableObject {
             Task { await refreshBrowserMedia() }
         }
         // Confirm the new hook with a centre-screen HUD (user-initiated, so always).
-        if let def = currentTargetDefinition() {
+        if showConfirmation, let def = currentTargetDefinition() {
             HookHUD.shared.show(appName: def.displayName,
                                 commandHint: commandVolumeHint)
         }
@@ -872,10 +914,13 @@ final class AppState: ObservableObject {
         }
         browserTargetRunning = true
 
+        let context = playbackTargetContext
         let scan = await pollRunner.run { [browserMediaController] in
             browserMediaController.scan(browser)
         }
-        guard BrowserKind.target(id: selectedTargetID) == browser else { return }
+        // A tab hook can complete while this scan is in flight. Its older
+        // selection markers must not overwrite the user's newer exact choice.
+        guard context == playbackTargetContext else { return }
 
         browserMediaInjectionAvailable = scan.injectionAvailable
         if scan.injectionAvailable {
@@ -914,6 +959,7 @@ final class AppState: ObservableObject {
 
     func selectBrowserMedia(_ id: String) {
         guard let candidate = browserMediaCandidates.first(where: { $0.id == id }) else { return }
+        menuBrowserHookRevision &+= 1
         selectedBrowserMediaID = id
         Task {
             _ = await scripting.run { [browserMediaController] in
@@ -921,6 +967,42 @@ final class AppState: ObservableObject {
             }
             await refreshBrowserMedia()
         }
+    }
+
+    /// Hook a visible tab even when another app owns the media keys. Mark the
+    /// exact page before switching targets so a scan cannot pick a different
+    /// playing tab in the meantime. A newer click/unhook wins over a late reply.
+    @discardableResult
+    func hookBrowserMedia(_ candidate: BrowserMediaCandidate,
+                          showConfirmation: Bool = true) async -> Bool {
+        guard let definition = availableApps.first(where: {
+            BrowserKind.target(id: $0.id) == candidate.browser
+        }) else { return false }
+        menuBrowserHookRevision &+= 1
+        let request = menuBrowserHookRevision
+        let context = playbackTargetContext
+        let selected = await scripting.run { [browserMediaController] in
+            browserMediaController.select(candidate)
+        }
+        guard selected, request == menuBrowserHookRevision,
+              context.targetID == selectedTargetID else { return false }
+
+        var candidates = activeBrowserMediaCandidates.filter { $0.browser == candidate.browser }
+        if !candidates.contains(where: { $0.id == candidate.id }) { candidates.append(candidate) }
+        // This action already verified injection and selected the page. Do not
+        // run setTarget's provisional scan/reset over that confirmed selection.
+        selectedTargetID = definition.id
+        targetManager.selectedTargetID = definition.id
+        browserMediaCandidates = candidates
+        browserMediaInjectionAvailable = true
+        browserTargetRunning = true
+        selectedBrowserMediaID = candidate.id
+        tap.transportKeysHijacked = true
+        updateVolumeRouting()
+        if showConfirmation {
+            HookHUD.shared.show(appName: candidate.label, commandHint: commandVolumeHint)
+        }
+        return true
     }
 
     /// Include recently playing browsers even after their output stream stops.
@@ -1021,9 +1103,10 @@ final class AppState: ObservableObject {
         if volumeSession != nil { sessionTabVolumes[candidate.id] = clamped }
         updateBrowserVolumeCaches(clamped, forTabID: candidate.id)
         Task {
-            _ = await scripting.run { [browserMediaController] in
+            let sent = await scripting.run { [browserMediaController] in
                 browserMediaController.setVolume(clamped, for: candidate)
             }
+            if sent { unmuteForVolumeChange(clamped, bundleID: candidate.browser.bundleID) }
         }
     }
 
@@ -1103,7 +1186,9 @@ final class AppState: ObservableObject {
         controller.$audibleApps
             .receive(on: RunLoop.main)
             .sink { [weak self] audible in
+                if let self { self.recordAppPlayback(self.audibleApps.union(audible)) }
                 self?.audibleApps = audible
+                self?.refreshRecentOverlaySources()
                 self?.refreshVolumeSourceActivity()
             }
             .store(in: &cancellables)
@@ -1124,7 +1209,8 @@ final class AppState: ObservableObject {
     private func updateMeterWatchlist() {
         guard #available(macOS 14.2, *), perAppMuteEnabled else { return }
         let overlay = Set((volumeSession?.entries ?? []).compactMap { volumeSourceBundleID($0.source) })
-        muteController.setMeterWatchlist(menuMeterWatchlist.union(overlay))
+        let candidates = volumeSession == nil ? Set<String>() : Set(volumePickerApps.map(\.bundleID))
+        muteController.setMeterWatchlist(menuMeterWatchlist.union(overlay).union(candidates))
     }
 
     private func volumeSourceBundleID(_ source: VolumeSource) -> String? {
@@ -1138,6 +1224,10 @@ final class AppState: ObservableObject {
     private func volumeSourceIsEmitting(_ source: VolumeSource) -> Bool {
         guard let bundleID = volumeSourceBundleID(source), !isAppMuted(bundleID),
               !perAppMuteEnabled || processVolumeLevels[bundleID] != 0 else { return false }
+        if currentVolume(of: source) == 0 { return false }
+        if let pending = pendingPickerPlayback, pending.source == source, pending.bundleID == bundleID {
+            return pending.playing
+        }
         let candidate: BrowserMediaCandidate?
         switch source {
         case .hookedTarget: candidate = selectedTargetIsBrowser ? selectedBrowserMediaCandidate : nil
@@ -1146,7 +1236,11 @@ final class AppState: ObservableObject {
         }
         // Per-tab playback disambiguates siblings; the app meter alone cannot
         // tell which tab is sounding. A paused/zero-volume tab stays still.
-        if let candidate, !candidate.isPlaying || tabVolume(id: candidate.id) == 0 { return false }
+        if let candidate { return candidate.isPlaying && tabVolume(id: candidate.id) != 0 }
+        if BrowserKind.browser(bundleID: bundleID) == nil,
+           canPlayPauseVolumeSource(source), let playing = playbackHint(for: bundleID) {
+            return playing
+        }
         if #available(macOS 14.2, *), perAppMuteEnabled {
             return audibleApps.contains(bundleID)
         }
@@ -1176,6 +1270,8 @@ final class AppState: ObservableObject {
     }
 
     private func volumeSourceIsPlaying(_ source: VolumeSource) -> Bool {
+        if let pending = pendingPickerPlayback, pending.source == source,
+           pending.bundleID == volumeSourceBundleID(source) { return pending.playing }
         switch source {
         case .browserTab(let id): return browserCandidate(id: id)?.isPlaying ?? false
         case .hookedTarget:
@@ -1265,6 +1361,14 @@ final class AppState: ObservableObject {
         muteController.setMuted(muted, bundleID: bundleID)
     }
 
+    /// A positive volume adjustment restores sound, including a browser's
+    /// process mute when its tab slider is used. Zero remains silent.
+    func unmuteForVolumeChange(_ percent: Int, bundleID: String) {
+        guard percent > 0, #available(macOS 14.2, *),
+              muteController.isMuted(bundleID) else { return }
+        muteController.setMuted(false, bundleID: bundleID)
+    }
+
     /// "Re-check" after a trip to System Settings: the probe never re-prompts —
     /// once answered, tap creation just succeeds or fails.
     func recheckMutePermission() {
@@ -1295,11 +1399,15 @@ final class AppState: ObservableObject {
         volumeByBundle[bundleID] = percent   // optimistic: the slider reflects it at once
         if #available(macOS 14.2, *), usesProcessVolume(bundleID: bundleID) {
             muteController.setVolume(percent, bundleID: bundleID)
+            unmuteForVolumeChange(percent, bundleID: bundleID)
             return
         }
         guard BrowserKind.browser(bundleID: bundleID) == nil,
               let app = registry.allApps().first(where: { $0.bundleID == bundleID }) else { return }
-        Task { await scripting.run { app.setVolume(percent) } }
+        Task {
+            await scripting.run { app.setVolume(percent) }
+            unmuteForVolumeChange(percent, bundleID: bundleID)
+        }
     }
 
     // MARK: - Volume-key coalescing
@@ -1356,9 +1464,16 @@ final class AppState: ObservableObject {
     /// `session` is the picker session the change was asked for in; once that
     /// session has ended the change still lands in the caches but shows no HUD.
     @discardableResult
-    private func changeVolume(of source: VolumeSource,
+    func changeVolume(of source: VolumeSource,
                               session: UInt64?,
                               _ transform: @escaping (Int) -> Int) async -> VolumeChange? {
+        // A hooked browser tab is still an exact tab. Use its cached level and
+        // identity-checked fast path instead of the generic browser scripts,
+        // which rediscover media for both the read and the write.
+        if source == .hookedTarget, selectedTargetIsBrowser,
+           let candidate = selectedBrowserMediaCandidate {
+            return await changeVolume(of: .browserTab(id: candidate.id), session: session, transform)
+        }
         let change: VolumeChange?
         switch source {
         case .hookedTarget:
@@ -1419,6 +1534,7 @@ final class AppState: ObservableObject {
             change = VolumeChange(bundleID: candidate.browser.bundleID, previous: current, volume: next)
         }
         guard let change else { return nil }
+        unmuteForVolumeChange(change.volume, bundleID: change.bundleID)
         if let session {
             if session == activeVolumeSession { showVolumeSessionHUD() }
         } else if volumeSession != nil {
@@ -1584,6 +1700,9 @@ final class AppState: ObservableObject {
         if !visible {
             volumeSessionRefresh?.cancel()
             volumeSessionRefresh = nil
+            spotifyTrackRefresh?.cancel()
+            spotifyTrackRefresh = nil
+            spotifyTrack = ""
             volumeSession = nil
             sessionTabVolumes = [:]
         }
@@ -1598,43 +1717,131 @@ final class AppState: ObservableObject {
         guard hudVisible else { return }
         beginVolumeSessionIfNeeded()
         guard volumeSession != nil else { return }
-        HookHUD.shared.holdUntilCommandRelease()
+        if !tap.volumeKeysHijacked { HookHUD.shared.holdUntilCommandRelease() }
         switch key {
         case .previous: volumeSession?.selectPrevious()
         case .next: volumeSession?.selectNext()
         case .volumeDown: nudgeVolume(up: false)
         case .volumeUp: nudgeVolume(up: true)
+        case .hook: hookPickerSource()
         }
         showVolumeSessionHUD()
     }
 
     /// Command-volume opens the full list without moving off the current source.
     private func showVolumePicker() {
+        dismissMenuForOverlay?()
         beginVolumeSessionIfNeeded()
         guard volumeSession != nil else { return }
-        HookHUD.shared.holdUntilCommandRelease()
+        if !tap.volumeKeysHijacked { HookHUD.shared.holdUntilCommandRelease() }
+        showVolumeSessionHUD()
+    }
+
+    private var pickerHookInFlight = false
+
+    private func hookPickerSource() {
+        guard !pickerHookInFlight, let entry = volumeSession?.selected,
+              let session = activeVolumeSession,
+              let bundleID = volumeSourceBundleID(entry.source) else { return }
+        guard let definition = availableApps.first(where: { $0.bundleID == bundleID }) else {
+            AddAppWindow.shared.show(state: self, prefillName: entry.name, prefillBundleID: bundleID)
+            return
+        }
+        let candidate: BrowserMediaCandidate?
+        if case .browserTab(let id) = entry.source { candidate = browserCandidate(id: id) }
+        else { candidate = nil }
+        pickerHookInFlight = true
+        Task {
+            defer { pickerHookInFlight = false }
+            if let candidate {
+                let selected = await scripting.run { [browserMediaController] in
+                    browserMediaController.select(candidate)
+                }
+                guard selected else { return }
+            }
+            guard activeVolumeSession == session else { return }
+            setTarget(definition.id, showConfirmation: false)
+            if selectedTargetIsBrowser { await refreshBrowserMedia() }
+            guard activeVolumeSession == session else { return }
+            let audible = audibleBundleIDs()
+            volumeSession?.replace(target: hookedVolumeEntry(),
+                                   apps: playingVolumeApps(audible: audible), tabs: browserVolumeTabs())
+            volumeSession?.select(.hookedTarget)
+            showVolumeSessionHUD()
+        }
+    }
+
+    /// A browser parent is not a transport target. With no remembered media,
+    /// an explicit Play can discover one exact tab and move the picker to it.
+    private func browserNeedingPlaybackDiscovery(_ source: VolumeSource) -> BrowserKind? {
+        guard let bundleID = volumeSourceBundleID(source),
+              let browser = BrowserKind.browser(bundleID: bundleID) else { return nil }
+        switch source {
+        case .browserTab: return nil
+        case .hookedTarget where selectedBrowserMediaCandidate != nil: return nil
+        default: break
+        }
+        guard !activeBrowserMediaCandidates.contains(where: {
+            $0.browser == browser && $0.supportsTransport
+        }) else { return nil }
+        return browser
+    }
+
+    static func discoveredPlaybackCandidate(_ candidates: [BrowserMediaCandidate]) -> BrowserMediaCandidate? {
+        let playable = candidates.filter { $0.supportsTransport && $0.volume != nil }
+        return playable.first(where: \.isPlaying) ?? playable.first
+    }
+
+    private func discoverAndPlay(_ browser: BrowserKind, source: VolumeSource, session: UInt64) async {
+        let scan = await pollRunner.run { [browserMediaController] in browserMediaController.scan(browser) }
+        guard activeVolumeSession == session, volumeSession?.selected?.source == source,
+              scan.injectionAvailable, let candidate = Self.discoveredPlaybackCandidate(scan.candidates) else { return }
+        activeBrowserMediaCandidates.removeAll { $0.browser == browser }
+        activeBrowserMediaCandidates.append(candidate)
+        if !candidate.isPlaying {
+            let started = await scripting.run { [browserMediaController] in
+                browserMediaController.play(candidate)
+            }
+            guard started else { return }
+            noteBrowserPlaybackToggled(candidate)
+        }
+        _ = recentBrowserSources(from: activeBrowserMediaCandidates.filter { $0.browser == browser }, browser: browser)
+        guard activeVolumeSession == session else { return }
+        let audible = audibleBundleIDs()
+        volumeSession?.replace(target: hookedVolumeEntry(),
+                               apps: playingVolumeApps(audible: audible), tabs: browserVolumeTabs())
+        volumeSession?.select(.browserTab(id: candidate.id))
         showVolumeSessionHUD()
     }
 
     private var pickerPlaybackInFlight = false
+    private var pendingPickerPlayback: (source: VolumeSource, bundleID: String?, playing: Bool)?
 
     private func togglePickerPlayback() {
         guard !pickerPlaybackInFlight, let source = volumeSession?.selected?.source,
-              let session = activeVolumeSession,
-              canPlayPauseVolumeSource(source) else { return }
+              let session = activeVolumeSession else { return }
+        if let browser = browserNeedingPlaybackDiscovery(source) {
+            pickerPlaybackInFlight = true
+            Task {
+                defer { pickerPlaybackInFlight = false }
+                await discoverAndPlay(browser, source: source, session: session)
+            }
+            return
+        }
+        guard canPlayPauseVolumeSource(source) else { return }
         let context = playbackTargetContext
         let candidate: BrowserMediaCandidate?
         if case .browserTab(let id) = source { candidate = browserCandidate(id: id) }
         else { candidate = nil }
+        let previous = volumeSourceIsPlaying(source)
+        pendingPickerPlayback = (source, volumeSourceBundleID(source), !previous)
+        refreshVolumeSourceActivity()
         pickerPlaybackInFlight = true
         Task {
-            defer { pickerPlaybackInFlight = false }
-            var previous = volumeSourceIsPlaying(source)
-            if let bundleID = volumeSourceBundleID(source),
-               BrowserKind.browser(bundleID: bundleID) == nil,
-               playbackHint(for: bundleID) == nil,
-               let playing = await isPlaying(bundleID: bundleID) {
-                previous = playing
+            defer {
+                pickerPlaybackInFlight = false
+                pendingPickerPlayback = nil
+                refreshVolumeSourceActivity()
             }
             switch source {
             case .hookedTarget:
@@ -1671,6 +1878,48 @@ final class AppState: ObservableObject {
             sessionTabVolumes = [:]
             volumeSession = list
             startVolumeSessionRefresh(audible: audible)
+            startSpotifyTrackRefresh()
+        }
+    }
+
+    func refreshSpotifyTrack() async {
+        guard isRunning(bundleID: "com.spotify.client") else {
+            spotifyTrack = ""
+            HookHUD.shared.updateSpotifyTrack("")
+            return
+        }
+        let track = await metadataRunner.run {
+            AppleScriptExecutor().run("""
+            if application id "com.spotify.client" is not running then return ""
+            tell application id "com.spotify.client"
+                try
+                    if player state is stopped then return ""
+                    set trackArtist to (artist of current track) as text
+                    set trackTitle to (name of current track) as text
+                    return trackArtist & " — " & trackTitle
+                on error
+                    return ""
+                end try
+            end tell
+            """).output ?? ""
+        }
+        guard !Task.isCancelled else { return }
+        spotifyTrack = track
+        if volumeSession != nil { HookHUD.shared.updateSpotifyTrack(track) }
+    }
+
+    private func startSpotifyTrackRefresh() {
+        spotifyTrackRefresh?.cancel()
+        spotifyTrackRefresh = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, self.volumeSession != nil else { return }
+                if self.volumeSession?.entries.contains(where: {
+                    self.volumeSourceBundleID($0.source) == "com.spotify.client"
+                }) == true {
+                    await self.refreshSpotifyTrack()
+                }
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+            }
         }
     }
 
@@ -1686,7 +1935,8 @@ final class AppState: ObservableObject {
                               isEmitting: volumeSourceIsEmitting($0.source),
                               isHooked: $0.source == .hookedTarget,
                               isPlaying: volumeSourceIsPlaying($0.source),
-                              canPlayPause: canPlayPauseVolumeSource($0.source))
+                              canPlayPause: canPlayPauseVolumeSource($0.source),
+                              nowPlaying: volumeSourceBundleID($0.source) == "com.spotify.client" ? spotifyTrack : nil)
         }
         HookHUD.shared.showVolumeSources(rows, selectedIndex: session.selectedIndex)
     }
@@ -1740,6 +1990,7 @@ final class AppState: ObservableObject {
 
     // Use the menu's row ordering in the picker as well.
     func playingAppRows(_ playingApps: [PlayingApp]) -> [PlayingApp] {
+        if !perAppMuteEnabled { recordAppPlayback(Set(playingApps.map(\.bundleID))) }
         let targetBundleID = targetManager.targetBundleID
         var seen = Set<String>()
         var out: [PlayingApp] = []
@@ -1769,7 +2020,7 @@ final class AppState: ObservableObject {
             }
         }
         // A silent browser still needs its parent row while recent tabs remain.
-        for bid in recentBrowserBundleIDs().sorted()
+        for bid in recentlyActiveAppIDs().sorted()
         where !seen.contains(bid) && isRunning(bundleID: bid) {
             seen.insert(bid)
             let name = availableApps.first { $0.bundleID == bid }?.displayName
@@ -1782,6 +2033,36 @@ final class AppState: ObservableObject {
             out.insert(out.remove(at: targetIndex), at: 0)
         }
         return out
+    }
+
+    /// The compact menu has no separate target picker/play button. Keep its
+    /// target visible even when quit (Play can launch it), and retain running
+    /// transport-only players after pausing so their resume button stays put.
+    func menuAppRows(_ playingApps: [PlayingApp]) -> [PlayingApp] {
+        var rows = playingAppRows(playingApps)
+        var seen = Set(rows.map(\.bundleID))
+        for definition in availableApps where isRunning(bundleID: definition.bundleID)
+            && canPlayPauseVolumeSource(.app(bundleID: definition.bundleID))
+            && seen.insert(definition.bundleID).inserted {
+            rows.append(PlayingApp(id: definition.bundleID, displayName: definition.displayName,
+                                   bundleID: definition.bundleID))
+        }
+        if let target = currentTargetDefinition() {
+            rows.removeAll { $0.bundleID == target.bundleID }
+            rows.insert(PlayingApp(id: target.bundleID, displayName: target.displayName,
+                                   bundleID: target.bundleID), at: 0)
+        }
+        return rows
+    }
+
+    private func refreshRecentOverlaySources() {
+        guard var updated = volumeSession else { return }
+        updated.replace(target: hookedVolumeEntry(),
+                        apps: playingVolumeApps(audible: Set(volumePickerApps.map(\.bundleID))),
+                        tabs: browserVolumeTabs())
+        guard updated != volumeSession else { return }
+        volumeSession = updated
+        showVolumeSessionHUD()
     }
 
     private var volumePickerApps: [PlayingApp] = []
@@ -1812,7 +2093,9 @@ final class AppState: ObservableObject {
         let missing = audible.union(parents).union(hookedBrowser ? Set([targetBundleID].compactMap { $0 }) : [])
             .subtracting(ordered)
         ordered.append(contentsOf: missing.sorted())
+        let recent = recentlyActiveAppIDs().union(parents)
         return ordered
+            .filter { recent.contains($0) || $0 == targetBundleID }
             .filter { $0 != targetBundleID || hookedBrowser }
             .map { bundleID in
                 VolumeSourceEntry(source: .app(bundleID: bundleID),
@@ -1983,6 +2266,8 @@ final class AppState: ObservableObject {
             targetSupportsVolume: targetCanTakeVolume,
             preferences: volumeKeyOverride
         )
+        sourcePickerTap.requiresCommand = !tap.volumeKeysHijacked
+        HookHUD.shared.pickerRequiresCommand = !tap.volumeKeysHijacked
         tap.commandVolumeRouting = commandVolumeRouting
         tap.targetCanTakeVolume = targetCanTakeVolume
         tap.targetCanTakeMute = targetCanTakeMute

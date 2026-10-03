@@ -176,7 +176,9 @@ final class MediaKeyTap: @unchecked Sendable {
 
         let key = decoded.key
 
-        if key == .playPause, event.flags.contains(.maskCommand),
+        if key == .playPause,
+           (volumeKeysHijacked ? (volumeSessionActive && !event.flags.contains(.maskCommand))
+                               : event.flags.contains(.maskCommand)),
            volumeSessionActive || pickerPlayPauseHandler != nil {
             if decoded.isDown && !decoded.isRepeat {
                 DispatchQueue.main.async { [weak self] in
@@ -213,7 +215,7 @@ final class MediaKeyTap: @unchecked Sendable {
             let routing = withStateLock { routingState }
             // Open/refresh the picker before delivering the step, even when
             // this source has no volume and the key falls through to macOS.
-            if commandHeld && routing.commandVolumeRouting && decoded.isDown {
+            if (routing.volumeKeysHijacked ? !commandHeld : commandHeld && routing.commandVolumeRouting) && decoded.isDown {
                 DispatchQueue.main.async { [weak self] in self?.commandVolumeHandler?() }
             }
             switch VolumeKeyRouting.destination(commandHeld: commandHeld,
@@ -246,7 +248,7 @@ final class MediaKeyTap: @unchecked Sendable {
         if key == .mute {
             let commandHeld = event.flags.contains(.maskCommand)
             let routing = withStateLock { routingState }
-            if commandHeld && routing.commandVolumeRouting && decoded.isDown && !decoded.isRepeat {
+            if (routing.volumeKeysHijacked ? !commandHeld : commandHeld && routing.commandVolumeRouting) && decoded.isDown && !decoded.isRepeat {
                 DispatchQueue.main.async { [weak self] in self?.commandVolumeHandler?() }
             }
             let sessionMute: Bool? = routing.volumeSessionActive ? routing.volumeSessionCanTakeMute : nil

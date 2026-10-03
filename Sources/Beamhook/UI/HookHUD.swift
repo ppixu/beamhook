@@ -25,6 +25,7 @@ final class HookHUD {
         var isHooked = false
         var isPlaying = false
         var canPlayPause = false
+        var nowPlaying: String? = nil
 
         var statusText: String {
             if percent == nil {
@@ -53,6 +54,45 @@ final class HookHUD {
             .foregroundStyle(Color(nsColor: canMute ? .labelColor : .tertiaryLabelColor))
             .frame(width: 20, height: 16)
             .accessibilityHidden(true)
+        }
+    }
+
+    struct TrackTicker: View {
+        var text: String
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+        @State private var started = Date()
+
+        var body: some View {
+            GeometryReader { geometry in
+                let width = (text as NSString).size(withAttributes: [
+                    .font: NSFont.systemFont(ofSize: 11)
+                ]).width
+                let scrolling = width > geometry.size.width && !reduceMotion && !text.isEmpty
+                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !scrolling)) { timeline in
+                    let elapsed = max(0, timeline.date.timeIntervalSince(started) - 1.5)
+                    let offset = scrolling ? (elapsed * 22).truncatingRemainder(dividingBy: width + 24) : 0
+                    HStack(spacing: 24) {
+                        Text(text).fixedSize()
+                        if scrolling { Text(text).fixedSize() }
+                    }
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(nsColor: .labelColor).opacity(0.5))
+                    .offset(x: -offset)
+                    .frame(width: geometry.size.width, height: geometry.size.height, alignment: .leading)
+                    .clipped()
+                }
+            }
+            .onChange(of: text) { _, _ in started = Date() }
+            .accessibilityLabel(text)
+        }
+    }
+
+    private var sourceTickers: [String: NSHostingView<TrackTicker>] = [:]
+
+    /// Update in place so polling does not reset the HUD's dismissal timer.
+    func updateSpotifyTrack(_ text: String) {
+        for ticker in sourceTickers.values where ticker.rootView.text != text {
+            ticker.rootView.text = text
         }
     }
 
@@ -90,7 +130,7 @@ final class HookHUD {
         case launching(appName: String)
         /// `isPlaying` is nil when the app reports no play state — the glyph then
         /// stays neutral rather than claiming a direction it doesn't know.
-        case playback(appName: String, isPlaying: Bool?)
+        case playback(appName: String, isPlaying: Bool?, subtitle: String)
         /// A play/pause press the tap handed back to macOS while a browser was
         /// hooked. The notice names why, so the key controlling another app
         /// reads as the system routing it — not as Beamhook misfiring.
@@ -101,7 +141,7 @@ final class HookHUD {
         var appName: String {
             switch self {
             case .hooked(let appName, _), .volume(let appName, _, _),
-                 .launching(let appName), .playback(let appName, _),
+                 .launching(let appName), .playback(let appName, _, _),
                  .passthrough(let appName, _), .mute(let appName, _): appName
             case .volumeSources(let rows, let selectedIndex):
                 rows.indices.contains(selectedIndex) ? rows[selectedIndex].name : "volume sources"
@@ -168,11 +208,26 @@ final class HookHUD {
     /// Free-text caption under the title, used by the passthrough presentation
     /// for its remediation line ("Enable JavaScript from Apple Events …").
     private var noticeLabel: NSTextField?
+    private var trackSubtitle: NSTextField?
     private var hookIcon: NSImageView?
     private var transportIcon: NSImageView?
     private var volumeRow: NSView?
     private var volumeBar: VolumeBarView?
-    /// "⌘ ↑↓ switch · ⌘ <speaker.slash> mute", under every volume presentation.
+    /// Shortcut modifiers follow the volume-key routing mode.
+    var pickerRequiresCommand = true {
+        didSet {
+            guard oldValue != pickerRequiresCommand else { return }
+            if !pickerRequiresCommand {
+                commandReleaseTimer?.invalidate()
+                commandReleaseTimer = nil
+            }
+            guard let stack = pickerHint as? NSStackView else { return }
+            let updated = Self.makePickerHint(requiresCommand: pickerRequiresCommand)
+            for view in stack.arrangedSubviews { stack.removeArrangedSubview(view); view.removeFromSuperview() }
+            for view in updated.arrangedSubviews { stack.addArrangedSubview(view) }
+            stack.setAccessibilityLabel(updated.accessibilityLabel())
+        }
+    }
     private var pickerHint: NSView?
     /// The picker's rows; rebuilt on every `.volumeSources` show.
     private var sourceList: NSStackView?
@@ -257,8 +312,19 @@ final class HookHUD {
 
     /// Confirm a play/pause press: the hooked app's name under a play or pause
     /// glyph. Pass `isPlaying: nil` when the app doesn't report its state.
-    func showPlayback(appName: String, isPlaying: Bool?) {
-        show(.playback(appName: appName, isPlaying: isPlaying))
+    @discardableResult
+    func showPlayback(appName: String, isPlaying: Bool?, subtitle: String = "") -> Int {
+        show(.playback(appName: appName, isPlaying: isPlaying, subtitle: subtitle))
+        return generation
+    }
+
+    func updatePlaybackSubtitle(_ text: String, generation expected: Int) {
+        guard generation == expected, let panel, panel.isVisible else { return }
+        trackSubtitle?.stringValue = text
+        trackSubtitle?.isHidden = text.isEmpty
+        content?.layoutSubtreeIfNeeded()
+        if let fitting = content?.fittingSize { panel.setContentSize(fitting) }
+        position(panel)
     }
 
     /// Explain a play/pause press that macOS routed instead of Beamhook.
@@ -323,6 +389,7 @@ final class HookHUD {
         // Only the passthrough presentation uses the notice line; hide it here
         // so the cases below stay a checklist of what they *do* show.
         noticeLabel?.isHidden = true
+        trackSubtitle?.isHidden = true
         header?.isHidden = false
         pickerHint?.isHidden = true
         sourceScroll?.isHidden = true
@@ -330,6 +397,7 @@ final class HookHUD {
         sourceSpeakers = [:]
         sourceBars = [:]
         sourcePlaybackIcons = [:]
+        sourceTickers = [:]
         switch presentation {
         case .hooked(let appName, let commandHint):
             label?.stringValue = "\(appName) hooked"
@@ -370,7 +438,9 @@ final class HookHUD {
             hookIcon?.isHidden = false
             transportIcon?.isHidden = true
             volumeRow?.isHidden = true
-        case .playback(let appName, let isPlaying):
+        case .playback(let appName, let isPlaying, let subtitle):
+            trackSubtitle?.stringValue = subtitle
+            trackSubtitle?.isHidden = subtitle.isEmpty
             label?.stringValue = appName
             hintRow?.isHidden = true
             hookIcon?.isHidden = true
@@ -475,6 +545,7 @@ final class HookHUD {
     private func dismiss(gen: Int) {
         guard gen == generation, let panel else { return }
         setVolumeVisible(false)
+        updateSpotifyTrack("")
         onVisibilityChange?(false)
         updateSourceActivity([:])
         // Fade to (near-)invisible but never order out: keeping the window in
@@ -576,7 +647,17 @@ final class HookHUD {
         notice.isHidden = true
         notice.translatesAutoresizingMaskIntoConstraints = false
 
-        let labels = NSStackView(views: [text, hint, notice])
+        let subtitle = NSTextField(labelWithString: "")
+        subtitle.font = .systemFont(ofSize: 10, weight: .regular)
+        subtitle.textColor = NSColor.labelColor.withAlphaComponent(0.5)
+        subtitle.lineBreakMode = .byTruncatingTail
+        subtitle.maximumNumberOfLines = 1
+        subtitle.cell?.wraps = false
+        subtitle.cell?.usesSingleLineMode = true
+        subtitle.isHidden = true
+        subtitle.widthAnchor.constraint(lessThanOrEqualToConstant: 220).isActive = true
+
+        let labels = NSStackView(views: [text, subtitle, hint, notice])
         labels.orientation = .vertical
         labels.alignment = .leading
         labels.spacing = 2
@@ -628,7 +709,7 @@ final class HookHUD {
             sourceHeight,
         ])
 
-        let picker = Self.makePickerHint()
+        let picker = Self.makePickerHint(requiresCommand: pickerRequiresCommand)
         picker.isHidden = true
 
         let stack = NSStackView(views: [header, volumeStack, sourceScroll, picker])
@@ -692,6 +773,7 @@ final class HookHUD {
         self.hintRow = hint
         self.hintSuffix = hintSuffix
         self.noticeLabel = notice
+        self.trackSubtitle = subtitle
         self.hookIcon = icon
         self.transportIcon = transport
         self.volumeRow = volumeStack
@@ -745,7 +827,7 @@ final class HookHUD {
 
     /// Each shortcut includes its Command modifier, with space between groups.
     /// The mute mark uses the real SF Symbol, like the system hint.
-    private static func makePickerHint() -> NSStackView {
+    private static func makePickerHint(requiresCommand: Bool) -> NSStackView {
         let muted = NSImageView()
         muted.image = NSImage(systemSymbolName: "speaker.slash.fill",
                               accessibilityDescription: "Mute")
@@ -755,23 +837,29 @@ final class HookHUD {
         muted.setContentHuggingPriority(.required, for: .horizontal)
         muted.setAccessibilityElement(false)
 
-        let muteShortcut = NSStackView(views: [caption("⌘"), muted, caption("mute")])
+        let prefix = requiresCommand ? "⌘ " : ""
+        let muteShortcut = NSStackView(views: (requiresCommand ? [caption("⌘")] : []) + [muted, caption("mute")])
         muteShortcut.orientation = .horizontal
         muteShortcut.alignment = .centerY
-        muteShortcut.spacing = 3
+        muteShortcut.spacing = 2
 
-        let row = NSStackView(views: [
-            caption("⌘ ↑↓ select"), caption("·"),
-            caption("⌘ ←→ volume"), caption("·"),
-            caption("⌘ ⏯ play/pause"), caption("·"), muteShortcut,
+        let legend = NSStackView(views: [
+            caption("\(prefix)↑↓ select"),
+            caption("\(prefix)←→ volume"),
+            caption("\(prefix)⏯ play/pause"),
+            muteShortcut, caption("\(prefix)H hook"),
         ])
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        row.spacing = 6
-        row.setAccessibilityElement(true)
-        row.setAccessibilityRole(.staticText)
-        row.setAccessibilityLabel("Hold Command: Up or Down to select, Left or Right for volume, Play for play/pause, Mute to mute")
-        return row
+        legend.orientation = .horizontal
+        legend.alignment = .centerY
+        legend.distribution = .equalSpacing
+        legend.spacing = 8
+        for item in legend.arrangedSubviews {
+            item.setContentHuggingPriority(.required, for: .horizontal)
+        }
+        legend.setAccessibilityElement(true)
+        legend.setAccessibilityRole(.staticText)
+        legend.setAccessibilityLabel("\(requiresCommand ? "Hold Command: " : "")Up or Down to select, Left or Right for volume, Play for play/pause, Mute to mute, H to hook")
+        return legend
     }
 
     /// One picker row: marker, name, then a mini bar or "muted".
@@ -785,10 +873,13 @@ final class HookHUD {
         sourcePlaybackIcons[row.sourceID] = marker
 
         let name = NSTextField(labelWithString: row.name)
-        let nameFont = NSFont.systemFont(ofSize: 13, weight: selected ? .semibold : .regular)
+        let nameFont = NSFont.systemFont(ofSize: row.indented ? 11 : 13, weight: selected ? .semibold : .regular)
         name.font = nameFont
         name.textColor = .labelColor
         name.lineBreakMode = .byTruncatingTail
+        name.maximumNumberOfLines = 1
+        name.cell?.wraps = false
+        name.cell?.usesSingleLineMode = true
         name.setAccessibilityElement(false)
         if row.isHooked, let glyph = NSImage(named: "HookGlyph") {
             // The attachment shares the original name column, so adding the
@@ -803,7 +894,10 @@ final class HookHUD {
             attachment.bounds = NSRect(x: 0, y: -4, width: 18, height: 18)
             let title = NSMutableAttributedString(attachment: attachment)
             title.append(NSAttributedString(string: " " + row.name))
-            title.addAttributes([.font: nameFont, .foregroundColor: NSColor.labelColor],
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.lineBreakMode = .byTruncatingTail
+            title.addAttributes([.font: nameFont, .foregroundColor: NSColor.labelColor,
+                                 .paragraphStyle: paragraph],
                                 range: NSRange(location: 0, length: title.length))
             name.attributedStringValue = title
         }
@@ -829,11 +923,36 @@ final class HookHUD {
         mute.setAccessibilityElement(false)
         sourceSpeakers[row.sourceID] = mute
 
-        let line = NSStackView(views: [marker, name, mute, level])
+        let nameColumn: NSView
+        if let track = row.nowPlaying {
+            let ticker = NSHostingView(rootView: TrackTicker(text: track))
+            ticker.setAccessibilityElement(false)
+            sourceTickers[row.sourceID] = ticker
+            name.setContentHuggingPriority(.required, for: .horizontal)
+            name.setContentCompressionResistancePriority(.required, for: .horizontal)
+            let column = NSStackView(views: [name, ticker])
+            column.orientation = .horizontal
+            column.alignment = .centerY
+            column.spacing = 8
+            // GeometryReader has no intrinsic width. Reserve its share of the
+            // name column explicitly instead of allowing the host to collapse.
+            let columnWidth: CGFloat = row.indented ? 152 : 168
+            let nameWidth = min(ceil(name.attributedStringValue.size().width), columnWidth - 40)
+            ticker.sizingOptions = []
+            NSLayoutConstraint.activate([
+                name.widthAnchor.constraint(equalToConstant: nameWidth),
+                ticker.widthAnchor.constraint(equalToConstant: columnWidth - nameWidth - column.spacing),
+                ticker.heightAnchor.constraint(equalToConstant: 18),
+            ])
+            nameColumn = column
+        } else {
+            nameColumn = name
+        }
+        let line = NSStackView(views: [marker, nameColumn, mute, level])
         line.orientation = .horizontal
         line.alignment = .centerY
         line.spacing = 6
-        line.edgeInsets = NSEdgeInsets(top: 12, left: row.indented ? 24 : 8, bottom: 12, right: 12)
+        line.edgeInsets = NSEdgeInsets(top: row.indented ? 6 : 12, left: row.indented ? 24 : 8, bottom: row.indented ? 6 : 12, right: 12)
         line.wantsLayer = true
         line.layer?.cornerRadius = 18
         line.layer?.cornerCurve = .continuous
@@ -841,7 +960,7 @@ final class HookHUD {
         if selected {
             // Follow the overlay's appearance (which contrasts with the system),
             // so white labels never sit on the light-mode-strength highlight.
-            line.layer?.backgroundColor = NSColor.white.withAlphaComponent(dark ? 0.18 : 0.7).cgColor
+            line.layer?.backgroundColor = NSColor.white.withAlphaComponent(dark ? 0.18 : 0.22).cgColor
         } else if row.isMuted {
             let tint: NSColor = dark ? .white : .black
             line.layer?.backgroundColor = tint.withAlphaComponent(0.12).cgColor
@@ -852,7 +971,7 @@ final class HookHUD {
         NSLayoutConstraint.activate([
             marker.widthAnchor.constraint(equalToConstant: 20),
             marker.heightAnchor.constraint(equalToConstant: 20),
-            name.widthAnchor.constraint(equalToConstant: row.indented ? 152 : 168),
+            nameColumn.widthAnchor.constraint(equalToConstant: row.indented ? 152 : 168),
             level.widthAnchor.constraint(equalToConstant: 122),
             mute.widthAnchor.constraint(equalToConstant: 20),
             level.heightAnchor.constraint(equalToConstant: 16),

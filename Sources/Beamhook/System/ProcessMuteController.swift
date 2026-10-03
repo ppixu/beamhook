@@ -324,16 +324,29 @@ final class ProcessMuteController: ObservableObject {
             case .processGone:
                 break
             case .failure(let err):
-                Self.log.error("Audio control failed for object \(obj): \(err)")
-                errors[bid] = err == kAudioDeviceUnsupportedFormatError
-                    ? "Volume unavailable for this output format. Use a mono or stereo output."
-                    : "Audio control failed. Check System Audio Recording permission and try again."
+                Self.log.error("Audio control failed for app \(bid, privacy: .public), object \(obj): \(err)")
+                if let message = Self.volumeError(for: err,
+                        isRunningOutput: AudioProcessMonitor.isRunningOutput(obj)) {
+                    errors[bid] = message
+                }
             }
         }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.volumeErrors != errors else { return }
             self.volumeErrors = errors
         }
+    }
+
+    /// Browsers keep idle audio helpers around after pausing. Their tap format
+    /// may be unavailable until output resumes, or the helper may disappear
+    /// during setup. Keep the saved volume usable and let reconciliation retry;
+    /// only a failure on a live output should disable the app's controls.
+    static func volumeError(for status: OSStatus, isRunningOutput: Bool) -> String? {
+        guard isRunningOutput, status != noErr,
+              status != kAudioHardwareBadObjectError else { return nil }
+        return status == kAudioDeviceUnsupportedFormatError
+            ? "Volume control could not initialize the audio stream. Beamhook will retry automatically."
+            : "Audio control failed. Check System Audio Recording permission and try again."
     }
 
     private enum BuildResult {
@@ -351,6 +364,14 @@ final class ProcessMuteController: ObservableObject {
                                muteBehavior: CATapMuteBehavior,
                                ioBlock: AudioDeviceIOBlock? = nil,
                                playbackGain: Float? = nil) -> BuildResult {
+        let outputDevice = Self.defaultOutputDevice()
+        let bundleID = AudioProcessMonitor.rowBundleID(for: obj) ?? "unknown"
+        var diagnostics: [String] = []
+        func failure(_ status: OSStatus, stage: String) -> BuildResult {
+            let detail = diagnostics.joined(separator: "; ")
+            Self.log.error("Audio setup failed: app=\(bundleID, privacy: .public), process=\(obj), output=\(outputDevice?.id ?? 0), stage=\(stage, privacy: .public), status=\(status), details=\(detail, privacy: .public)")
+            return status == kAudioHardwareBadObjectError ? .processGone : .failure(status)
+        }
         let description = CATapDescription(stereoMixdownOfProcesses: [obj])
         description.muteBehavior = muteBehavior
         description.isPrivate = true
@@ -359,7 +380,7 @@ final class ProcessMuteController: ObservableObject {
         var tapID = AudioObjectID(kAudioObjectUnknown)
         var err = AudioHardwareCreateProcessTap(description, &tapID)
         guard err == noErr, tapID != kAudioObjectUnknown else {
-            return err == kAudioHardwareBadObjectError ? .processGone : .failure(err)
+            return failure(err, stage: "create process tap")
         }
 
         // The default output serves as the aggregate's clock; without a real
@@ -378,7 +399,6 @@ final class ProcessMuteController: ObservableObject {
                 ]
             ],
         ]
-        let outputDevice = Self.defaultOutputDevice()
         if let outputUID = outputDevice?.uid {
             aggregate[kAudioAggregateDeviceMainSubDeviceKey as String] = outputUID
             aggregate[kAudioAggregateDeviceSubDeviceListKey as String] = [
@@ -391,7 +411,7 @@ final class ProcessMuteController: ObservableObject {
         err = AudioHardwareCreateAggregateDevice(aggregate as CFDictionary, &aggregateID)
         guard err == noErr, aggregateID != kAudioObjectUnknown else {
             AudioHardwareDestroyProcessTap(tapID)
-            return .failure(err)
+            return failure(err, stage: "create aggregate")
         }
 
         // The read that engages the mute (and the permission). For a mute the
@@ -405,15 +425,17 @@ final class ProcessMuteController: ObservableObject {
             // HAL converts the tap using drift compensation. Never retune the
             // user's hardware just to accommodate our capture stream.
             guard let outputDevice,
-                  Self.matchOutputRate(aggregate: aggregateID, output: outputDevice.id) else {
+                  Self.matchOutputRate(aggregate: aggregateID, output: outputDevice.id,
+                                       diagnostic: { diagnostics.append($0) }) else {
                 AudioHardwareDestroyAggregateDevice(aggregateID)
                 AudioHardwareDestroyProcessTap(tapID)
-                return .failure(kAudioDeviceUnsupportedFormatError)
+                return failure(kAudioDeviceUnsupportedFormatError, stage: "match output sample rate")
             }
-            guard let configuration = ProcessVolumeRenderer.configuration(device: aggregateID) else {
+            guard let configuration = ProcessVolumeRenderer.configuration(device: aggregateID,
+                    diagnostic: { diagnostics.append($0) }) else {
                 AudioHardwareDestroyAggregateDevice(aggregateID)
                 AudioHardwareDestroyProcessTap(tapID)
-                return .failure(kAudioDeviceUnsupportedFormatError)
+                return failure(kAudioDeviceUnsupportedFormatError, stage: "validate aggregate streams")
             }
             let playback = ProcessVolumeRenderer(gain: gain, sampleRate: configuration.sampleRate,
                                                  outputChannels: configuration.outputChannels)
@@ -440,7 +462,7 @@ final class ProcessMuteController: ObservableObject {
         guard err == noErr, let ioProcID else {
             AudioHardwareDestroyAggregateDevice(aggregateID)
             AudioHardwareDestroyProcessTap(tapID)
-            return .failure(err)
+            return failure(err, stage: "create IO callback")
         }
 
         err = AudioDeviceStart(aggregateID, ioProcID)
@@ -448,7 +470,7 @@ final class ProcessMuteController: ObservableObject {
             AudioDeviceDestroyIOProcID(aggregateID, ioProcID)
             AudioHardwareDestroyAggregateDevice(aggregateID)
             AudioHardwareDestroyProcessTap(tapID)
-            return .failure(err)
+            return failure(err, stage: "start IO")
         }
 
         return .success(ActiveMute(tapID: tapID, aggregateID: aggregateID, ioProcID: ioProcID, renderer: renderer))
@@ -518,14 +540,18 @@ final class ProcessMuteController: ObservableObject {
         DispatchQueue.main.async { [weak self] in self?.applyAndReschedule() }
     }
 
-    private static func matchOutputRate(aggregate: AudioObjectID, output: AudioObjectID) -> Bool {
+    private static func matchOutputRate(aggregate: AudioObjectID, output: AudioObjectID,
+                                        diagnostic: (String) -> Void) -> Bool {
         var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyNominalSampleRate,
             mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
         var rate: Float64 = 0
         var size = UInt32(MemoryLayout<Float64>.size)
-        guard AudioObjectGetPropertyData(output, &address, 0, nil, &size, &rate) == noErr,
-              rate.isFinite, rate > 0 else { return false }
-        return AudioObjectSetPropertyData(aggregate, &address, 0, nil, size, &rate) == noErr
+        let readStatus = AudioObjectGetPropertyData(output, &address, 0, nil, &size, &rate)
+        diagnostic("physical output nominal rate=\(rate), readStatus=\(readStatus)")
+        guard readStatus == noErr, rate.isFinite, rate > 0 else { return false }
+        let writeStatus = AudioObjectSetPropertyData(aggregate, &address, 0, nil, size, &rate)
+        diagnostic("set aggregate nominal rate=\(rate), writeStatus=\(writeStatus)")
+        return writeStatus == noErr
     }
 
     private static func defaultOutputDevice() -> (id: AudioObjectID, uid: String)? {
