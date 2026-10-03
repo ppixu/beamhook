@@ -96,8 +96,8 @@ outside a session:
 ```
   Spotify
   ⌘ + 🔊 for system volume          ← only when the hook is ON (today's line)
-  ⌘ ↑↓ switch · ⌘ 🔇 mute           ← new hint line
   🔈 ━━━━━━━━━━━━━━──────── 🔊
+  ⌘ ↑↓ switch · ⌘ 🔇 mute           ← new hint line, bottom in both forms
 ```
 
 Reached via ⌘ + Vol (hook off), the first hint line is hidden — plain volume is
