@@ -4,6 +4,23 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [Unreleased]
+
+### Added
+
+- **Pick whose volume the keys control, right from the overlay.** While the
+  volume overlay is up, ⌘↑ / ⌘↓ grows it into a list of the apps and browser
+  tabs that are playing, each with its own level, and moves the selection. The
+  volume keys then adjust the picked source until the overlay fades, so
+  turning down a YouTube tab no longer means opening the menu. ⌘PgUp / ⌘PgDn
+  work too. Beamhook only listens for these keys while the overlay is on
+  screen.
+- **⌘ + Mute mutes one app or tab.** It silences the current source — the
+  picked one, or the hooked app — and pressing it again restores the previous
+  level. Plain Mute still mutes the whole Mac.
+- **⌘ + Volume reaches the hooked app when the volume keys aren't routed to
+  it.** ⌘ now flips the volume keys either way.
+
 ## [1.1.10] — 2026-08-09
 
 ### Added
