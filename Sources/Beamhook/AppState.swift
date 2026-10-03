@@ -117,6 +117,24 @@ final class AppState: ObservableObject {
     /// net delta off-main, so a held key never stacks up blocked Apple-event sends.
     private var pendingVolumeSteps = 0
     private var volumeDrainInFlight = false
+    /// Pre-mute volumes, so ⌘+Mute can undo itself. Outlives sessions.
+    private var muteMemory = MuteMemory()
+    /// Non-nil while the source list is on screen — the spec's "volume session".
+    /// While set, every volume key and ⌘+Mute follow its selection.
+    private var volumeSession: VolumeSourceList? {
+        didSet { tap.volumeSessionActive = volumeSession != nil }
+    }
+    /// The session's background refresh (volumes, browser tabs).
+    private var volumeSessionRefresh: Task<Void, Never>?
+    /// Whether the volume HUD is currently on screen. Guards against a ⌘↑/⌘↓
+    /// that reaches the main queue just after the HUD hid and the picker tap
+    /// was disarmed — without this, a stale key would open a session and
+    /// re-show the HUD with no keyboard tap behind it.
+    private var volumeHUDVisible = false
+    /// Exists for the app's lifetime; only *installed* while a volume HUD is up.
+    private lazy var sourcePickerTap = SourcePickerKeyTap { [weak self] key in
+        MainActor.assumeIsolated { self?.handleSourcePickerKey(key) }
+    }
 
     /// Incremented whenever the hooked app or selected browser source changes.
     /// It deliberately is not reset, even if the same destination is selected
@@ -151,12 +169,16 @@ final class AppState: ObservableObject {
     @Published var browserMediaInjectionAvailable: Bool?
     @Published var browserTargetRunning: Bool?
     @Published var browserMediaCandidates: [BrowserMediaCandidate] = [] {
-        didSet { updateMenuBarGlyph() }
+        didSet {
+            updateMenuBarGlyph()
+            updateTargetHasVolume()
+        }
     }
     @Published var selectedBrowserMediaID: String? {
         didSet {
             if selectedBrowserMediaID != oldValue { playbackContextRevision &+= 1 }
             updateMenuBarGlyph()
+            updateTargetHasVolume()
         }
     }
     /// Volume-controllable browser tabs for browsers whose Core Audio process
@@ -247,6 +269,7 @@ final class AppState: ObservableObject {
         switch key {
         case .volumeUp:   nudgeVolume(up: true)
         case .volumeDown: nudgeVolume(up: false)
+        case .mute:       toggleMute()
         default:
             guard let command = key.command else { return }
             if selectedTargetIsBrowser, browserMediaInjectionAvailable == true {
@@ -369,6 +392,9 @@ final class AppState: ObservableObject {
         watchdog.start()
         outputMonitor.start()
         updateVolumeHijack()
+        HookHUD.shared.onVolumeVisibilityChange = { [weak self] visible in
+            self?.volumeHUDVisibilityChanged(visible)
+        }
         if selectedTargetIsBrowser {
             Task { await refreshBrowserMedia() }
         }
@@ -877,16 +903,218 @@ final class AppState: ObservableObject {
         while pendingVolumeSteps != 0 {
             let steps = pendingVolumeSteps
             pendingVolumeSteps = 0
-            // Key the cache to the app adjustVolume actually acted on (resolved inside
-            // its off-main closure), not a separately-read target that may have changed
-            // across the await.
-            if let result = await targetManager.adjustVolume(bySteps: steps) {
-                volumeByBundle[result.bundleID] = result.volume
-                let appName = availableApps.first { $0.bundleID == result.bundleID }?.displayName
-                    ?? result.bundleID
-                HookHUD.shared.showVolume(appName: appName, percent: result.volume,
-                                          systemVolumeHint: tap.volumeKeysHijacked)
+            let delta = steps * targetManager.volumeStep
+            await changeVolume(of: currentVolumeSource) { $0 + delta }
+        }
+    }
+
+    /// The session's selected source, otherwise the hooked target.
+    private var currentVolumeSource: VolumeSource {
+        volumeSession?.selected?.source ?? .hookedTarget
+    }
+
+    /// Read-modify-write one source's volume (AppleScript off main), update the
+    /// caches the menu and HUD read, then show the HUD. Returns the change, or nil
+    /// when nothing was changed (source gone, not ready, no volume).
+    @discardableResult
+    private func changeVolume(of source: VolumeSource,
+                              _ transform: @escaping (Int) -> Int) async -> VolumeChange? {
+        let change: VolumeChange?
+        switch source {
+        case .hookedTarget:
+            change = await targetManager.updateVolume(transform)
+            if let change {
+                volumeByBundle[change.bundleID] = change.volume
+                if selectedTargetIsBrowser, let id = selectedBrowserMediaID,
+                   let index = browserMediaCandidates.firstIndex(where: { $0.id == id }) {
+                    browserMediaCandidates[index].volume = change.volume
+                }
             }
+        case .app(let bundleID):
+            change = await targetManager.updateVolume(ofBundleID: bundleID, transform)
+            if let change { volumeByBundle[bundleID] = change.volume }
+        case .browserTab(let id):
+            if let candidate = browserCandidate(id: id), let current = candidate.volume {
+                let next = min(100, max(0, transform(current)))
+                setBrowserVolume(next, for: candidate)   // updates both caches, sends off main
+                change = VolumeChange(bundleID: candidate.browser.bundleID, previous: current, volume: next)
+            } else {
+                change = nil
+            }
+        }
+        guard let change else { return nil }
+        if volumeSession != nil {
+            showVolumeSessionHUD()
+        } else {
+            let appName = availableApps.first { $0.bundleID == change.bundleID }?.displayName
+                ?? change.bundleID
+            HookHUD.shared.showVolume(appName: appName, percent: change.volume,
+                                      systemVolumeHint: tap.volumeKeysHijacked)
+        }
+        return change
+    }
+
+    private func browserCandidate(id: String) -> BrowserMediaCandidate? {
+        activeBrowserMediaCandidates.first { $0.id == id }
+            ?? browserMediaCandidates.first { $0.id == id }
+    }
+
+    /// ⌘+Mute: silence the current volume source, or put back what muting took.
+    private func toggleMute() {
+        let source = currentVolumeSource
+        let key = muteMemoryKey(for: source)
+        let restore = muteMemory.restoreVolume(for: key)
+        Task {
+            guard let change = await changeVolume(of: source, {
+                MuteMemory.toggled(from: $0, restore: restore)
+            }) else { return }
+            muteMemory.record(sourceID: key, previous: change.previous, new: change.volume)
+        }
+    }
+
+    /// Mute memory follows the thing actually silenced, not the "hooked target"
+    /// role — re-hooking another app must not make it inherit a restore value.
+    private func muteMemoryKey(for source: VolumeSource) -> String {
+        guard source == .hookedTarget else { return source.id }
+        if selectedTargetIsBrowser, let id = selectedBrowserMediaID {
+            return VolumeSource.browserTab(id: id).id
+        }
+        return VolumeSource.app(bundleID: targetManager.targetBundleID ?? "").id
+    }
+
+    // MARK: - Volume source picker
+
+    private func volumeHUDVisibilityChanged(_ visible: Bool) {
+        volumeHUDVisible = visible
+        if visible {
+            sourcePickerTap.arm()
+        } else {
+            sourcePickerTap.disarm()
+            volumeSessionRefresh?.cancel()
+            volumeSessionRefresh = nil
+            volumeSession = nil
+        }
+    }
+
+    /// ⌘↑/⌘↓ while a volume HUD is up. The first press opens the session (the
+    /// HUD grows into the list) and moves the selection one row.
+    private func handleSourcePickerKey(_ key: SourcePickerKey) {
+        // A key can reach the main queue just after the HUD hid and the picker
+        // tap was disarmed. Ignore it — otherwise a stale key would open a
+        // session and re-show the HUD with no keyboard tap behind it.
+        guard volumeHUDVisible else { return }
+        if volumeSession == nil {
+            let audible = audibleBundleIDs()
+            volumeSession = VolumeSourceList(target: hookedVolumeEntry(),
+                                             apps: playingVolumeApps(audible: audible),
+                                             tabs: browserVolumeTabs())
+            startVolumeSessionRefresh(audible: audible)
+        }
+        switch key {
+        case .previous: volumeSession?.selectPrevious()
+        case .next: volumeSession?.selectNext()
+        }
+        showVolumeSessionHUD()
+    }
+
+    private func showVolumeSessionHUD() {
+        guard let session = volumeSession else { return }
+        let rows = session.entries.map {
+            HookHUD.SourceRow(name: $0.name, percent: currentVolume(of: $0.source))
+        }
+        HookHUD.shared.showVolumeSources(rows, selectedIndex: session.selectedIndex)
+    }
+
+    /// Cached volume for a row; the session refresh fills these in.
+    private func currentVolume(of source: VolumeSource) -> Int? {
+        switch source {
+        case .hookedTarget:
+            if selectedTargetIsBrowser, let volume = selectedBrowserMediaCandidate?.volume {
+                return volume
+            }
+            return targetManager.targetBundleID.flatMap { volumeByBundle[$0] }
+        case .app(let bundleID):
+            return volumeByBundle[bundleID]
+        case .browserTab(let id):
+            return browserCandidate(id: id)?.volume
+        }
+    }
+
+    private func hookedVolumeEntry() -> VolumeSourceEntry? {
+        guard tap.targetHasVolume, let def = currentTargetDefinition() else { return nil }
+        let name = selectedTargetIsBrowser
+            ? (selectedBrowserMediaCandidate?.label ?? def.displayName)
+            : def.displayName
+        return VolumeSourceEntry(source: .hookedTarget, name: name)
+    }
+
+    /// Bundle ids with a live audio output stream. Before macOS 14.2 there's no
+    /// per-process audio API, so every running supported browser stands in (its
+    /// tabs are still scanned) and no other apps are offered.
+    private func audibleBundleIDs() -> Set<String> {
+        if #available(macOS 14.2, *) {
+            let monitor = AudioProcessMonitor()
+            monitor.refresh()
+            return Set(monitor.playingApps.map(\.bundleID))
+        }
+        return Set(BrowserKind.allCases.map(\.bundleID).filter { isRunning(bundleID: $0) })
+    }
+
+    /// Other playing apps Beamhook can script the volume of, by name. The hooked
+    /// target is row 1 already, and browsers contribute tabs instead.
+    private func playingVolumeApps(audible: Set<String>) -> [VolumeSourceEntry] {
+        let targetBundleID = targetManager.targetBundleID
+        return audible
+            .filter { $0 != targetBundleID
+                && BrowserKind.browser(bundleID: $0) == nil
+                && volumeScriptable(bundleID: $0) }
+            .map { bundleID in
+                VolumeSourceEntry(source: .app(bundleID: bundleID),
+                                  name: availableApps.first { $0.bundleID == bundleID }?.displayName
+                                      ?? bundleID)
+            }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    /// Tabs with a volume from the last active-browser scan, minus the hooked tab.
+    private func browserVolumeTabs() -> [VolumeSourceEntry] {
+        let hookedTabID = selectedTargetIsBrowser ? selectedBrowserMediaID : nil
+        return activeBrowserMediaCandidates
+            .filter { $0.volume != nil && $0.id != hookedTabID }
+            .map { VolumeSourceEntry(source: .browserTab(id: $0.id),
+                                     name: "\($0.label) · \($0.browser.applicationName)") }
+    }
+
+    /// Read every row's volume and scan browser tabs, off main, then redraw. The
+    /// list shows immediately from caches; this only fills it in.
+    private func startVolumeSessionRefresh(audible: Set<String>) {
+        volumeSessionRefresh?.cancel()
+        volumeSessionRefresh = Task { [weak self] in
+            guard let self else { return }
+            for entry in self.volumeSession?.entries ?? [] {
+                guard !Task.isCancelled else { return }
+                let bundleID: String?
+                switch entry.source {
+                case .hookedTarget:
+                    bundleID = self.selectedTargetIsBrowser ? nil : self.targetManager.targetBundleID
+                case .app(let id):
+                    bundleID = id
+                case .browserTab:
+                    bundleID = nil
+                }
+                if let bundleID, let volume = await self.volume(for: bundleID) {
+                    self.volumeByBundle[bundleID] = volume
+                }
+            }
+            guard !Task.isCancelled, self.volumeSession != nil else { return }
+            self.showVolumeSessionHUD()
+
+            await self.refreshActiveBrowserMedia(bundleIDs: audible)
+            guard !Task.isCancelled, self.volumeSession != nil else { return }
+            self.volumeSession?.replace(target: self.hookedVolumeEntry(),
+                                        apps: self.playingVolumeApps(audible: audible),
+                                        tabs: self.browserVolumeTabs())
+            self.showVolumeSessionHUD()
         }
     }
 
@@ -974,6 +1202,15 @@ final class AppState: ObservableObject {
             targetSupportsVolume: targetManager.targetSupportsVolume,
             preferences: volumeKeyOverride
         )
+        updateTargetHasVolume()
+    }
+
+    /// Whether ⌘+Volume / ⌘+Mute have something to act on. A browser target only
+    /// does once a scan found a tab with a volume; until then the keys stay with
+    /// macOS rather than being swallowed for nothing.
+    private func updateTargetHasVolume() {
+        let browserReady = !selectedTargetIsBrowser || selectedBrowserMediaCandidate?.volume != nil
+        tap.targetHasVolume = targetManager.targetSupportsVolume && browserReady
     }
 }
 
