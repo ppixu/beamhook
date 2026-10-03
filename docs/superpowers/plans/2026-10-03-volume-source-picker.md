@@ -1,5 +1,7 @@
 # Volume source picker — Implementation Plan
 
+> **Superseded in part by the 1.2.1 merge.** The key routing and the app mute described below were replaced when this branch merged upstream 1.2.1: routing lives in `VolumeKeyRouting.destination` / `VolumeKeyRouting.muteDestination` (there is no `VolumeKeyAction`), apps are muted through `ProcessMuteController` (not volume 0), plain Mute follows upstream's rule rather than always going to macOS, and `MuteMemory` is used for browser tabs only. The body is kept as written.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** While Beamhook's volume HUD is visible, ⌘↑/⌘↓ expands it into a list of playing apps and tabs and picks whose volume the keys change; ⌘+Mute mutes/unmutes the current source; ⌘+Volume reaches the app when the volume hook is off.
@@ -20,10 +22,10 @@
 - **Copy:** hint line text is exactly `⌘ ↑↓ switch · ⌘` + `speaker.slash.fill` symbol + `mute`. Muted row text is `muted`. Tab rows are named `"<tab label> · <browser applicationName>"`.
 - **Session HUD hide delay 2.5 s; compact volume HUD stays 1.5 s. Source list cap: 6 rows. Unmute fallback: 50.**
 - **Do not touch** `docs/index.html`, `docs/sitemap.xml`, `.gitignore` — they hold the user's own uncommitted edits. Always `git add` explicit paths, never `git add -A` / `git add .`.
-- **No Xcode on this Mac.** Verification uses two scratchpad scripts (already built and proven against the existing suites — 104 Kit tests + 4 MediaKeyTap tests pass):
+- **Verification.** The suites run with `xcodegen generate` and `xcodebuild test -project Beamhook.xcodeproj -scheme BeamhookKit|Beamhook -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO`. The per-step commands below use a local XCTest shim harness instead (proven against the existing suites — 104 Kit tests + 4 MediaKeyTap tests pass):
   - `$H/run-kit-tests.sh <TestFile.swift>...` — compiles all of `Sources/BeamhookKit` + `Tests/BeamhookKitTests/Mocks.swift` + the given XCTest files against an XCTest shim and runs every `func test*` (sync and async). Prefix with `APP_SOURCES="Sources/Beamhook/System/X.swift ..."` to also compile app-target files (for `Tests/BeamhookTests/*` tests). Prints `N tests run` then `ALL PASSED` or failures; exit status 1 on failure.
   - `$H/typecheck-app.sh` — typechecks the whole app target against BeamhookKit. Prints `APP TYPECHECK OK`.
-  - where `H=/private/tmp/claude-501/-Users-henkka-git-beamhook/8c630582-db4b-48a3-887c-fab4ac7816b7/scratchpad/kittest`. Run both from the repo root `/Users/henkka/git/beamhook`.
+  - where `$H` is the harness directory. Run both from the repo root.
 - Commits: message style is a plain imperative sentence (see `git log`), ending with the line `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. If a commit fails on `index.lock` (parallel workers), wait a second and retry.
 
 ## File Structure
@@ -1912,7 +1914,7 @@ APP_SOURCES="Sources/Beamhook/System/MediaKeyTap.swift Sources/Beamhook/System/S
 Expected: both end with `ALL PASSED`.
 
 Run: `xcodegen generate`
-Expected: `Created project at /Users/henkka/git/beamhook/Beamhook.xcodeproj` (picks up the new files; the project is not committed).
+Expected: `Created project at <repo>/Beamhook.xcodeproj` (picks up the new files; the project is not committed).
 
 - [ ] **Step 8: Manual checklist (for the user on a Mac with the built app — record in the final report, do not block on it)**
 

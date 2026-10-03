@@ -60,8 +60,8 @@ macOS 14.2. Tested on macOS Tahoe 26.5.
   is muted.
 - **Pick the source from the overlay.** While the volume overlay is showing,
   ⌘↑ / ⌘↓ switches between the apps and browser tabs that are playing; the
-  volume keys then adjust the one you picked, and ⌘ + Mute mutes it, until the
-  overlay fades.
+  volume keys then adjust the one you picked, and ⌘ + Mute mutes it (with the
+  volume keys hooked, plain Mute does the same), until the overlay fades.
 - If the hooked app isn't running, play/pause starts it and begins playback. Can
   be turned off in Settings. (A menu-driven app launched with an empty queue —
   TIDAL, for instance — has nothing to play.)

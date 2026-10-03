@@ -16,10 +16,11 @@ one-time, includes all 1.x updates); building from source is always free.
   menu. ⌘PgUp / ⌘PgDn work too. Beamhook only listens for these keys while the
   overlay is on screen, and the overlay's bottom line names them.
 - **⌘ + Mute mutes the picked source.** While the list is up, ⌘ + Mute toggles
-  the selected row instead of following the usual rule. An app is muted with
-  the same per-app mute as the menu's buttons (so it needs that setting); a
-  browser tab is muted through its own volume, so the rest of the browser keeps
-  playing, and pressing it again restores the tab's previous level.
+  the selected row instead of following the usual rule; with the volume keys
+  hooked, plain Mute does the same. An app is muted with the same per-app mute
+  as the menu's buttons (so it needs that setting); a browser tab is muted
+  through its own volume, so the rest of the browser keeps playing, and
+  pressing it again restores the tab's previous level.
 
 ## [1.2.1] — 2026-09-02
 

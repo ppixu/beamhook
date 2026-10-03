@@ -3,6 +3,8 @@
 **Date:** 2026-10-03
 **Status:** Approved for planning
 
+> **Superseded in part by the 1.2.1 merge.** The key routing and the app mute described below were replaced when this branch merged upstream 1.2.1: routing lives in `VolumeKeyRouting.destination` / `VolumeKeyRouting.muteDestination` (there is no `VolumeKeyAction`), apps are muted through `ProcessMuteController` (not volume 0), plain Mute follows upstream's rule rather than always going to macOS, and `MuteMemory` is used for browser tabs only. The body is kept as written.
+
 ## Problem
 
 The volume keys can only ever drive the hooked target. To change Spotify's
@@ -178,9 +180,8 @@ Expanded (during a session):
 
 ## Testing
 
-No Xcode on the dev Mac, so BeamhookKit logic is verified with a `swiftc`
-typecheck plus a scratchpad harness; the XCTest files are still written so CI
-and an Xcode machine run them.
+The XCTest suites run with `xcodebuild test` (schemes BeamhookKit and
+Beamhook); during development a local XCTest shim harness ran the same files.
 
 - `VolumeKeyActionTests` — every row of the key table, plus session overrides
   and no-volume pass-through.
