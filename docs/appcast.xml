@@ -15,6 +15,27 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.3.2</title>
+            <pubDate>Sat, 03 Oct 2026 21:42:42 +0300</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.3.2</link>
+            <sparkle:version>22</sparkle:version>
+            <sparkle:shortVersionString>1.3.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Fixed</h3>
+<ul>
+<li>Sound detection now checks every sample instead of skipping through the buffer, fixing missed right-channel and repeating audio signals. This also restores active-app discovery and speaker feedback for affected apps, including Unity.</li>
+<li>Spotify's small playback subtitle uses the correct dim text color in both macOS appearances.</li>
+<li>Active menu hook icons are black in light mode and white in dark mode, and render directly at their final size for sharper edges.</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li>Speaker arcs pulse outward in both the menu and overlay. The volume setting determines how many arcs react, with at least one whenever sound is detected.</li>
+<li>Expanded overlay controls follow the menu order: hook and name, play/pause, speaker, then volume.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.3.2.zip" length="2592301" type="application/octet-stream" sparkle:edSignature="LKC3dph/f1KiU4WhHG0bMmPl3SB/1Tw5m5fK0l9ok5E1bbMeu8d8KLO+lV7NPPQzkbW0M7U/tXvAN6frSxtKAg=="/>
+        </item>
+        <item>
             <title>1.3.1</title>
             <pubDate>Sat, 03 Oct 2026 21:21:17 +0300</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.3.1</link>
@@ -310,6 +331,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: ibib5RWKdbdt5h2D8RRiCyX4K8tBxZi0PYkg0d0420pif2aJHWw9MKwSj4JcCCPWmwxuBRTWIfgx9WnPy4T+Cg==
-length: 26917
+edSignature: 3IhrJ2/dMiSKPSivbYunSP6uf4L2Gu5g/SUuIRwxoKR0l7trVsWTxsJPqWS3BMU8nuxuLIh4r4rdmJnXdeL2Bw==
+length: 28425
 -->
