@@ -52,15 +52,16 @@ final class SourcePickerKeyTapTests: XCTestCase {
         var keys: [SourcePickerKey] = []
         let tap = SourcePickerKeyTap { keys.append($0) }
 
-        // The events are kept alive across the asserts: a passed-through result
-        // is an unretained reference to them, and XCTAssertNotNil reflects over
-        // its argument, which crashes if the event has already been freed.
+        // A passed-through result is an unretained reference to the event, so
+        // each event stays in a local for the whole assert, and the check is
+        // that the very same event comes back.
         let events = [keyEvent(126, flags: []),
                       keyEvent(126, flags: [.maskCommand, .maskShift]),
                       keyEvent(0)]   // ⌘A
         withExtendedLifetime(events) {
             for event in events {
-                XCTAssertTrue(tap.handle(type: .keyDown, event: event) != nil)
+                let passed = tap.handle(type: .keyDown, event: event)?.takeUnretainedValue()
+                XCTAssertTrue(passed === event, "the event must pass through unchanged")
             }
         }
 
