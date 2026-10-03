@@ -231,6 +231,75 @@ final class TargetManagerTests: XCTestCase {
         XCTAssertNil(result)
         XCTAssertTrue(app.setVolumeCalls.isEmpty)
     }
+
+    // MARK: - updateVolume
+
+    func testUpdateVolumeAppliesTransformAndReportsPrevious() async {
+        let (resolver, app) = makeVolumeTarget(current: 40)
+        let tm = makeManager(resolver: resolver)
+        tm.selectedTargetID = "spotify"
+
+        let change = await tm.updateVolume { _ in 0 }
+        XCTAssertEqual(change, VolumeChange(bundleID: "com.example.spotify", previous: 40, volume: 0))
+        XCTAssertEqual(app.setVolumeCalls, [0])
+    }
+
+    func testUpdateVolumeClamps() async {
+        let (resolver, app) = makeVolumeTarget(current: 40)
+        let tm = makeManager(resolver: resolver)
+        tm.selectedTargetID = "spotify"
+
+        let change = await tm.updateVolume { $0 + 500 }
+        XCTAssertEqual(change?.volume, 100)
+        XCTAssertEqual(app.setVolumeCalls, [100])
+    }
+
+    func testUpdateVolumeNoOpWithoutReadableVolume() async {
+        let (resolver, app) = makeVolumeTarget(current: nil)
+        let tm = makeManager(resolver: resolver)
+        tm.selectedTargetID = "spotify"
+
+        let change = await tm.updateVolume { $0 + 6 }
+        XCTAssertNil(change)
+        XCTAssertTrue(app.setVolumeCalls.isEmpty)
+    }
+
+    func testUpdateVolumeOfBundleIDLeavesTheHookedTargetAlone() async {
+        let (resolver, spotify) = makeVolumeTarget(current: 50)
+        let music = MockMediaApp(id: "music", isRunning: true)
+        music.supportsVolume = true
+        music.volumeValue = 20
+        resolver.apps["music"] = music
+        let tm = makeManager(resolver: resolver)
+        tm.selectedTargetID = "spotify"
+
+        let change = await tm.updateVolume(ofBundleID: "com.example.music") { $0 + 10 }
+        XCTAssertEqual(change, VolumeChange(bundleID: "com.example.music", previous: 20, volume: 30))
+        XCTAssertEqual(music.setVolumeCalls, [30])
+        XCTAssertTrue(spotify.setVolumeCalls.isEmpty)
+        XCTAssertEqual(tm.selectedTargetID, "spotify")
+    }
+
+    func testUpdateVolumeOfBundleIDNoOpForUnknownOrUnreadyApp() async {
+        let resolver = MockResolver()
+        let music = MockMediaApp(id: "music", isRunning: true)
+        music.supportsVolume = true
+        music.volumeValue = 20
+        music.readyValue = false
+        resolver.apps["music"] = music
+        let tm = makeManager(resolver: resolver)
+
+        let unknown = await tm.updateVolume(ofBundleID: "com.example.nope") { $0 + 10 }
+        let unready = await tm.updateVolume(ofBundleID: "com.example.music") { $0 + 10 }
+        XCTAssertNil(unknown)
+        XCTAssertNil(unready)
+        XCTAssertTrue(music.setVolumeCalls.isEmpty)
+    }
+
+    func testVolumeStepIsReadable() {
+        let tm = makeManager(resolver: MockResolver(), volumeStep: 9)
+        XCTAssertEqual(tm.volumeStep, 9)
+    }
 }
 
 private final class BeforeRunScriptRunner: ScriptRunning {

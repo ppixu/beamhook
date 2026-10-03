@@ -1,10 +1,25 @@
 import Foundation
 
+/// One completed read-modify-write of an app's volume, 0...100.
+public struct VolumeChange: Equatable, Sendable {
+    public let bundleID: String
+    public let previous: Int
+    public let volume: Int
+
+    public init(bundleID: String, previous: Int, volume: Int) {
+        self.bundleID = bundleID
+        self.previous = previous
+        self.volume = volume
+    }
+}
+
 public final class TargetManager {
     private let defaults: UserDefaults
     private let resolver: MediaAppResolver
     private let runner: ScriptRunning
-    private let volumeStep: Int
+    /// Percent per volume-key press. Public so other volume sources (browser
+    /// tabs) step by the same amount as the hooked target.
+    public let volumeStep: Int
     private static let storageKey = "selectedTargetAppID"
     private static let noTargetSentinel = "__beamhook_no_target__"
 
@@ -77,13 +92,36 @@ public final class TargetManager {
     /// 0/100 boundary (e.g. down-then-up near 0). That's intentional and benign for a
     /// held/bursty key; it keeps holding the key to one round-trip.
     public func adjustVolume(bySteps steps: Int) async -> (bundleID: String, volume: Int)? {
-        guard steps != 0, let app = currentTargetApp() else { return nil }
+        guard steps != 0 else { return nil }
         let delta = steps * volumeStep
-        return await runner.run {
+        guard let change = await updateVolume({ $0 + delta }) else { return nil }
+        return (change.bundleID, change.volume)
+    }
+
+    /// Reads the hooked target's volume, sets `transform(current)` clamped to
+    /// 0...100, and reports both — one off-main round-trip, so a mute toggle can
+    /// decide from the live value without a second Apple event. nil when there's
+    /// no target, it isn't ready, or it has no readable volume.
+    public func updateVolume(_ transform: @escaping (Int) -> Int) async -> VolumeChange? {
+        guard let app = currentTargetApp() else { return nil }
+        return await Self.readModifyWrite(app, transform, on: runner)
+    }
+
+    /// Same as `updateVolume(_:)` for any registered app, without touching the
+    /// hooked target. Used by the volume-source picker.
+    public func updateVolume(ofBundleID bundleID: String,
+                             _ transform: @escaping (Int) -> Int) async -> VolumeChange? {
+        guard let app = resolver.allApps().first(where: { $0.bundleID == bundleID }) else { return nil }
+        return await Self.readModifyWrite(app, transform, on: runner)
+    }
+
+    private static func readModifyWrite(_ app: MediaApp, _ transform: @escaping (Int) -> Int,
+                                        on runner: ScriptRunning) async -> VolumeChange? {
+        await runner.run {
             guard app.isReady, app.supportsVolume, let current = app.currentVolume() else { return nil }
-            let next = min(100, max(0, current + delta))
+            let next = min(100, max(0, transform(current)))
             app.setVolume(next)
-            return (app.bundleID, next)
+            return VolumeChange(bundleID: app.bundleID, previous: current, volume: next)
         }
     }
 
