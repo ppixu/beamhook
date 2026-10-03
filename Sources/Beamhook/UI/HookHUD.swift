@@ -10,18 +10,22 @@ final class HookHUD {
     static let shared = HookHUD()
     private init() {}
 
-    /// One row of the volume-source picker. `percent` 0 reads as muted; nil
-    /// means the volume hasn't been read yet.
+    /// One row of the volume-source picker. `percent` nil means the volume
+    /// hasn't been read yet. `muted` is the app's per-app (process-tap) mute;
+    /// a volume of 0 reads as muted too, which is how a tab is muted.
     struct SourceRow: Equatable {
         let name: String
         let percent: Int?
+        var muted = false
+
+        var isMuted: Bool { muted || percent == 0 }
     }
 
     private enum Presentation {
-        case hooked(appName: String, volumeKeysHijacked: Bool)
-        /// `systemVolumeHint`: the volume keys are hooked, so ⌘ reaches the
-        /// system volume — say so. Off when ⌘+Volume brought this up.
-        case volume(appName: String, percent: Int, systemVolumeHint: Bool)
+        /// `commandHint` is what ⌘ + a volume key reaches from here, or nil when
+        /// ⌘ changes nothing and the hint line stays hidden.
+        case hooked(appName: String, commandHint: VolumeKeyDestination?)
+        case volume(appName: String, percent: Int, commandHint: VolumeKeyDestination?)
         /// The volume-source picker: one row per source, one selected.
         case volumeSources(rows: [SourceRow], selectedIndex: Int)
         case launching(appName: String)
@@ -32,12 +36,14 @@ final class HookHUD {
         /// hooked. The notice names why, so the key controlling another app
         /// reads as the system routing it — not as Beamhook misfiring.
         case passthrough(appName: String, notice: PassthroughNotice)
+        /// A routed mute key flipped the hooked app's process-tap mute.
+        case mute(appName: String, muted: Bool)
 
         var appName: String {
             switch self {
             case .hooked(let appName, _), .volume(let appName, _, _),
                  .launching(let appName), .playback(let appName, _),
-                 .passthrough(let appName, _): appName
+                 .passthrough(let appName, _), .mute(let appName, _): appName
             case .volumeSources(let rows, let selectedIndex):
                 rows.indices.contains(selectedIndex) ? rows[selectedIndex].name : "volume sources"
             }
@@ -52,11 +58,12 @@ final class HookHUD {
 
         var hideDelay: TimeInterval {
             switch self {
-            case .hooked(_, let volumeKeysHijacked): volumeKeysHijacked ? 3.0 : 2.0
+            case .hooked(_, let commandHint): commandHint == nil ? 2.0 : 3.0
             case .volume: 1.5
             case .volumeSources: 2.5
             case .launching: 2.0
             case .playback: 1.4
+            case .mute: 1.4
             // The remediation line is a sentence; leave time to read it.
             case .passthrough(let appName, let notice):
                 HookHUD.noticeText(notice, appName: appName) == nil ? 1.8 : 4.0
@@ -93,8 +100,11 @@ final class HookHUD {
     /// `.volumeSources`, which replaces it with the source list.
     private var header: NSView?
     /// "⌘ + <speaker> for system volume" — a row rather than a label, so the
-    /// speaker is the same SF Symbol the popover and the menu bar draw.
-    private var hintRow: NSView?
+    /// speaker is the same SF Symbol the popover and the menu bar draw. Its
+    /// trailing caption names whichever side ⌘ leads to, so the two directions
+    /// of the chord can't be advertised the wrong way round.
+    private var hintRow: NSStackView?
+    private var hintSuffix: NSTextField?
     /// Free-text caption under the title, used by the passthrough presentation
     /// for its remediation line ("Enable JavaScript from Apple Events …").
     private var noticeLabel: NSTextField?
@@ -139,14 +149,15 @@ final class HookHUD {
     }
 
     /// Flash "<appName> hooked" just below the menu bar, under the status item.
-    func show(appName: String, volumeKeysHijacked: Bool = false) {
-        show(.hooked(appName: appName, volumeKeysHijacked: volumeKeysHijacked))
+    func show(appName: String, commandHint: VolumeKeyDestination? = nil) {
+        show(.hooked(appName: appName, commandHint: commandHint))
     }
 
     /// Show an app-specific volume HUD after a hooked volume-key command succeeds.
-    func showVolume(appName: String, percent: Int, systemVolumeHint: Bool) {
-        show(.volume(appName: appName, percent: min(100, max(0, percent)),
-                     systemVolumeHint: systemVolumeHint))
+    func showVolume(appName: String, percent: Int, commandHint: VolumeKeyDestination? = nil) {
+        show(.volume(appName: appName,
+                     percent: min(100, max(0, percent)),
+                     commandHint: commandHint))
     }
 
     /// Show the volume-source picker with `selectedIndex` highlighted.
@@ -169,6 +180,25 @@ final class HookHUD {
     /// Explain a play/pause press that macOS routed instead of Beamhook.
     func showPassthrough(_ notice: PassthroughNotice, appName: String) {
         show(.passthrough(appName: appName, notice: notice))
+    }
+
+    /// Confirm a mute-key press: muting is otherwise only audible by its
+    /// absence, which reads as a dead key.
+    func showMute(appName: String, muted: Bool) {
+        show(.mute(appName: appName, muted: muted))
+    }
+
+    /// Point the "⌘ + <speaker> for …" line at whichever volume the chord reaches,
+    /// or hide it when ⌘ changes nothing from here.
+    private func applyCommandHint(_ destination: VolumeKeyDestination?, appName: String) {
+        guard let destination else {
+            hintRow?.isHidden = true
+            return
+        }
+        let target = destination == .system ? "system" : appName
+        hintSuffix?.stringValue = "for \(target) volume"
+        hintRow?.setAccessibilityLabel("Command plus Volume for \(target) volume")
+        hintRow?.isHidden = false
     }
 
     /// The one-line remediation under the passthrough title; nil when there is
@@ -213,15 +243,15 @@ final class HookHUD {
         pickerHint?.isHidden = true
         sourceList?.isHidden = true
         switch presentation {
-        case .hooked(let appName, let volumeKeysHijacked):
+        case .hooked(let appName, let commandHint):
             label?.stringValue = "\(appName) hooked"
-            hintRow?.isHidden = !volumeKeysHijacked
+            applyCommandHint(commandHint, appName: appName)
             hookIcon?.isHidden = false
             transportIcon?.isHidden = true
             volumeRow?.isHidden = true
-        case .volume(let appName, let percent, let systemVolumeHint):
+        case .volume(let appName, let percent, let commandHint):
             label?.stringValue = appName
-            hintRow?.isHidden = !systemVolumeHint
+            applyCommandHint(commandHint, appName: appName)
             hookIcon?.isHidden = true
             transportIcon?.isHidden = true
             volumeRow?.isHidden = false
@@ -253,6 +283,13 @@ final class HookHUD {
             hookIcon?.isHidden = true
             transportIcon?.isHidden = false
             transportIcon?.image = Self.transportSymbol(isPlaying: isPlaying)
+            volumeRow?.isHidden = true
+        case .mute(let appName, let muted):
+            label?.stringValue = muted ? "\(appName) muted" : "\(appName) unmuted"
+            hintRow?.isHidden = true
+            hookIcon?.isHidden = true
+            transportIcon?.isHidden = false
+            transportIcon?.image = Self.muteSymbol(muted: muted)
             volumeRow?.isHidden = true
         case .passthrough(let appName, let notice):
             label?.stringValue = "macOS handled Play/Pause"
@@ -425,7 +462,7 @@ final class HookHUD {
         transport.translatesAutoresizingMaskIntoConstraints = false
         transport.setContentHuggingPriority(.required, for: .horizontal)
 
-        let hint = Self.makeSystemVolumeHint()
+        let (hint, hintSuffix) = Self.makeCommandVolumeHint()
         hint.isHidden = true
 
         let notice = NSTextField(labelWithString: "")
@@ -539,6 +576,7 @@ final class HookHUD {
         self.label = text
         self.header = header
         self.hintRow = hint
+        self.hintSuffix = hintSuffix
         self.noticeLabel = notice
         self.hookIcon = icon
         self.transportIcon = transport
@@ -562,12 +600,13 @@ final class HookHUD {
         return field
     }
 
-    /// "⌘ + <speaker> for system volume", built as a row so the speaker can be
+    /// "⌘ + <speaker> for … volume", built as a row so the speaker can be
     /// the real `speaker.wave.2.fill` symbol — the same mark the popover's hint
     /// and the menu bar itself use. An emoji speaker sat here before; it drew in
     /// its own colours and at its own weight, ignoring both the HUD's tint and
-    /// the surrounding text.
-    private static func makeSystemVolumeHint() -> NSStackView {
+    /// the surrounding text. The trailing caption is returned alongside the row
+    /// because `applyCommandHint` retargets it per presentation.
+    private static func makeCommandVolumeHint() -> (row: NSStackView, suffix: NSTextField) {
         let speaker = NSImageView()
         speaker.image = NSImage(systemSymbolName: "speaker.wave.2.fill",
                                 accessibilityDescription: "Volume")
@@ -577,14 +616,15 @@ final class HookHUD {
         speaker.setContentHuggingPriority(.required, for: .horizontal)
         speaker.setAccessibilityElement(false)
 
-        let row = NSStackView(views: [caption("⌘ +"), speaker, caption("for system volume")])
+        let suffix = caption("for system volume")
+        let row = NSStackView(views: [caption("⌘ +"), speaker, suffix])
         row.orientation = .horizontal
         row.alignment = .centerY
         row.spacing = 3
         row.setAccessibilityElement(true)
         row.setAccessibilityRole(.staticText)
         row.setAccessibilityLabel("Command plus Volume for system volume")
-        return row
+        return (row, suffix)
     }
 
     /// "⌘ ↑↓ switch · ⌘ <speaker.slash.fill> mute" — the picker's keys, built
@@ -623,7 +663,7 @@ final class HookHUD {
         name.setAccessibilityElement(false)
 
         let level: NSView
-        if row.percent == 0 {
+        if row.isMuted {
             let icon = NSImageView()
             icon.image = NSImage(systemSymbolName: "speaker.slash.fill", accessibilityDescription: nil)
             icon.symbolConfiguration = .init(pointSize: 11, weight: .regular)
@@ -656,10 +696,10 @@ final class HookHUD {
             marker.widthAnchor.constraint(equalToConstant: 10),
             name.widthAnchor.constraint(equalToConstant: 132),
             level.widthAnchor.constraint(equalToConstant: 104),
-            level.heightAnchor.constraint(equalToConstant: row.percent == 0 ? 14 : 5),
+            level.heightAnchor.constraint(equalToConstant: row.isMuted ? 14 : 5),
         ])
 
-        let state = row.percent.map { $0 == 0 ? "muted" : "\($0) percent" } ?? "volume unknown"
+        let state = row.isMuted ? "muted" : row.percent.map { "\($0) percent" } ?? "volume unknown"
         line.setAccessibilityElement(true)
         line.setAccessibilityRole(.staticText)
         line.setAccessibilityLabel("\(row.name), \(state)\(selected ? ", selected" : "")")
@@ -668,6 +708,12 @@ final class HookHUD {
 
     /// The glyph for a play/pause press. `nil` — an app that reports no state —
     /// gets the neutral combined mark rather than a guess in either direction.
+    private static func muteSymbol(muted: Bool) -> NSImage? {
+        muted
+            ? NSImage(systemSymbolName: "speaker.slash.fill", accessibilityDescription: "Muted")
+            : NSImage(systemSymbolName: "speaker.wave.2.fill", accessibilityDescription: "Unmuted")
+    }
+
     private static func transportSymbol(isPlaying: Bool?) -> NSImage? {
         switch isPlaying {
         case true?:

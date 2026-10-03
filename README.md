@@ -27,8 +27,9 @@ Beamhook makes your Mac's media keys predictable. It sends play/pause,
 next, and previous to **one app you choose** — so macOS can't redirect them
 to Apple Music, YouTube, or whichever player it remembers. It also lets you
 control the volume of apps that are currently playing audio, when the app
-supports AppleScript. Requires macOS 14.0 or later; the active-audio source list
-requires macOS 14.2. Tested on macOS Tahoe 26.5.
+supports AppleScript — and mute any app at all, AppleScript or not. Requires
+macOS 14.0 or later; the active-audio source list and per-app mute require
+macOS 14.2. Tested on macOS Tahoe 26.5.
 
 > [!IMPORTANT]
 > Firefox is not supported. Browser control works with Safari, Chrome, Brave,
@@ -43,14 +44,24 @@ requires macOS 14.2. Tested on macOS Tahoe 26.5.
 - Per-tab volume sliders for actively playing browser sources when [JavaScript
   from Apple Events](https://beamhook.app/help/) is enabled.
 - Optionally route the keyboard's volume keys to the selected app.
-- Hold Command to flip what the volume keys do: with volume keys routed to the
-  app, ⌘ + Volume adjusts the Mac's system volume; without, ⌘ + Volume adjusts
-  the app.
-- While the volume overlay is showing, ⌘↑ / ⌘↓ switches between the apps and
-  browser tabs that are playing, and the volume keys then adjust the one you
-  picked. It goes back to the hooked app when the overlay fades.
-- ⌘ + Mute mutes or unmutes just that app or tab; plain Mute is still the
-  system's.
+- **Command flips which volume the keys control.** With the volume keys routed
+  to the app, ⌘ + a volume key reaches the Mac's system volume; with them left
+  to the system, ⌘ + a volume key reaches the hooked app. Either way the plain
+  keys keep their usual meaning. Can be turned off in Settings.
+- **Mute any app.** Every app in the menu has a speaker button — including
+  apps with no AppleScript at all, such as Electron apps and chat apps with
+  notification chimes. Works through a Core Audio process tap; needs macOS 14.2
+  and the System Audio Recording permission, which macOS asks for when Beamhook
+  first starts. Beamhook only mutes, it never records. Can be turned off in
+  Settings.
+- The speaker icon animates while an app or tab is actually making sound.
+- ⌘ + mute toggles the hooked app's mute, following the same rule as the volume
+  keys. The menu-bar icon shows a slash through the hooked app's badge while it
+  is muted.
+- **Pick the source from the overlay.** While the volume overlay is showing,
+  ⌘↑ / ⌘↓ switches between the apps and browser tabs that are playing; the
+  volume keys then adjust the one you picked, and ⌘ + Mute mutes it, until the
+  overlay fades.
 - If the hooked app isn't running, play/pause starts it and begins playback. Can
   be turned off in Settings. (A menu-driven app launched with an empty queue —
   TIDAL, for instance — has nothing to play.)

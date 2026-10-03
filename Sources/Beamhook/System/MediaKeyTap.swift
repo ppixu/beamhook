@@ -17,8 +17,11 @@ final class MediaKeyTap: @unchecked Sendable {
     private struct RoutingState {
         var transportKeysHijacked = true
         var volumeKeysHijacked = false
-        var targetHasVolume = false
+        var commandVolumeRouting = true
+        var targetCanTakeVolume = false
+        var targetCanTakeMute = false
         var volumeSessionActive = false
+        var volumeSessionCanTakeMute = false
     }
 
     private let handler: Handler
@@ -44,18 +47,42 @@ final class MediaKeyTap: @unchecked Sendable {
         set { withStateLock { routingState.volumeKeysHijacked = newValue } }
     }
 
-    /// Whether the hooked target's volume can be set right now. Gates ⌘+Volume
-    /// (hook off) and ⌘+Mute, so Beamhook never swallows a key it can't act on.
-    var targetHasVolume: Bool {
-        get { withStateLock { routingState.targetHasVolume } }
-        set { withStateLock { routingState.targetHasVolume = newValue } }
+    /// The global "⌘ + volume keys control the hooked app" setting. Only governs
+    /// the Command chord; the plain keys are unaffected either way.
+    var commandVolumeRouting: Bool {
+        get { withStateLock { routingState.commandVolumeRouting } }
+        set { withStateLock { routingState.commandVolumeRouting = newValue } }
     }
 
-    /// True while the volume-source list is on screen: every volume key and
-    /// ⌘+Mute then goes to the picked source, with or without ⌘.
+    /// The target exposes a volume Beamhook can drive AND is running. Kept here
+    /// rather than resolved in the callback because asking NSWorkspace on the tap
+    /// thread would put an unbounded call in front of every key press.
+    var targetCanTakeVolume: Bool {
+        get { withStateLock { routingState.targetCanTakeVolume } }
+        set { withStateLock { routingState.targetCanTakeVolume = newValue } }
+    }
+
+    /// The target can be process-tap muted right now: the per-app mute feature
+    /// is on AND the target is running. Unlike volume this needs no scripting
+    /// support, so it is a separate capability from `targetCanTakeVolume`.
+    var targetCanTakeMute: Bool {
+        get { withStateLock { routingState.targetCanTakeMute } }
+        set { withStateLock { routingState.targetCanTakeMute = newValue } }
+    }
+
+    /// True while the volume-source picker's list is on screen: every volume
+    /// key, with or without ⌘, then goes to the picked source, and so does
+    /// ⌘ + Mute (see `VolumeKeyRouting.muteDestination`).
     var volumeSessionActive: Bool {
         get { withStateLock { routingState.volumeSessionActive } }
         set { withStateLock { routingState.volumeSessionActive = newValue } }
+    }
+
+    /// Whether the picked source can be muted right now. Read only while
+    /// `volumeSessionActive`; when false, ⌘ + Mute reaches the system.
+    var volumeSessionCanTakeMute: Bool {
+        get { withStateLock { routingState.volumeSessionCanTakeMute } }
+        set { withStateLock { routingState.volumeSessionCanTakeMute = newValue } }
     }
 
     private var eventTap: CFMachPort?
@@ -63,7 +90,9 @@ final class MediaKeyTap: @unchecked Sendable {
     private var thread: Thread?
     private var threadRunLoop: CFRunLoop?
 
-    /// Both handlers are always invoked on the main thread: `handler` for transport keys the tap swallowed and routed (fresh key-downs only), and for volume keys and ⌘+Mute that `VolumeKeyAction` says Beamhook handles (volume keys including repeats); `passthroughHandler` for transport keys it handed back to macOS (fresh key-downs only).
+    /// Both handlers are always invoked on the main thread, for fresh (non-repeat)
+    /// key-downs only: `handler` for transport keys the tap swallowed and routed,
+    /// `passthroughHandler` for transport keys it handed back to macOS.
     init(handler: @escaping Handler, passthroughHandler: Handler? = nil) {
         self.handler = handler
         self.passthroughHandler = passthroughHandler
@@ -152,31 +181,57 @@ final class MediaKeyTap: @unchecked Sendable {
             return nil
         }
 
-        if key.isVolume || key == .mute {
-            let state = withStateLock { routingState }
-            let action = VolumeKeyAction.resolve(
-                key: key,
-                commandHeld: event.flags.contains(.maskCommand),
-                hijacked: state.volumeKeysHijacked,
-                targetHasVolume: state.targetHasVolume,
-                sessionActive: state.volumeSessionActive)
-            switch action {
-            case .passThrough:
-                return Unmanaged.passUnretained(event)
-            case .passThroughWithoutCommand:
-                // Command-volume is an escape hatch to the normal system volume.
-                // Remove Command before passing the event through so macOS receives
-                // an ordinary volume key rather than a modified shortcut.
-                event.flags = event.flags.subtracting(.maskCommand)
-                return Unmanaged.passUnretained(event)
-            case .handle:
-                // Volume: key-down AND repeats, so holding the key ramps. Mute:
-                // a fresh key-down only — a held key must not flap the toggle.
-                // Both down and up are swallowed either way.
-                if decoded.isDown && (key.isVolume || !decoded.isRepeat) {
+        if key.isVolume {
+            let commandHeld = event.flags.contains(.maskCommand)
+            let routing = withStateLock { routingState }
+            switch VolumeKeyRouting.destination(commandHeld: commandHeld,
+                                                hijacked: routing.volumeKeysHijacked,
+                                                commandRoutingEnabled: routing.commandVolumeRouting,
+                                                targetCanTakeVolume: routing.targetCanTakeVolume,
+                                                sessionActive: routing.volumeSessionActive) {
+            case .app:
+                // Forward on key-down AND repeats so holding the key ramps the volume.
+                if decoded.isDown {
                     DispatchQueue.main.async { [weak self] in self?.handler(key) }
                 }
                 return nil
+            case .system:
+                // macOS gives Command + volume no meaning of its own, so a press
+                // that reaches the system must arrive as an ordinary volume key
+                // rather than a modified shortcut.
+                if commandHeld {
+                    event.flags = event.flags.subtracting(.maskCommand)
+                }
+                return Unmanaged.passUnretained(event)
+            }
+        }
+
+        // The mute key rides the same Command flip as the volume keys — it is
+        // part of the same physical cluster — but toggles the hooked app's
+        // process-tap mute instead of a volume step. During a picker session
+        // ⌘ + Mute toggles the picked source instead.
+        if key == .mute {
+            let commandHeld = event.flags.contains(.maskCommand)
+            let routing = withStateLock { routingState }
+            let sessionMute: Bool? = routing.volumeSessionActive ? routing.volumeSessionCanTakeMute : nil
+            switch VolumeKeyRouting.muteDestination(commandHeld: commandHeld,
+                                                    hijacked: routing.volumeKeysHijacked,
+                                                    commandRoutingEnabled: routing.commandVolumeRouting,
+                                                    targetCanTakeMute: routing.targetCanTakeMute,
+                                                    sessionSourceCanTakeMute: sessionMute) {
+            case .app:
+                // Mute is a toggle: act once per fresh key-down, but swallow
+                // the repeats and the key-up too, else they'd fire the
+                // system's mute alongside ours.
+                if decoded.isDown && !decoded.isRepeat {
+                    DispatchQueue.main.async { [weak self] in self?.handler(key) }
+                }
+                return nil
+            case .system:
+                if commandHeld {
+                    event.flags = event.flags.subtracting(.maskCommand)
+                }
+                return Unmanaged.passUnretained(event)
             }
         }
 

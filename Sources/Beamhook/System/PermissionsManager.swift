@@ -26,4 +26,13 @@ final class PermissionsManager {
             NSWorkspace.shared.open(url)
         }
     }
+
+    /// Privacy & Security → Screen & System Audio Recording, where the grant
+    /// behind the per-app mute taps lives. A third, separate permission: denying
+    /// it costs only the mute buttons.
+    func openAudioCaptureSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture") {
+            NSWorkspace.shared.open(url)
+        }
+    }
 }

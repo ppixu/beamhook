@@ -30,8 +30,9 @@ public enum MediaKey: Equatable, Sendable {
         }
     }
 
-    /// Hardware volume up/down. Mute is separate: plain mute always belongs to
-    /// the system, ⌘+Mute toggles the volume source (see `VolumeKeyAction`).
+    /// Hardware volume up/down. Mute is not in this set: it shares the volume
+    /// cluster's Command-flip routing but toggles the hooked app's process-tap
+    /// mute rather than stepping a volume, so the tap handles it separately.
     public var isVolume: Bool {
         switch self {
         case .volumeUp, .volumeDown: return true

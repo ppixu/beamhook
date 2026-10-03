@@ -117,7 +117,7 @@ final class AppState: ObservableObject {
     /// net delta off-main, so a held key never stacks up blocked Apple-event sends.
     private var pendingVolumeSteps = 0
     private var volumeDrainInFlight = false
-    /// Same coalescing shape for ⌘+Mute: each press bumps `pendingMuteToggles`
+    /// Same coalescing shape for mute inside a picker session: each press bumps `pendingMuteToggles`
     /// and a single drain task runs them one at a time. Unlike volume steps these
     /// aren't summed into a net delta — each toggle must fully complete (including
     /// `muteMemory.record`) before the next one reads `restoreVolume`, otherwise a
@@ -125,12 +125,13 @@ final class AppState: ObservableObject {
     /// reads the fallback restore value instead of what the first press saved.
     private var pendingMuteToggles = 0
     private var muteToggleInFlight = false
-    /// Pre-mute volumes, so ⌘+Mute can undo itself. Outlives sessions.
+    /// Pre-mute volumes of browser tabs, so a session's ⌘+Mute can undo itself.
+    /// Apps use the process-tap mute instead. Outlives sessions.
     private var muteMemory = MuteMemory()
     /// Non-nil while the source list is on screen — the spec's "volume session".
     /// While set, every volume key and ⌘+Mute follow its selection.
     private var volumeSession: VolumeSourceList? {
-        didSet { tap.volumeSessionActive = volumeSession != nil }
+        didSet { updateVolumeSessionRouting() }
     }
     /// The session's background refresh (volumes, browser tabs).
     private var volumeSessionRefresh: Task<Void, Never>?
@@ -168,6 +169,21 @@ final class AppState: ObservableObject {
     @Published var launchTargetOnPlay: Bool = LaunchOnPlayPreference.isEnabled(.standard)
     /// Whether a hooked play/pause press flashes the overlay.
     @Published var showPlayPauseHUD: Bool = PlayPauseHUDPreference.isEnabled(.standard)
+    /// Whether ⌘ + a volume key reaches the hooked app when the plain keys don't.
+    @Published var commandVolumeRouting: Bool = CommandVolumePreference.isEnabled(.standard)
+    /// Whether the per-app mute buttons are shown. Default ON; the System Audio
+    /// Recording permission behind them is asked for once, at first activation
+    /// (see `requestMutePermissionOnce`).
+    @Published var perAppMuteEnabled: Bool = PerAppMutePreference.isEnabled(.standard)
+    /// Mirror of the mute controller's muted set, so rows observing AppState
+    /// re-render on a mute without each observing the controller separately.
+    @Published private(set) var mutedApps: Set<String> = [] {
+        didSet { updateMenuBarGlyph() }
+    }
+    /// Mirror of the controller's permission verdict; nil until a tap has run.
+    @Published private(set) var mutePermissionGranted: Bool?
+    /// Mirror of the controller's live audibility meter (see setMeterWatchlist).
+    @Published private(set) var audibleApps: Set<String> = []
     /// Per-app opt-in for volume-key control. Absent (nil) means OFF — the volume
     /// keys are never taken over unless the user explicitly turns them on for that
     /// app. There is no automatic/silent hijack.
@@ -177,16 +193,12 @@ final class AppState: ObservableObject {
     @Published var browserMediaInjectionAvailable: Bool?
     @Published var browserTargetRunning: Bool?
     @Published var browserMediaCandidates: [BrowserMediaCandidate] = [] {
-        didSet {
-            updateMenuBarGlyph()
-            updateTargetHasVolume()
-        }
+        didSet { updateMenuBarGlyph() }
     }
     @Published var selectedBrowserMediaID: String? {
         didSet {
             if selectedBrowserMediaID != oldValue { playbackContextRevision &+= 1 }
             updateMenuBarGlyph()
-            updateTargetHasVolume()
         }
     }
     /// Volume-controllable browser tabs for browsers whose Core Audio process
@@ -199,9 +211,18 @@ final class AppState: ObservableObject {
     /// Which template image the status item should show. Derived state — see
     /// `updateMenuBarGlyph()` for the inputs that keep it current.
     @Published private(set) var menuBarGlyph: MenuBarGlyph = .hook
+    /// The hooked app is process-tap muted right now; the status item draws its
+    /// glyph with a slash through it. Derived alongside `menuBarGlyph`.
+    @Published private(set) var menuBarMuted = false
 
     let outputMonitor = AudioOutputMonitor()
+    /// Created on first use (which also keeps it off macOS 14.0/14.1, where the
+    /// tap API doesn't exist). Typed AnyObject because a stored property can't
+    /// carry the @available(macOS 14.2, *) the class needs.
+    private var muteControllerStorage: AnyObject?
     private var cancellables = Set<AnyCancellable>()
+    /// Workspace launch/terminate observers; see `observeTargetPresence()`.
+    private var workspaceObservers: [NSObjectProtocol] = []
     private static let volumeOverrideKey = "volumeKeyOverride"
     private static let legacyVolumeHookKey = "volumeHookBundleIDs"
     private static let log = Logger(subsystem: "com.github.ppixu.beamhook", category: "HUD")
@@ -250,6 +271,13 @@ final class AppState: ObservableObject {
         self.watchdog = TapWatchdog(tap: tap)
 
         loadVolumeOverrides()
+        if PerAppMutePreference.isEnabled(.standard), #available(macOS 14.2, *) {
+            // No permission probe here: this runs before Accessibility is
+            // settled. `activateInput` asks once, on the first activation, so
+            // a fresh install sees Accessibility first and System Audio
+            // Recording second rather than both dialogs at once.
+            muteController.start()
+        }
         outputMonitor.$outputVolumeControllable
             .receive(on: RunLoop.main)
             .sink { [weak self] controllable in
@@ -261,6 +289,7 @@ final class AppState: ObservableObject {
             .store(in: &cancellables)
 
         handlerBox.state = self
+        observeTargetPresence()
         // Seed this now rather than waiting for the first popover: the target menu
         // disables uninstalled apps, and an empty set would disable every one of
         // them if the menu were ever built before `setMenuVisible(true)` lands.
@@ -278,7 +307,7 @@ final class AppState: ObservableObject {
         switch key {
         case .volumeUp:   nudgeVolume(up: true)
         case .volumeDown: nudgeVolume(up: false)
-        case .mute:       toggleMute()
+        case .mute:       handleMuteKey()
         default:
             guard let command = key.command else { return }
             if selectedTargetIsBrowser, browserMediaInjectionAvailable == true {
@@ -343,18 +372,17 @@ final class AppState: ObservableObject {
     /// (the volume overlay already waits the same way); an app that reports no
     /// state at all still gets an overlay, just a direction-neutral one.
     private func announcePlayPause() async {
-        guard showPlayPauseHUD, let def = currentTargetDefinition() else { return }
+        guard let def = currentTargetDefinition() else { return }
         let context = playbackTargetContext
-        // A menu-driven target reports its state through the play/pause menu
-        // item's own title, and that title can lag the press that changed it.
-        // Reading it right away would sometimes draw the state we just left, so
-        // let it settle first; scripted targets answer for themselves at once.
-        if def.menuControl != nil {
-            try? await Task.sleep(nanoseconds: 350_000_000)
-            guard context == playbackTargetContext else { return }
-        }
-        let isPlaying = await confirmTargetPlaying(in: context)
-        guard context == playbackTargetContext else { return }   // hook changed meanwhile
+        // The press is the freshest knowledge there is: flip the last known
+        // state now, so the speaker animation and the row buttons react to the
+        // key rather than to the read that follows it.
+        let previous = playbackHint(for: def.bundleID)
+        if let previous { notePlayback(bundleID: def.bundleID, playing: !previous) }
+        // Confirmed regardless of the overlay setting: the settled read also
+        // corrects the hint if the guess above was wrong.
+        let isPlaying = await confirmTargetPlaying(in: context, after: previous)
+        guard showPlayPauseHUD, context == playbackTargetContext else { return }
         HookHUD.shared.showPlayback(appName: def.displayName, isPlaying: isPlaying)
     }
 
@@ -396,11 +424,27 @@ final class AppState: ObservableObject {
     /// (e.g. after wake / fast user switch) don't re-flash it.
     private var didAnnounceStartupHook = false
 
+    private static let mutePermissionRequestedKey = "perAppMutePermissionRequested"
+
+    /// With per-app mute on by default, the System Audio Recording prompt
+    /// belongs at first launch — right here, once Accessibility is in place, so
+    /// a fresh install meets the two dialogs one after the other — rather than
+    /// at some later first mute. Persisted, so it happens once per install
+    /// (macOS never re-prompts after an answer anyway; this just spares every
+    /// later launch the probe). A later toggle in Settings still probes.
+    private func requestMutePermissionOnce() {
+        guard perAppMuteEnabled, #available(macOS 14.2, *),
+              !UserDefaults.standard.bool(forKey: Self.mutePermissionRequestedKey) else { return }
+        UserDefaults.standard.set(true, forKey: Self.mutePermissionRequestedKey)
+        muteController.requestPermission()
+    }
+
     private func activateInput() {
         tap.start()
         watchdog.start()
         outputMonitor.start()
-        updateVolumeHijack()
+        updateVolumeRouting()
+        requestMutePermissionOnce()
         HookHUD.shared.onVolumeVisibilityChange = { [weak self] visible in
             self?.volumeHUDVisibilityChanged(visible)
         }
@@ -422,7 +466,7 @@ final class AppState: ObservableObject {
                     Self.log.info("startup hook: target=\(def?.displayName ?? "nil", privacy: .public) running=\(running)")
                     if let def, running {
                         HookHUD.shared.show(appName: def.displayName,
-                                            volumeKeysHijacked: self.tap.volumeKeysHijacked)
+                                            commandHint: self.commandVolumeHint)
                     }
                 }
             }
@@ -512,6 +556,61 @@ final class AppState: ObservableObject {
         )
     }
 
+    // MARK: - Fresh playback knowledge
+
+    /// The freshest known play state per app — written by the user's own
+    /// clicks and key presses (optimistically, then confirmed) and refreshed by
+    /// every poll. It is what lets the speaker's EQ animation follow a pause or
+    /// play the instant it happens rather than when the next 1.5s poll or 2s
+    /// stream refresh notices. It never ages out on its own: a time-based
+    /// expiry is invisible to SwiftUI, so polls overwrite it instead. Keyed by
+    /// bundle id; browsers keep theirs per tab (see `performBrowserCommand`).
+    struct PlaybackHint {
+        let playing: Bool
+        let at: Date
+    }
+    @Published private(set) var playbackHints: [String: PlaybackHint] = [:]
+    /// Apps with a toggle in flight. A poll that lands mid-toggle would read
+    /// the state we just left (Spotify keeps reporting "paused" for a beat
+    /// after play while it buffers) and stomp the optimistic hint, so polled
+    /// results are ignored for these until the confirm read settles them.
+    private var playbackSettling: Set<String> = []
+
+    /// Authoritative: a click, a key press, or a settled confirm read.
+    func notePlayback(bundleID: String, playing: Bool) {
+        playbackHints[bundleID] = PlaybackHint(playing: playing, at: Date())
+    }
+
+    /// From a periodic poll — dropped while that app's toggle is settling.
+    func notePolledPlayback(bundleID: String, playing: Bool) {
+        guard !playbackSettling.contains(bundleID) else { return }
+        notePlayback(bundleID: bundleID, playing: playing)
+    }
+
+    func playbackHint(for bundleID: String) -> Bool? {
+        playbackHints[bundleID]?.playing
+    }
+
+    /// A browser toggle just ran on one tab: flip that tab's cached play state
+    /// so the rows react now instead of at the next 3s scan. Only the acted-on
+    /// tab changes — with several tabs playing, the browser row keeps animating
+    /// until the last of them stops, which is exactly right.
+    private func noteBrowserPlaybackToggled(_ candidate: BrowserMediaCandidate) {
+        func flipped(_ c: BrowserMediaCandidate) -> BrowserMediaCandidate {
+            BrowserMediaCandidate(browser: c.browser, sourceID: c.sourceID,
+                                  windowIndex: c.windowIndex, tabIndex: c.tabIndex,
+                                  title: c.title, artist: c.artist, host: c.host,
+                                  isPlaying: !c.isPlaying, isSelected: c.isSelected,
+                                  supportsTransport: c.supportsTransport, volume: c.volume)
+        }
+        if let index = browserMediaCandidates.firstIndex(where: { $0.id == candidate.id }) {
+            browserMediaCandidates[index] = flipped(browserMediaCandidates[index])
+        }
+        if let index = activeBrowserMediaCandidates.firstIndex(where: { $0.id == candidate.id }) {
+            activeBrowserMediaCandidates[index] = flipped(activeBrowserMediaCandidates[index])
+        }
+    }
+
     // Play/pause helpers used by the in-menu control. Reads run off the main
     // thread and are accepted only while their exact target context is current.
     // Browser reads address the cached page-owned source directly instead of
@@ -520,16 +619,43 @@ final class AppState: ObservableObject {
         await targetPlayingState(in: context, using: pollRunner)
     }
 
-    /// Read immediately after a user command on the command lane. Since the toggle
-    /// has already completed, this is queued directly behind it and authoritatively
-    /// reconciles the optimistic icon without waiting for the periodic poll.
-    func confirmTargetPlaying(in context: PlaybackTargetContext) async -> Bool? {
-        await targetPlayingState(in: context, using: scripting)
+    /// Read after a user command, on the command lane, and authoritatively
+    /// reconcile the optimistic state without waiting for the periodic poll.
+    ///
+    /// Not immediately, though: every kind of target can lag the press. A
+    /// menu-driven app's item title updates late, and a scripted player still
+    /// reports "paused" for a beat after play while it buffers (Spotify).
+    /// Reading right away sometimes drew the state we just left — which is why
+    /// play used to restart the speaker animation a poll later while pause
+    /// stopped it at once. So: settle, read, and if the app still reports the
+    /// state we came from (`after`), give it one more beat and read again.
+    /// Polls are ignored for the app meanwhile (see `playbackSettling`).
+    func confirmTargetPlaying(in context: PlaybackTargetContext,
+                              after previous: Bool? = nil) async -> Bool? {
+        let bundleID = currentTargetDefinition()?.bundleID
+        if let bundleID { playbackSettling.insert(bundleID) }
+        defer { if let bundleID { playbackSettling.remove(bundleID) } }
+
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        guard context == playbackTargetContext else { return nil }
+        var result = await targetPlayingState(in: context, using: scripting, notingHint: false)
+        if let previous, result == previous {
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            guard context == playbackTargetContext else { return nil }
+            result = await targetPlayingState(in: context, using: scripting, notingHint: false)
+        }
+        if let result, let bundleID, context == playbackTargetContext {
+            notePlayback(bundleID: bundleID, playing: result)
+        }
+        return result
     }
 
+    /// `notingHint`: a poll records its result (unless the app is settling a
+    /// toggle); the confirm read above writes the hint itself once settled.
     private func targetPlayingState(
         in context: PlaybackTargetContext,
-        using runner: ScriptRunner
+        using runner: ScriptRunner,
+        notingHint: Bool = true
     ) async -> Bool? {
         guard context == playbackTargetContext, let id = context.targetID else { return nil }
 
@@ -546,6 +672,9 @@ final class AppState: ObservableObject {
         } else {
             guard let app = registry.app(withID: id) else { return nil }
             result = await runner.run { app.isPlaying() }
+            if notingHint, let result, context == playbackTargetContext {
+                notePolledPlayback(bundleID: app.bundleID, playing: result)
+            }
         }
 
         guard context == playbackTargetContext else { return nil }
@@ -611,16 +740,20 @@ final class AppState: ObservableObject {
         _ command: MediaCommand,
         on candidate: BrowserMediaCandidate
     ) async -> Bool {
-        await scripting.run { [browserMediaController] in
+        let performed = await scripting.run { [browserMediaController] in
             browserMediaController.perform(command, on: candidate)
         }
+        if performed, command == .playPause {
+            noteBrowserPlaybackToggled(candidate)
+        }
+        return performed
     }
 
     func setTarget(_ id: String?) {
         selectedTargetID = id
         targetManager.selectedTargetID = id
         configureBrowserTransportForPendingScan()
-        updateVolumeHijack()
+        updateVolumeRouting()
         // Scan the hooked browser now instead of leaving it to the menu's
         // visible-poll loop: the popover can close before that loop fires,
         // which would strand a JS-enabled browser in macOS passthrough until
@@ -632,7 +765,7 @@ final class AppState: ObservableObject {
         // Confirm the new hook with a centre-screen HUD (user-initiated, so always).
         if let def = currentTargetDefinition() {
             HookHUD.shared.show(appName: def.displayName,
-                                volumeKeysHijacked: tap.volumeKeysHijacked)
+                                commandHint: commandVolumeHint)
         }
     }
 
@@ -651,6 +784,9 @@ final class AppState: ObservableObject {
     private func updateMenuBarGlyph() {
         let host = selectedTargetIsBrowser ? selectedBrowserMediaCandidate?.host : nil
         menuBarGlyph = MenuBarGlyph.forTarget(id: selectedTargetID, browserHost: host)
+        let mutedNow = perAppMuteEnabled
+            && (targetManager.targetBundleID.map { mutedApps.contains($0) } ?? false)
+        if menuBarMuted != mutedNow { menuBarMuted = mutedNow }
     }
 
     /// Whether the hooked browser source can act on the transport keys. A call
@@ -881,6 +1017,112 @@ final class AppState: ObservableObject {
         PlayPauseHUDPreference.setEnabled(on, in: .standard)
     }
 
+    func setCommandVolumeRouting(_ on: Bool) {
+        commandVolumeRouting = on
+        CommandVolumePreference.setEnabled(on, in: .standard)
+        updateVolumeRouting()
+    }
+
+    // MARK: - Per-app mute
+
+    @available(macOS 14.2, *)
+    private var muteController: ProcessMuteController {
+        if let existing = muteControllerStorage as? ProcessMuteController { return existing }
+        let controller = ProcessMuteController()
+        controller.$mutedBundleIDs
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.mutedApps = $0 }
+            .store(in: &cancellables)
+        controller.$permissionGranted
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.mutePermissionGranted = $0 }
+            .store(in: &cancellables)
+        controller.$audibleApps
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.audibleApps = $0 }
+            .store(in: &cancellables)
+        muteControllerStorage = controller
+        return controller
+    }
+
+    /// The popover's list of apps that need live audibility (no play state to
+    /// ask for): while the menu is open the mute controller meters exactly
+    /// these; an empty set tears the meters down.
+    func setMeterWatchlist(_ bundleIDs: Set<String>) {
+        guard #available(macOS 14.2, *), perAppMuteEnabled else { return }
+        muteController.setMeterWatchlist(bundleIDs)
+    }
+
+    func setPerAppMute(_ on: Bool) {
+        perAppMuteEnabled = on
+        PerAppMutePreference.setEnabled(on, in: .standard)
+        defer {
+            updateVolumeRouting()   // the tap's mute-key routing follows the setting
+            updateMenuBarGlyph()
+        }
+        guard #available(macOS 14.2, *) else { return }
+        if on {
+            muteController.start()
+            // This is the moment the System Audio Recording prompt may appear —
+            // right after the user asked for the feature, never uninvited.
+            muteController.requestPermission()
+        } else {
+            muteController.stopAndClear()
+        }
+    }
+
+    /// A mute key press the tap routed to us (⌘ + mute normally; plain mute
+    /// while the volume keys are hooked): flip the hooked app's process-tap
+    /// mute. The guards mirror `targetCanTakeMute` — the tap only routes the
+    /// key here while that was true, but the world can change between press
+    /// and dispatch.
+    private func toggleTargetMute() {
+        guard let bundleID = targetManager.targetBundleID,
+              let nowMuted = toggleProcessMute(bundleID: bundleID) else { return }
+        if let def = currentTargetDefinition() {
+            HookHUD.shared.showMute(appName: def.displayName, muted: nowMuted)
+        }
+    }
+
+    /// Flip one app's process-tap mute; the new state, or nil when per-app mute
+    /// is off or unavailable. Shared by the mute key and the picker session.
+    private func toggleProcessMute(bundleID: String) -> Bool? {
+        guard #available(macOS 14.2, *), perAppMuteEnabled else { return nil }
+        let nowMuted = !isAppMuted(bundleID)
+        muteController.setMuted(nowMuted, bundleID: bundleID)
+        return nowMuted
+    }
+
+    /// The hooked target can be process-tap muted right now: the per-app mute
+    /// feature is on and the target is running. Unlike volume this needs no
+    /// scripting support — the tap mutes any process.
+    var targetCanTakeMute: Bool {
+        guard perAppMuteEnabled, let bundleID = targetManager.targetBundleID else { return false }
+        return isRunning(bundleID: bundleID)
+    }
+
+    func isAppMuted(_ bundleID: String) -> Bool {
+        mutedApps.contains(bundleID)
+    }
+
+    func setAppMuted(_ muted: Bool, bundleID: String) {
+        guard #available(macOS 14.2, *) else { return }
+        muteController.setMuted(muted, bundleID: bundleID)
+    }
+
+    /// "Re-check" after a trip to System Settings: the probe never re-prompts —
+    /// once answered, tap creation just succeeds or fails.
+    func recheckMutePermission() {
+        guard #available(macOS 14.2, *) else { return }
+        muteController.requestPermission()
+    }
+
+    /// Name for a muted row with no matching definition: the running app's own.
+    func runningAppName(bundleID: String) -> String? {
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .first?.localizedName
+    }
+
     // Volume helpers used by the sliders (AppleScript runs off the main thread).
     // The initial read uses the poll runner (best-effort); the write uses the command
     // runner since it's a user action.
@@ -934,7 +1176,9 @@ final class AppState: ObservableObject {
             // Capture what "hooked" meant at the moment this RMW started — by the
             // time it returns, the user may have switched tabs or re-hooked, and
             // writing into today's selection with yesterday's result would land
-            // one source's volume on another's row.
+            // one source's volume on another's row. The cache is keyed to the app
+            // updateVolume actually acted on (resolved inside its off-main
+            // closure), not a separately-read target.
             let wasBrowser = selectedTargetIsBrowser
             let browserTabID = selectedBrowserMediaID
             change = await targetManager.updateVolume(transform)
@@ -964,8 +1208,11 @@ final class AppState: ObservableObject {
         } else {
             let appName = availableApps.first { $0.bundleID == change.bundleID }?.displayName
                 ?? change.bundleID
-            HookHUD.shared.showVolume(appName: appName, percent: change.volume,
-                                      systemVolumeHint: tap.volumeKeysHijacked)
+            // With the plain keys hooked, the overlay teaches the escape hatch.
+            // Reached by ⌘ instead, it would only echo the chord just pressed.
+            HookHUD.shared.showVolume(appName: appName,
+                                      percent: change.volume,
+                                      commandHint: tap.volumeKeysHijacked ? .system : nil)
         }
         return change
     }
@@ -975,10 +1222,20 @@ final class AppState: ObservableObject {
             ?? browserMediaCandidates.first { $0.id == id }
     }
 
-    /// ⌘+Mute: silence the current volume source, or put back what muting took.
-    /// Queued like `nudgeVolume`/`drainVolumeSteps`, so a quick double-press can't
-    /// read `restoreVolume` before the first press has recorded it.
-    private func toggleMute() {
+    /// A mute key the tap routed to us. Outside a picker session it is exactly
+    /// upstream's hooked-app mute; inside one it toggles the picked source.
+    private func handleMuteKey() {
+        guard volumeSession != nil else {
+            toggleTargetMute()
+            return
+        }
+        toggleSessionMute()
+    }
+
+    /// Mute inside a picker session. Queued like `nudgeVolume`/`drainVolumeSteps`,
+    /// so a quick double-press on a tab can't read `restoreVolume` before the
+    /// first press has recorded it.
+    private func toggleSessionMute() {
         pendingMuteToggles += 1
         guard !muteToggleInFlight else { return }
         muteToggleInFlight = true
@@ -993,27 +1250,52 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// One full mute toggle: source, key, and the restore value are all resolved
-    /// here — at the moment this toggle actually runs — not when it was queued,
-    /// so it always sees the previous toggle's recorded result.
+    /// One full mute toggle, with the source resolved when it actually runs —
+    /// not when it was queued — so it always sees the previous toggle's result.
+    ///
+    /// Apps (the hooked target included) use the same process-tap mute as the
+    /// mute key outside a session, so the menu, the menu-bar slash and the
+    /// persisted set stay in step. A browser tab can't be process-muted without
+    /// silencing the whole browser, so a tab is muted through its volume, with
+    /// `MuteMemory` remembering what to put back.
     private func performMuteToggle() async {
-        let source = currentVolumeSource
-        let key = muteMemoryKey(for: source)
-        let restore = muteMemory.restoreVolume(for: key)
-        guard let change = await changeVolume(of: source, {
-            MuteMemory.toggled(from: $0, restore: restore)
-        }) else { return }
-        muteMemory.record(sourceID: key, previous: change.previous, new: change.volume)
+        guard volumeSession != nil else {
+            // The HUD hid while this toggle was queued: back to the ordinary rule.
+            toggleTargetMute()
+            return
+        }
+        switch currentVolumeSource {
+        case .hookedTarget:
+            guard let bundleID = targetManager.targetBundleID,
+                  toggleProcessMute(bundleID: bundleID) != nil else { return }
+            showVolumeSessionHUD()
+        case .app(let bundleID):
+            guard toggleProcessMute(bundleID: bundleID) != nil else { return }
+            showVolumeSessionHUD()
+        case .browserTab(let id):
+            let source = VolumeSource.browserTab(id: id)
+            let restore = muteMemory.restoreVolume(for: source.id)
+            guard let change = await changeVolume(of: source, {
+                MuteMemory.toggled(from: $0, restore: restore)
+            }) else { return }
+            muteMemory.record(sourceID: source.id, previous: change.previous, new: change.volume)
+        }
     }
 
-    /// Mute memory follows the thing actually silenced, not the "hooked target"
-    /// role — re-hooking another app must not make it inherit a restore value.
-    private func muteMemoryKey(for source: VolumeSource) -> String {
-        guard source == .hookedTarget else { return source.id }
-        if selectedTargetIsBrowser, let id = selectedBrowserMediaID {
-            return VolumeSource.browserTab(id: id).id
+    /// Whether the picked source can be muted right now, mirrored to the tap so
+    /// ⌘ + Mute is never swallowed for a source it can't act on. Apps follow
+    /// `targetCanTakeMute`'s rule (per-app mute on, app running); a listed tab
+    /// always has a volume to set to 0.
+    private func updateVolumeSessionRouting() {
+        tap.volumeSessionActive = volumeSession != nil
+        switch volumeSession?.selected?.source {
+        case nil, .hookedTarget?:
+            tap.volumeSessionCanTakeMute = targetCanTakeMute
+        case .app(let bundleID)?:
+            tap.volumeSessionCanTakeMute = perAppMuteEnabled && isRunning(bundleID: bundleID)
+        case .browserTab?:
+            tap.volumeSessionCanTakeMute = true
         }
-        return VolumeSource.app(bundleID: targetManager.targetBundleID ?? "").id
     }
 
     // MARK: - Volume source picker
@@ -1054,7 +1336,9 @@ final class AppState: ObservableObject {
     private func showVolumeSessionHUD() {
         guard let session = volumeSession else { return }
         let rows = session.entries.map {
-            HookHUD.SourceRow(name: $0.name, percent: currentVolume(of: $0.source))
+            HookHUD.SourceRow(name: $0.name,
+                              percent: currentVolume(of: $0.source),
+                              muted: isProcessMuted($0.source))
         }
         HookHUD.shared.showVolumeSources(rows, selectedIndex: session.selectedIndex)
     }
@@ -1074,8 +1358,22 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// A row's per-app (process-tap) mute. Read from the controller itself
+    /// rather than the `mutedApps` mirror, which only catches up a run-loop
+    /// turn later — too late for the redraw right after a toggle.
+    private func isProcessMuted(_ source: VolumeSource) -> Bool {
+        guard #available(macOS 14.2, *), perAppMuteEnabled else { return false }
+        let bundleID: String?
+        switch source {
+        case .hookedTarget: bundleID = targetManager.targetBundleID
+        case .app(let id): bundleID = id
+        case .browserTab: bundleID = nil
+        }
+        return bundleID.map { muteController.isMuted($0) } ?? false
+    }
+
     private func hookedVolumeEntry() -> VolumeSourceEntry? {
-        guard tap.targetHasVolume, let def = currentTargetDefinition() else { return nil }
+        guard targetCanTakeVolume, let def = currentTargetDefinition() else { return nil }
         let name = selectedTargetIsBrowser
             ? (selectedBrowserMediaCandidate?.label ?? def.displayName)
             : def.displayName
@@ -1219,32 +1517,66 @@ final class AppState: ObservableObject {
     func setVolumeKeysEnabled(_ on: Bool, bundleID: String) {
         volumeKeyOverride[bundleID] = on
         UserDefaults.standard.set(volumeKeyOverride, forKey: Self.volumeOverrideKey)
-        updateVolumeHijack()
+        updateVolumeRouting()
         if on,
            tap.volumeKeysHijacked,
            let def = currentTargetDefinition(),
            def.bundleID == bundleID {
-            HookHUD.shared.show(appName: def.displayName, volumeKeysHijacked: true)
+            HookHUD.shared.show(appName: def.displayName, commandHint: commandVolumeHint)
         }
     }
 
     /// The volume keys are hijacked for the target only when it exposes a scriptable
-    /// volume AND the user has explicitly enabled it for that app.
-    private func updateVolumeHijack() {
+    /// volume AND the user has explicitly enabled it for that app. `targetCanTakeVolume`
+    /// gates both routings on the app actually running, so a quit target hands the
+    /// keys back to macOS instead of swallowing presses that could do nothing.
+    private func updateVolumeRouting() {
         tap.volumeKeysHijacked = VolumeKeyRouting.shouldHijack(
             targetBundleID: targetManager.targetBundleID,
             targetSupportsVolume: targetManager.targetSupportsVolume,
             preferences: volumeKeyOverride
         )
-        updateTargetHasVolume()
+        tap.commandVolumeRouting = commandVolumeRouting
+        tap.targetCanTakeVolume = targetCanTakeVolume
+        tap.targetCanTakeMute = targetCanTakeMute
+        updateVolumeSessionRouting()
+        objectWillChange.send()   // the ⌘ hint in the menu row derives from these
     }
 
-    /// Whether ⌘+Volume / ⌘+Mute have something to act on. A browser target only
-    /// does once a scan found a tab with a volume; until then the keys stay with
-    /// macOS rather than being swallowed for nothing.
-    private func updateTargetHasVolume() {
-        let browserReady = !selectedTargetIsBrowser || selectedBrowserMediaCandidate?.volume != nil
-        tap.targetHasVolume = targetManager.targetSupportsVolume && browserReady
+    /// The hooked target exposes a volume Beamhook can drive and is running right
+    /// now — the precondition for either routing to swallow a volume key.
+    var targetCanTakeVolume: Bool {
+        guard targetManager.targetSupportsVolume,
+              let bundleID = targetManager.targetBundleID else { return false }
+        return isRunning(bundleID: bundleID)
+    }
+
+    /// What ⌘ + a volume key reaches right now, or nil when ⌘ changes nothing.
+    /// Drives the hint in the menu row and on the overlay from one source.
+    var commandVolumeHint: VolumeKeyDestination? {
+        VolumeKeyRouting.commandHintDestination(
+            hijacked: tap.volumeKeysHijacked,
+            commandRoutingEnabled: commandVolumeRouting,
+            targetCanTakeVolume: targetCanTakeVolume)
+    }
+
+    /// Volume routing depends on whether the target is running, and nothing else
+    /// tells us that: the popover's refresh only runs while it's open, and a key
+    /// press can't afford to ask NSWorkspace on the tap thread.
+    private func observeTargetPresence() {
+        let center = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didLaunchApplicationNotification,
+                     NSWorkspace.didTerminateApplicationNotification] {
+            let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateVolumeRouting() }
+            }
+            workspaceObservers.append(token)
+        }
+    }
+
+    deinit {
+        let center = NSWorkspace.shared.notificationCenter
+        for token in workspaceObservers { center.removeObserver(token) }
     }
 }
 

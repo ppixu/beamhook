@@ -10,16 +10,92 @@ one-time, includes all 1.x updates); building from source is always free.
 
 - **Pick whose volume the keys control, right from the overlay.** While the
   volume overlay is up, ⌘↑ / ⌘↓ grows it into a list of the apps and browser
-  tabs that are playing, each with its own level, and moves the selection. The
-  volume keys then adjust the picked source until the overlay fades, so
-  turning down a YouTube tab no longer means opening the menu. ⌘PgUp / ⌘PgDn
-  work too. Beamhook only listens for these keys while the overlay is on
-  screen.
-- **⌘ + Mute mutes one app or tab.** It silences the current source — the
-  picked one, or the hooked app — and pressing it again restores the previous
-  level. Plain Mute still mutes the whole Mac.
-- **⌘ + Volume reaches the hooked app when the volume keys aren't routed to
-  it.** ⌘ now flips the volume keys either way.
+  tabs that are playing, each with its own level, and moves the selection.
+  Until the overlay fades, every volume key — with or without ⌘ — adjusts the
+  picked source, so turning down a YouTube tab no longer means opening the
+  menu. ⌘PgUp / ⌘PgDn work too. Beamhook only listens for these keys while the
+  overlay is on screen, and the overlay's bottom line names them.
+- **⌘ + Mute mutes the picked source.** While the list is up, ⌘ + Mute toggles
+  the selected row instead of following the usual rule. An app is muted with
+  the same per-app mute as the menu's buttons (so it needs that setting); a
+  browser tab is muted through its own volume, so the rest of the browser keeps
+  playing, and pressing it again restores the tab's previous level.
+
+## [1.2.1] — 2026-09-02
+
+### Changed
+
+- **Mute buttons are on by default.** They are the menu's answer for apps
+  Beamhook can't otherwise control, so they no longer wait behind a setting.
+  The System Audio Recording permission behind them is now requested the first
+  time Beamhook starts after this update — right after Accessibility on a fresh
+  install — instead of on the first mute. Turn the buttons off under
+  Settings → General if you'd rather not have them.
+
+## [1.2.0] — 2026-09-02
+
+### Added
+
+- **Mute any app from the menu — even ones Beamhook can't otherwise control.**
+  Turn on "Mute buttons next to apps" under Settings → General and every app in
+  the menu gets a speaker button. It works at the audio-system level, through a
+  Core Audio process tap, so it needs no AppleScript: Electron apps, chat apps
+  with notification chimes, and whole browsers can all be silenced with one
+  click. Mutes survive Beamhook restarts; quitting Beamhook unmutes everything.
+  Muting needs macOS 14.2 and the System Audio Recording permission, which
+  macOS asks for on the first mute. Beamhook only listens for its own mute and
+  never records or stores any audio. The setting is off by default.
+- **The speaker shows what is actually making sound.** While an app or a
+  browser tab plays, its speaker icon animates like a level meter. The signal
+  is real rather than "has an audio stream open": a browser's playing tabs, a
+  player's own reported state, and a live audio meter for apps that report
+  nothing — so a paused player, or a Unity session sitting silent in play
+  mode, stays still. When a browser plays from a page with no media player (a
+  Web Audio chime, a voice chat), the row says so instead of hinting at a tab
+  that isn't there.
+- **⌘ + mute toggles the hooked app's mute.** The mute key follows the same
+  rule as the volume keys: with "Volume keys" off, ⌘ + mute mutes the hooked
+  app; with it on, the plain mute key does and ⌘ + mute reaches the system.
+  Needs the mute setting above. An overlay confirms each press.
+- The menu-bar icon draws a slash through the hooked app's badge while that
+  app is muted.
+
+### Changed
+
+- Browser playback is now detected from the browser's audio helper process.
+  Chrome, Brave, Arc and Vivaldi play audio in a helper that macOS's list of
+  running apps doesn't include, which is why the "recently playing" list could
+  miss a Chromium browser; the same fix is what lets a browser be muted.
+- The switches in Settings are smaller.
+
+## [1.1.11] — 2026-08-28
+
+### Added
+
+- **⌘ now flips which volume the hardware keys control.** The volume keys are
+  routed to the hooked app only if you tick "Volume keys" for it, and that has
+  always left the other direction unreachable: with the box unticked there was
+  no way to change the hooked app's volume from the keyboard, and no reason to
+  hold ⌘. Now the modifier means the same thing in both states — whichever
+  volume the plain keys don't control.
+
+  | "Volume keys" | volume key | ⌘ + volume key |
+  |---|---|---|
+  | off (default) | system | the hooked app |
+  | on | the hooked app | system |
+
+  The plain keys keep their existing behaviour exactly, macOS gives ⌘ + a
+  volume key no meaning of its own, and the whole chord can be turned off under
+  Settings → General. The hint beside the "Volume keys" checkbox and the one on
+  the overlay now name whichever side ⌘ leads to, instead of only appearing
+  when the keys were hooked.
+
+### Fixed
+
+- The volume keys are no longer swallowed while the hooked app isn't running.
+  With "Volume keys" ticked for an app you had since quit, every press
+  disappeared into a target that could not act on it; they now fall back to the
+  system volume until the app is running again.
 
 ## [1.1.10] — 2026-08-09
 

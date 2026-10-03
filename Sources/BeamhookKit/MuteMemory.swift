@@ -1,9 +1,11 @@
 import Foundation
 
-/// ⌘ + Mute toggles one source by setting its volume, not through per-app mute
-/// properties (most apps have none). Muting remembers what it silenced so the
-/// next toggle can put it back. In-process only: after a restart, or when the
-/// user dragged a source to 0 themselves, unmuting restores `fallbackRestore`.
+/// During a volume-source picker session, ⌘ + Mute mutes a browser tab by
+/// setting its volume: a process-tap mute would silence the whole browser.
+/// (Apps use the process-tap mute instead.) Muting remembers what it silenced
+/// so the next toggle can put it back. In-process only: after a restart, or
+/// when the user dragged a tab to 0 themselves, unmuting restores
+/// `fallbackRestore`.
 public struct MuteMemory: Sendable {
     public static let fallbackRestore = 50
 

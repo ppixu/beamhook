@@ -40,3 +40,4 @@ Beamhook-*.dmg
 /release.sh
 /RELEASING.md
 /scripts/sign-release.sh
+/scripts/update-site.sh

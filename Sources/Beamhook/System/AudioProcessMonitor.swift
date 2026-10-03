@@ -31,17 +31,48 @@ final class AudioProcessMonitor: ObservableObject {
     func refresh() {
         var apps: [PlayingApp] = []
         for obj in Self.processObjectIDs() where Self.isRunningOutput(obj) {
-            guard let pid = Self.pid(obj),
-                  let running = NSRunningApplication(processIdentifier: pid),
-                  let rawBundleID = running.bundleIdentifier else { continue }
-            let identity = Self.browserIdentity(for: running, rawBundleID: rawBundleID)
-            let bid = identity?.bundleID ?? rawBundleID
-            let name = identity?.displayName ?? Self.displayName(for: running, bundleID: rawBundleID)
-            if !apps.contains(where: { $0.bundleID == bid }) {
-                apps.append(PlayingApp(id: bid, displayName: name, bundleID: bid))
+            guard let identity = Self.resolve(obj) else { continue }
+            // Never list Beamhook itself (any build: .dev or shipping). The
+            // mute assemblies run an IO proc that plays silence, which makes
+            // our own process a running-output audio client — a row nobody
+            // can meaningfully hook or mute.
+            if identity.bundleID.hasPrefix("com.github.ppixu.beamhook") { continue }
+            if !apps.contains(where: { $0.bundleID == identity.bundleID }) {
+                apps.append(PlayingApp(id: identity.bundleID,
+                                       displayName: identity.displayName,
+                                       bundleID: identity.bundleID))
             }
         }
         if apps != playingApps { playingApps = apps }
+    }
+
+    /// (displayName, bundleID) for one HAL process, or nil when it can't be
+    /// tied to an app the user would recognize. Internal (not private):
+    /// ProcessMuteController resolves processes with the same mapping, so a
+    /// mute applied to a row covers exactly the processes the row stands for.
+    ///
+    /// Two paths, because Core Audio's process list is broader than
+    /// LaunchServices': an app process (or a registered helper like WebKit's)
+    /// resolves through NSRunningApplication, but Chromium and Electron audio
+    /// helpers are spawned outside LaunchServices and only the HAL knows their
+    /// bundle id — those resolve through `kAudioProcessPropertyBundleID` and,
+    /// via the ".helper" convention, back to the app that owns them.
+    static func resolve(_ obj: AudioObjectID) -> (displayName: String, bundleID: String)? {
+        if let pid = pid(obj),
+           let running = NSRunningApplication(processIdentifier: pid),
+           let raw = running.bundleIdentifier {
+            if let identity = browserIdentity(for: running, rawBundleID: raw) { return identity }
+            return (displayName(for: running, bundleID: raw), raw)
+        }
+        guard let hal = bundleID(obj), !hal.isEmpty else { return nil }
+        if let identity = browserIdentity(bundleID: hal) { return identity }
+        // "<parent>.helper[…]" → the app it belongs to — but only when that
+        // app is really running, so a system daemon never becomes a row.
+        guard let helperRange = hal.range(of: ".helper") else { return nil }
+        let parentID = String(hal[..<helperRange.lowerBound])
+        guard let parent = NSRunningApplication
+            .runningApplications(withBundleIdentifier: parentID).first else { return nil }
+        return (parent.localizedName ?? parentID, parentID)
     }
 
     /// Human-facing name for an audio-emitting process. Safari (and any WebKit host,
@@ -68,24 +99,37 @@ final class AudioProcessMonitor: ObservableObject {
         if rawBundleID.hasPrefix("com.apple.WebKit"), name == "Safari" {
             return ("Safari", "com.apple.Safari")
         }
-        if rawBundleID == "com.google.Chrome" || rawBundleID.hasPrefix("com.google.Chrome.helper") {
+        return browserIdentity(bundleID: rawBundleID)
+    }
+
+    /// The Chromium browsers by bundle id alone (the app itself or any of its
+    /// ".helper" processes) — the WebKit case above needs a process name and
+    /// stays with the NSRunningApplication path.
+    private static func browserIdentity(bundleID: String) -> (displayName: String, bundleID: String)? {
+        if bundleID == "com.google.Chrome" || bundleID.hasPrefix("com.google.Chrome.helper") {
             return ("Chrome", "com.google.Chrome")
         }
-        if rawBundleID == "com.brave.Browser" || rawBundleID.hasPrefix("com.brave.Browser.helper") {
+        if bundleID == "com.brave.Browser" || bundleID.hasPrefix("com.brave.Browser.helper") {
             return ("Brave", "com.brave.Browser")
         }
-        if rawBundleID == "company.thebrowser.Browser" || rawBundleID.hasPrefix("company.thebrowser.Browser.helper") {
+        if bundleID == "company.thebrowser.Browser" || bundleID.hasPrefix("company.thebrowser.Browser.helper") {
             return ("Arc", "company.thebrowser.Browser")
         }
-        if rawBundleID == "com.vivaldi.Vivaldi" || rawBundleID.hasPrefix("com.vivaldi.Vivaldi.helper") {
+        if bundleID == "com.vivaldi.Vivaldi" || bundleID.hasPrefix("com.vivaldi.Vivaldi.helper") {
             return ("Vivaldi", "com.vivaldi.Vivaldi")
         }
         return nil
     }
 
-    // MARK: - Core Audio helpers
+    /// The bundle id an app row uses for one HAL process; nil for processes
+    /// that don't belong to a recognizable app. See `resolve`.
+    static func rowBundleID(for obj: AudioObjectID) -> String? {
+        resolve(obj)?.bundleID
+    }
 
-    private static func processObjectIDs() -> [AudioObjectID] {
+    // MARK: - Core Audio helpers (shared with ProcessMuteController)
+
+    static func processObjectIDs() -> [AudioObjectID] {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyProcessObjectList,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -102,7 +146,7 @@ final class AudioProcessMonitor: ObservableObject {
         return Array(ids.prefix(actualCount))
     }
 
-    private static func isRunningOutput(_ obj: AudioObjectID) -> Bool {
+    static func isRunningOutput(_ obj: AudioObjectID) -> Bool {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioProcessPropertyIsRunningOutput,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -113,7 +157,7 @@ final class AudioProcessMonitor: ObservableObject {
         return status == noErr && value != 0
     }
 
-    private static func pid(_ obj: AudioObjectID) -> pid_t? {
+    static func pid(_ obj: AudioObjectID) -> pid_t? {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioProcessPropertyPID,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -122,5 +166,19 @@ final class AudioProcessMonitor: ObservableObject {
         var size = UInt32(MemoryLayout<pid_t>.size)
         let status = AudioObjectGetPropertyData(obj, &address, 0, nil, &size, &value)
         return status == noErr ? value : nil
+    }
+
+    /// The HAL's own record of a process's bundle id — present even for audio
+    /// helpers LaunchServices has never heard of.
+    private static func bundleID(_ obj: AudioObjectID) -> String? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioProcessPropertyBundleID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var value: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(obj, &address, 0, nil, &size, &value) == noErr,
+              let value else { return nil }
+        return value.takeRetainedValue() as String
     }
 }
