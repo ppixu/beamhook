@@ -778,7 +778,7 @@
   const hookIcon = '<svg viewBox="429 49 105 195" aria-hidden="true"><path d="M462 49A33 33 0 1 0 462 115 33 33 0 1 0 462 49ZM462 68.5A13.5 13.5 0 1 1 462 95.5 13.5 13.5 0 1 1 462 68.5ZM452 100 452 203A41 41 0 0 0 534 203L534 149 504 183 515 197 515 203A21 21 0 0 1 473 203L473 100Z"/></svg>';
   const playIcon = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5 10 6 3 10.5Z"/></svg>';
   const pauseIcon = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1h3v10H2zM7 1h3v10H7z"/></svg>';
-  function isHooked(row) {
+  function isTarget(row) {
     return hookedID === row.id || previewRows.find(r => r.id === hookedID)?.parent === row.id;
   }
   function speaker(row) {
@@ -790,11 +790,11 @@
       + '</svg>';
   }
   function renderPreview() {
-    const visible = previewRows.filter(row => showAll || row.recent || isHooked(row));
+    const visible = previewRows.filter(row => showAll || row.recent || isTarget(row));
     rowsElement.innerHTML = visible.map(row => {
-      const active = isHooked(row);
+      const active = hookedID === row.id;
       return '<div class="preview-row '+(row.parent ? 'subitem ' : '')+(active ? 'hooked ' : '')+(row.muted ? 'muted' : '')+'" data-source="'+row.id+'">'
-        + '<button class="preview-name" data-action="hook" aria-label="'+(active ? 'Unhook ' : 'Hook ')+row.name+'" aria-pressed="'+active+'"><span class="preview-hook">'+hookIcon+'</span><span class="preview-title">'+row.name+'</span>'
+        + '<button class="preview-name" data-action="hook" aria-label="'+(isTarget(row) ? 'Unhook ' : 'Hook ')+row.name+'" aria-pressed="'+active+'"><span class="preview-hook">'+hookIcon+'</span><span class="preview-title">'+row.name+'</span>'
         + (row.track ? '<span class="preview-track"><span>'+row.track+'　　'+row.track+'</span></span>' : '') + '</button>'
         + (row.transport ? '<button class="preview-play" data-action="play" aria-label="'+(row.playing ? 'Pause ' : 'Play ')+row.name+'">'+(row.playing ? pauseIcon : playIcon)+'</button>' : '<span class="preview-play"></span>')
         + '<button class="preview-mute" data-action="mute" aria-label="'+(row.muted || row.volume === 0 ? 'Unmute ' : 'Mute ')+row.name+'" aria-pressed="'+Boolean(row.muted || row.volume === 0)+'">'+speaker(row)+'</button>'
@@ -815,7 +815,7 @@
     if (!button) return;
     const row = previewRows.find(r => r.id === button.closest('[data-source]').dataset.source);
     if (button.dataset.action === 'hook') {
-      hookedID = isHooked(row) ? null : row.id === 'safari' ? 'tab' : row.id;
+      hookedID = isTarget(row) ? null : row.id === 'safari' ? 'tab' : row.id;
     } else if (button.dataset.action === 'play') {
       row.playing = !row.playing;
     } else {

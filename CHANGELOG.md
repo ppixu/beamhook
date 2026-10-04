@@ -18,6 +18,9 @@ one-time, includes all 1.x updates); building from source is always free.
 
 - Only the hooked app shows a hook in the menu. Other rows drop the dim hook
   and keep its space, so names stay aligned.
+- A hooked browser tab shows the hook on the tab only, not on the browser too.
+- Long tab titles are cut short in the play/pause overlay instead of stretching
+  it across the screen.
 
 ### Fixed
 

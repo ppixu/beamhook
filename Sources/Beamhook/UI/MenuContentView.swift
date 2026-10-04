@@ -289,7 +289,9 @@ private struct AppVolumeRow: View {
 
     private var isTarget: Bool { state.targetManager.targetBundleID == playing.bundleID }
     private var isBrowser: Bool { BrowserKind.browser(bundleID: playing.bundleID) != nil }
-    private var isHooked: Bool { isTarget }
+    private var isHooked: Bool {
+        isTarget && !browserSources.contains { $0.id == state.selectedBrowserMediaID }
+    }
     private var automationDenied: Bool { state.automationDeniedBundleIDs.contains(playing.bundleID) }
     private var canPlayPause: Bool { state.canPlayPauseVolumeSource(.app(bundleID: playing.bundleID)) }
     private var canChangeVolume: Bool {
@@ -324,7 +326,7 @@ private struct AppVolumeRow: View {
                 .buttonStyle(.plain)
                 .hoverHighlight(cornerRadius: 6, behind: true)
                 .help(isTarget ? "Release media keys from \(playing.displayName)" : "Hook media keys to \(playing.displayName)")
-                .accessibilityLabel(isHooked ? "\(playing.displayName), hooked. Release media keys" : "Hook media keys to \(playing.displayName)")
+                .accessibilityLabel(isTarget ? "Release media keys from \(playing.displayName)" : "Hook media keys to \(playing.displayName)")
                 .contextMenu {
                     Button("Show \(playing.displayName)") { state.activate(bundleID: playing.bundleID) }
                 }
