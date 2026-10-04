@@ -15,6 +15,8 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ### Fixed
 
+- Opening or refreshing the volume overlay no longer crashes from overlapping
+  reads and writes of its source list.
 - Menu audio discovery runs in the background instead of freezing the menu
   every two seconds. Closing the menu discards pending scan results.
 - Menu-row hook icons draw at display resolution instead of using fractional

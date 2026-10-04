@@ -207,7 +207,7 @@ final class AppState: ObservableObject {
     private var muteMemory = MuteMemory()
     /// Non-nil while the source list is on screen — the spec's "volume session".
     /// While set, every volume key and ⌘+Mute follow its selection.
-    private var volumeSession: VolumeSourceList? {
+    var volumeSession: VolumeSourceList? {
         didSet {
             updateVolumeSessionRouting()
             updateMeterWatchlist()
@@ -1925,9 +1925,7 @@ final class AppState: ObservableObject {
         }
         if !showedAllSources, volumeSession?.showsAllSources == true {
             let audible = Set(volumePickerApps.map(\.bundleID))
-            volumeSession?.replace(target: hookedVolumeEntry(),
-                                   apps: playingVolumeApps(audible: audible),
-                                   tabs: browserVolumeTabs())
+            replaceVolumeSessionSources(audible: audible)
             startVolumeSessionRefresh(audible: audible)
         }
         showVolumeSessionHUD()
@@ -1969,8 +1967,7 @@ final class AppState: ObservableObject {
             if selectedTargetIsBrowser { await refreshBrowserMedia() }
             guard activeVolumeSession == session else { return }
             let audible = audibleBundleIDs()
-            volumeSession?.replace(target: hookedVolumeEntry(),
-                                   apps: playingVolumeApps(audible: audible), tabs: browserVolumeTabs())
+            replaceVolumeSessionSources(audible: audible)
             volumeSession?.select(.hookedTarget)
             showVolumeSessionHUD()
         }
@@ -2013,8 +2010,7 @@ final class AppState: ObservableObject {
         _ = recentBrowserSources(from: activeBrowserMediaCandidates.filter { $0.browser == browser }, browser: browser)
         guard activeVolumeSession == session else { return }
         let audible = audibleBundleIDs()
-        volumeSession?.replace(target: hookedVolumeEntry(),
-                               apps: playingVolumeApps(audible: audible), tabs: browserVolumeTabs())
+        replaceVolumeSessionSources(audible: audible)
         volumeSession?.select(.browserTab(id: candidate.id))
         showVolumeSessionHUD()
     }
@@ -2261,13 +2257,22 @@ final class AppState: ObservableObject {
     }
 
     private func refreshRecentOverlaySources() {
-        guard var updated = volumeSession else { return }
-        updated.replace(target: hookedVolumeEntry(),
-                        apps: playingVolumeApps(audible: Set(volumePickerApps.map(\.bundleID))),
-                        tabs: browserVolumeTabs())
-        guard updated != volumeSession else { return }
-        volumeSession = updated
+        guard replaceVolumeSessionSources(audible: Set(volumePickerApps.map(\.bundleID))) else { return }
         showVolumeSessionHUD()
+    }
+
+    /// Build from a local copy: playingVolumeApps reads volumeSession, so calling
+    /// volumeSession?.replace with it as an argument overlaps a read and write
+    /// to the same property and traps under Swift's exclusivity checks.
+    @discardableResult
+    func replaceVolumeSessionSources(audible: Set<String>) -> Bool {
+        guard var updated = volumeSession else { return false }
+        updated.replace(target: hookedVolumeEntry(),
+                        apps: playingVolumeApps(audible: audible),
+                        tabs: browserVolumeTabs())
+        guard updated != volumeSession else { return false }
+        volumeSession = updated
+        return true
     }
 
     private var volumePickerApps: [PlayingApp] = []
@@ -2338,9 +2343,7 @@ final class AppState: ObservableObject {
                 guard !Task.isCancelled, self.volumeSession != nil else { return }
                 self.volumePickerApps = self.playingAppRows(apps)
                 audible = Set(self.volumePickerApps.map(\.bundleID))
-                self.volumeSession?.replace(target: self.hookedVolumeEntry(),
-                                            apps: self.playingVolumeApps(audible: audible),
-                                            tabs: self.browserVolumeTabs())
+                self.replaceVolumeSessionSources(audible: audible)
                 self.showVolumeSessionHUD()
             }
             for entry in self.volumeSession?.entries ?? [] {
@@ -2368,9 +2371,7 @@ final class AppState: ObservableObject {
 
             await self.refreshActiveBrowserMedia(bundleIDs: audible)
             guard !Task.isCancelled, self.volumeSession != nil else { return }
-            self.volumeSession?.replace(target: self.hookedVolumeEntry(),
-                                        apps: self.playingVolumeApps(audible: audible),
-                                        tabs: self.browserVolumeTabs())
+            self.replaceVolumeSessionSources(audible: audible)
             self.showVolumeSessionHUD()
         }
     }
