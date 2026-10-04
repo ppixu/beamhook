@@ -6,6 +6,23 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ## [Unreleased]
 
+### Changed
+
+- Only the hooked app shows a hook in the menu. Other rows drop the dim hook
+  and keep its space, so names stay aligned.
+
+### Fixed
+
+- Per-app volume, mute and sound detection work when the output device has
+  inputs of its own, such as a USB audio interface with a microphone input.
+  Beamhook previously rejected every app's audio on these devices, so apps
+  like Safari, QuickTime Player and Podcasts showed an error, couldn't be
+  adjusted, and never appeared as playing. Sound detection also ignores the
+  device's own inputs, so a live microphone can't make an app look active.
+- The volume overlay follows a switch between light and dark mode right away
+  instead of keeping the old look until Beamhook restarts. This also fixes
+  play/pause icons that turned white and hard to see after a switch.
+
 ## [1.3.3] — 2026-10-04
 
 ### Added
