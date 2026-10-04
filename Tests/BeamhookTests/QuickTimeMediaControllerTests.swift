@@ -8,7 +8,8 @@ final class QuickTimeMediaControllerTests: XCTestCase {
         for source in [try XCTUnwrap(BuiltInApps.quickTime.playPauseScript),
                        QuickTimeMediaController.scanScript,
                        QuickTimeMediaController.script(for: movie, toggle: true),
-                       QuickTimeMediaController.script(for: movie, toggle: false)] {
+                       QuickTimeMediaController.script(for: movie, toggle: false),
+                       QuickTimeMediaController.seekScript(for: movie, seconds: -15)] {
             let script = try XCTUnwrap(NSAppleScript(source: "with timeout of 5 seconds\n\(source)\nend timeout"))
             var error: NSDictionary?
             XCTAssertTrue(script.compileAndReturnError(&error), "\(error ?? [:])")
@@ -79,6 +80,27 @@ final class QuickTimeMediaControllerTests: XCTestCase {
         status.reset(for: new)
         status.accept(true, from: observation)
         XCTAssertNil(status.isPlaying)
+    }
+
+    func testSeekAddsSignedSecondsInsideAppleScript() {
+        let executor = QuickTimeExecutor()
+        let controller = QuickTimeMediaController(executor: executor, processID: { 42 })
+        let movie = QuickTimeMovie(processID: 42, windowID: 7, title: "Clip", isPlaying: true)
+        executor.output = "OK"
+        XCTAssertTrue(controller.seek(movie, by: -15))
+        let script = executor.scripts.last ?? ""
+        XCTAssertTrue(script.contains("window id 7"))
+        XCTAssertTrue(script.contains("current time of targetMovie"))
+        XCTAssertTrue(script.contains("(-15)"))
+        XCTAssertFalse(script.contains("as text"))
+    }
+
+    func testSeekRefusesAMovieFromAnotherProcess() {
+        let executor = QuickTimeExecutor()
+        let controller = QuickTimeMediaController(executor: executor, processID: { 99 })
+        let movie = QuickTimeMovie(processID: 42, windowID: 7, title: "Clip", isPlaying: true)
+        XCTAssertFalse(controller.seek(movie, by: 15))
+        XCTAssertTrue(executor.scripts.isEmpty)
     }
 }
 

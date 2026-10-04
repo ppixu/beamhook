@@ -331,6 +331,64 @@ final class BrowserMediaControllerTests: XCTestCase {
         \(window)\t\(tab)\t{"sourceID":"\(escapedID)","title":"Test","artist":"","host":"\(host)","playing":true,"selected":false,"live":\(live),"volume":50}
         """
     }
+
+    // MARK: - Short skip
+
+    func testTransportFactsDecodeThePagesAnswer() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        executor.output = #"{"host":"youtube.com","duration":3600.5,"hasListParam":false,"nextButton":"enabled","live":false}"#
+        let facts = controller.transportFacts(makeCandidate())
+        XCTAssertEqual(facts, BrowserPlaybackFacts(host: "youtube.com", duration: 3600.5,
+                                                   hasListParam: false, nextButton: .enabled, live: false))
+        let script = executor.scripts.last ?? ""
+        XCTAssertTrue(script.contains("550e8400-e29b-41d4-a716-446655440000"))
+        XCTAssertTrue(script.contains("hasListParam"))
+        XCTAssertTrue(script.contains("ytmusic-player-bar .next-button"))
+    }
+
+    func testTransportFactsAreNilWhenTheSourceIsGoneOrScriptFails() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        executor.output = "NO"
+        XCTAssertNil(controller.transportFacts(makeCandidate()))
+        executor.output = "{}"
+        executor.succeeds = false
+        XCTAssertNil(controller.transportFacts(makeCandidate()))
+    }
+
+    func testSeekMovesCurrentTimeBySignedSeconds() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        XCTAssertTrue(controller.seek(by: -10, on: makeCandidate()))
+        let script = executor.scripts.last ?? ""
+        XCTAssertTrue(script.contains("currentTime"))
+        XCTAssertTrue(script.contains("(-10)"))
+    }
+
+    func testBrowserScriptsKeepJavaScriptFreeOfDoubleQuotes() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        _ = controller.transportFacts(makeCandidate())
+        _ = controller.seek(by: 15, on: makeCandidate())
+        for script in executor.scripts {
+            let js = script.components(separatedBy: "set javascriptSource to \"").dropFirst().first?
+                .components(separatedBy: "\"\n").first ?? ""
+            XCTAssertFalse(js.isEmpty)
+            XCTAssertFalse(js.contains("\\"))
+        }
+    }
+
+    func testNextAndPreviousAlsoReachBandcampAndYouTubeMusicButtons() {
+        let executor = RecordingScriptExecutor()
+        let controller = BrowserMediaController(executor: executor)
+        _ = controller.perform(.next, on: makeCandidate())
+        _ = controller.perform(.previous, on: makeCandidate())
+        XCTAssertTrue(executor.scripts[0].contains(".nextbutton"))
+        XCTAssertTrue(executor.scripts[1].contains(".prevbutton"))
+        XCTAssertTrue(executor.scripts[0].contains("ytmusic-player-bar .next-button"))
+        XCTAssertTrue(executor.scripts[1].contains("ytmusic-player-bar .previous-button"))
+    }
 }
 
 final class PlaybackStatusTests: XCTestCase {

@@ -204,6 +204,28 @@ final class BrowserMediaController: @unchecked Sendable {
         return executor.run(script).succeeded
     }
 
+    /// What the page says about its media right now, for the short-skip
+    /// decision. nil when the tab is gone or the script fails — the caller then
+    /// keeps the plain track command.
+    func transportFacts(_ candidate: BrowserMediaCandidate) -> BrowserPlaybackFacts? {
+        let js = """
+        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; \(BrowserJS.pick) const p = bhPick(); if (!p) return 'NO'; const d = p.el.duration; const nb = document.querySelector('.ytp-next-button, .nextbutton, ytmusic-player-bar .next-button'); const disabled = nb && (nb.getAttribute('aria-disabled') === 'true' || nb.classList.contains('hiddenelem') || nb.style.display === 'none'); return JSON.stringify({host: location.hostname.replace(/^www[.]/, ''), duration: isFinite(d) && d > 0 ? d : null, hasListParam: new URLSearchParams(location.search).has('list'), nextButton: !nb ? 'absent' : (disabled ? 'disabled' : 'enabled'), live: p.live}); })()
+        """
+        let result = executor.run(targetedQueryScript(js, candidate: candidate))
+        guard result.succeeded,
+              let output = result.output?.trimmingCharacters(in: .whitespacesAndNewlines),
+              output.hasPrefix("{") else { return nil }
+        return try? JSONDecoder().decode(BrowserPlaybackFacts.self, from: Data(output.utf8))
+    }
+
+    /// Jumps the page's media by `seconds`, clamped inside its length.
+    func seek(by seconds: Int, on candidate: BrowserMediaCandidate) -> Bool {
+        let js = """
+        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; \(BrowserJS.pick) const p = bhPick(); if (!p || p.live) return 'NO'; const d = p.el.duration; if (!isFinite(d) || d <= 0) return 'NO'; p.el.currentTime = Math.max(0, Math.min(d - 0.5, p.el.currentTime + (\(seconds)))); return 'MATCH'; })()
+        """
+        return executor.run(targetedActionScript(js, candidate: candidate)).succeeded
+    }
+
     private func scanScript(_ browser: BrowserKind) -> String {
         let js = """
         (() => { \(BrowserJS.pick) const p = bhPick(); const md = navigator.mediaSession && navigator.mediaSession.metadata; if (!p && !md) return null; const key = '__beamhookSourceID_v1'; const makeID = () => globalThis.crypto && globalThis.crypto.randomUUID ? globalThis.crypto.randomUUID() : [Date.now().toString(36), Math.random().toString(36).slice(2)].join('-'); const sourceID = globalThis[key] || (globalThis[key] = makeID()); return JSON.stringify({sourceID,title:(md && md.title) || document.title || location.hostname,artist:(md && md.artist) || '',host:location.hostname || '',playing:p ? (!p.el.paused && !p.el.ended) : navigator.mediaSession.playbackState === 'playing',live:p ? p.live : false,selected:sessionStorage.getItem('beamhook-selected') === '1',volume:p ? Math.round(p.el.volume * 100) : null}); })()
@@ -300,14 +322,14 @@ final class BrowserMediaController: @unchecked Sendable {
 
     private func nextScript(_ candidate: BrowserMediaCandidate) -> String {
         let js = """
-        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; const b = document.querySelector('.ytp-next-button'); if (!b) return 'NO'; b.click(); return 'MATCH'; })()
+        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; const b = document.querySelector('.ytp-next-button, .nextbutton, ytmusic-player-bar .next-button'); if (!b) return 'NO'; b.click(); return 'MATCH'; })()
         """
         return targetedActionScript(js, candidate: candidate)
     }
 
     private func previousScript(_ candidate: BrowserMediaCandidate) -> String {
         let js = """
-        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; const b = document.querySelector('.ytp-prev-button'); if (!b) return 'NO'; b.click(); return 'MATCH'; })()
+        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; const b = document.querySelector('.ytp-prev-button, .prevbutton, ytmusic-player-bar .previous-button'); if (!b) return 'NO'; b.click(); return 'MATCH'; })()
         """
         return targetedActionScript(js, candidate: candidate)
     }
@@ -350,6 +372,39 @@ final class BrowserMediaController: @unchecked Sendable {
         end tell
         if targetFound is false then error "Selected browser media source is no longer available"
         return true
+        """
+    }
+
+    /// Like `targetedActionScript`, but returns whatever the page answered
+    /// instead of `true`. Any answer other than `NO` counts as the match.
+    private func targetedQueryScript(
+        _ javascript: String,
+        candidate: BrowserMediaCandidate
+    ) -> String {
+        let evaluate = candidate.browser == .safari
+            ? "do JavaScript javascriptSource in candidateTab"
+            : "execute candidateTab javascript javascriptSource"
+        return """
+        set javascriptSource to "\(javascript)"
+        set pageAnswer to "NO"
+        tell application "\(candidate.browser.applicationName)"
+            try
+                set candidateTab to tab \(candidate.tabIndex) of window \(candidate.windowIndex)
+                set pageAnswer to \(evaluate)
+            end try
+            if pageAnswer is "NO" or pageAnswer is missing value then
+                repeat with browserWindow in windows
+                    repeat with candidateTab in tabs of browserWindow
+                        try
+                            set pageAnswer to \(evaluate)
+                            if pageAnswer is not "NO" and pageAnswer is not missing value then exit repeat
+                        end try
+                    end repeat
+                    if pageAnswer is not "NO" and pageAnswer is not missing value then exit repeat
+                end repeat
+            end if
+        end tell
+        return pageAnswer
         """
     }
 

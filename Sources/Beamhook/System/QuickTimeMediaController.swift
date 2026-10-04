@@ -75,6 +75,30 @@ final class QuickTimeMediaController: @unchecked Sendable {
         }
     }
 
+    /// Jumps the chosen movie by `seconds`, clamped to its length.
+    func seek(_ movie: QuickTimeMovie, by seconds: Int) -> Bool {
+        guard processID() == movie.processID else { return false }
+        let result = executor.run(Self.seekScript(for: movie, seconds: seconds))
+        return result.succeeded && result.output == "OK"
+    }
+
+    /// The arithmetic stays in AppleScript; times read as text are
+    /// locale-formatted (`12,5` on comma locales).
+    static func seekScript(for movie: QuickTimeMovie, seconds: Int) -> String {
+        """
+        tell application "QuickTime Player"
+            if not (exists window id \(movie.windowID)) then return "missing"
+            set targetMovie to document of window id \(movie.windowID)
+            if targetMovie is missing value then return "missing"
+            set newTime to (current time of targetMovie) + (\(seconds))
+            if newTime < 0 then set newTime to 0
+            if newTime > (duration of targetMovie) then set newTime to duration of targetMovie
+            set current time of targetMovie to newTime
+            return "OK"
+        end tell
+        """
+    }
+
     static func script(for movie: QuickTimeMovie, toggle: Bool) -> String {
         let action = toggle ? """
         if playing of targetMovie then
