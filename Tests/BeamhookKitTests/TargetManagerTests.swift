@@ -22,6 +22,62 @@ final class TargetManagerTests: XCTestCase {
                       runner: runner, volumeStep: volumeStep)
     }
 
+    func testFailedCommandsPropagateThroughBothRoutes() async {
+        let resolver = MockResolver()
+        let app = MockMediaApp(id: "music", isRunning: true)
+        app.commandSucceeds = false
+        resolver.apps[app.id] = app
+        let manager = makeManager(resolver: resolver)
+        manager.selectedTargetID = app.id
+        let targetResult = await manager.route(.playPause)
+        let rowResult = await manager.route(.playPause, toBundleID: app.bundleID)
+        XCTAssertFalse(targetResult)
+        XCTAssertFalse(rowResult)
+        XCTAssertEqual(app.performedCommands.count, 2)
+    }
+
+    func testTrackKeysRunMusicScriptsWithoutTouchingSpotify() async {
+        final class Resolver: MediaAppResolver {
+            let apps: [MediaApp]
+            init(_ apps: [MediaApp]) { self.apps = apps }
+            func app(withID id: String) -> MediaApp? { apps.first { $0.id == id } }
+            func allApps() -> [MediaApp] { apps }
+        }
+        let presence = MockPresence()
+        presence.runningBundleIDs = [BuiltInApps.music.bundleID, BuiltInApps.spotify.bundleID,
+                                      BuiltInApps.quickTime.bundleID]
+        let musicExecutor = MockScriptExecutor()
+        let spotifyExecutor = MockScriptExecutor()
+        let quickTimeExecutor = MockScriptExecutor()
+        let music = ScriptedMediaApp(definition: BuiltInApps.music, executor: musicExecutor, presence: presence)
+        let spotify = ScriptedMediaApp(definition: BuiltInApps.spotify, executor: spotifyExecutor, presence: presence)
+        let quickTime = ScriptedMediaApp(definition: BuiltInApps.quickTime, executor: quickTimeExecutor, presence: presence)
+        let manager = makeManager(resolver: Resolver([music, spotify, quickTime]))
+        manager.selectedTargetID = music.id
+        for key in [MediaKey.next, .previous, .fastForward, .rewind] {
+            let result = await manager.route(key)
+            XCTAssertTrue(result)
+        }
+        XCTAssertEqual(musicExecutor.ranScripts, [
+            "tell application \"Music\" to next track",
+            "tell application \"Music\" to previous track",
+            "tell application \"Music\" to next track",
+            "tell application \"Music\" to previous track"
+        ])
+        // Unsupported commands and denied access must not fall back to Spotify.
+        manager.selectedTargetID = quickTime.id
+        for key in [MediaKey.next, .previous, .fastForward, .rewind] {
+            let result = await manager.route(key)
+            XCTAssertFalse(result)
+        }
+        XCTAssertTrue(quickTimeExecutor.ranScripts.isEmpty)
+        manager.selectedTargetID = music.id
+        musicExecutor.succeed = false
+        let denied = await manager.route(.next)
+        XCTAssertFalse(denied)
+        XCTAssertTrue(spotifyExecutor.ranScripts.isEmpty)
+    }
+
     func testSelectionPersists() {
         let defaults = makeDefaults()
         let resolver = MockResolver()

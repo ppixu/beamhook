@@ -88,6 +88,37 @@ final class MediaKeyTapTests: XCTestCase {
         XCTAssertTrue(passedThrough.isEmpty)
     }
 
+    func testBothTrackKeyPairsAreSwallowedAndRoutedOncePerPress() {
+        for (code, key) in [(17, MediaKey.next), (18, .previous), (19, .fastForward), (20, .rewind)] {
+            var handled: [MediaKey] = []
+            var passed: [MediaKey] = []
+            let tap = MediaKeyTap(handler: { handled.append($0) },
+                                  passthroughHandler: { passed.append($0) })
+            tap.transportKeysHijacked = true
+            for (down, repeated) in [(true, false), (true, true), (false, false)] {
+                let event = mediaKeyEvent(keyCode: code, isDown: down, isRepeat: repeated)
+                XCTAssertNil(tap.handle(type: systemDefinedType, event: event), "code \(code) must not reach Spotify")
+            }
+            drainMainQueue()
+            XCTAssertEqual(handled, [key])
+            XCTAssertTrue(passed.isEmpty)
+        }
+    }
+
+    func testAlternateTrackKeysPassThroughWhenUnhooked() {
+        var handled: [MediaKey] = []
+        let tap = MediaKeyTap(handler: { handled.append($0) })
+        tap.transportKeysHijacked = false
+        for code in [19, 20] {
+            for (down, repeated) in [(true, false), (true, true), (false, false)] {
+                let event = mediaKeyEvent(keyCode: code, isDown: down, isRepeat: repeated)
+                XCTAssertNotNil(tap.handle(type: systemDefinedType, event: event))
+            }
+        }
+        drainMainQueue()
+        XCTAssertTrue(handled.isEmpty)
+    }
+
     // MARK: - Volume routing
 
     /// NX_KEYTYPE_SOUND_UP.

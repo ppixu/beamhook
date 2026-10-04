@@ -47,7 +47,8 @@ public protocol MediaApp: AnyObject {
     var isRunning: Bool { get }
     /// Running and ready to answer Apple events promptly. Defaults to `isRunning`.
     var isReady: Bool { get }
-    func perform(_ command: MediaCommand)
+    /// True only when the target accepted the command.
+    @discardableResult func perform(_ command: MediaCommand) -> Bool
     var supportsVolume: Bool { get }
     func currentVolume() -> Int?    // 0...100, nil if unsupported/unavailable
     func setVolume(_ percent: Int)  // 0...100

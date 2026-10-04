@@ -62,8 +62,7 @@ public final class TargetManager {
             // Check at execution time so a command queued while the app is finishing
             // launch is not silently discarded before it reaches the scripting lane.
             guard app.isReady else { return false }
-            app.perform(command)   // perform() re-checks readiness off-main
-            return true
+            return app.perform(command)
         }
     }
 
@@ -75,8 +74,7 @@ public final class TargetManager {
         else { return false }
         return await runner.run {
             guard app.isReady else { return false }
-            app.perform(command)   // perform() re-checks readiness off-main
-            return true
+            return app.perform(command)
         }
     }
 

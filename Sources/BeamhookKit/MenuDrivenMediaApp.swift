@@ -28,17 +28,18 @@ public final class MenuDrivenMediaApp: MediaApp, @unchecked Sendable {
     public var isRunning: Bool { presence.isRunning(bundleID: definition.bundleID) }
     public var isReady: Bool { presence.isReady(bundleID: definition.bundleID) }
 
-    public func perform(_ command: MediaCommand) {
+    @discardableResult
+    public func perform(_ command: MediaCommand) -> Bool {
         // A launching app has no menu bar yet, so the lookup would only fail slowly.
-        guard isReady else { return }
+        guard isReady else { return false }
         let path: MenuItemPath?
         switch command {
         case .playPause: path = control.playPause
         case .next:      path = control.next
         case .previous:  path = control.previous
         }
-        guard let path else { return }
-        _ = presser.press(path, bundleID: definition.bundleID)
+        guard let path else { return false }
+        return presser.press(path, bundleID: definition.bundleID)
     }
 
     /// Menus only step the volume up and down; there is no absolute set to map onto

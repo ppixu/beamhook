@@ -19,10 +19,11 @@ public final class ScriptedMediaApp: MediaApp, @unchecked Sendable {
     public var isRunning: Bool { presence.isRunning(bundleID: definition.bundleID) }
     public var isReady: Bool { presence.isReady(bundleID: definition.bundleID) }
 
-    public func perform(_ command: MediaCommand) {
+    @discardableResult
+    public func perform(_ command: MediaCommand) -> Bool {
         // Ready (not merely running): scripting a still-launching app can block the
         // Apple-event send for a long time.
-        guard isReady else { return }
+        guard isReady else { return false }
         let script: String?
         switch command {
         case .playPause: script = definition.playPauseScript
@@ -30,8 +31,9 @@ public final class ScriptedMediaApp: MediaApp, @unchecked Sendable {
         case .previous:  script = definition.previousScript
         }
         if let script, !script.isEmpty {
-            _ = executor.run(script)
+            return executor.run(script).succeeded
         }
+        return false
     }
 
     public var supportsVolume: Bool {

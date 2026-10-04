@@ -23,12 +23,7 @@ public enum MediaKey: Equatable, Sendable {
     }
 
     /// Keys we intercept (swallow) and forward to the target app.
-    public var isHandledTransport: Bool {
-        switch self {
-        case .playPause, .next, .previous: return true
-        default: return false
-        }
-    }
+    public var isHandledTransport: Bool { command != nil }
 
     /// Hardware volume up/down. Mute is not in this set: it shares the volume
     /// cluster's Command-flip routing but toggles the hooked app's process-tap
@@ -43,8 +38,11 @@ public enum MediaKey: Equatable, Sendable {
     public var command: MediaCommand? {
         switch self {
         case .playPause: return .playPause
-        case .next: return .next
-        case .previous: return .previous
+        // Some keyboards send FAST/REWIND for the track buttons instead of
+        // NEXT/PREVIOUS. Treat their initial press as a track change; the tap
+        // consumes repeats and key-up without sending additional commands.
+        case .next, .fastForward: return .next
+        case .previous, .rewind: return .previous
         default: return nil
         }
     }

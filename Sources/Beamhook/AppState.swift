@@ -10,6 +10,7 @@ struct PlaybackTargetContext: Hashable, Sendable {
     let targetID: String?
     let browserMediaID: String?
     let revision: UInt64
+    var quickTimeMovieID: String? = nil
 }
 
 /// Tags one playback read with the local menu-state revision at which it began.
@@ -24,6 +25,16 @@ struct PlaybackObservation: Equatable {
 /// Every mutation is tagged with its playback context; late polls and command
 /// completions from an earlier hook are ignored.
 struct PlaybackStatus {
+    static func symbol(for playing: Bool?) -> String {
+        guard let playing else { return "playpause.fill" }
+        return playing ? "pause.fill" : "play.fill"
+    }
+
+    static func actionLabel(for playing: Bool?, name: String) -> String {
+        guard let playing else { return "Play or pause \(name) (playback state unavailable)" }
+        return "\(playing ? "Pause" : "Play") \(name)"
+    }
+
     private(set) var context: PlaybackTargetContext?
     private(set) var isPlaying: Bool?
     private(set) var commandContext: PlaybackTargetContext?
@@ -57,7 +68,7 @@ struct PlaybackStatus {
         // stale before optimistically changing the displayed state.
         revision &+= 1
         commandContext = context
-        isPlaying = !(isPlaying == true)
+        isPlaying = isPlaying.map { !$0 }
         return true
     }
 
@@ -109,6 +120,37 @@ final class AppState: ObservableObject {
     private let metadataRunner = ScriptRunner()
     private let browserMediaController: BrowserMediaController
     private var menuBrowserHookRevision: UInt64 = 0
+    private let quickTimeController = QuickTimeMediaController()
+    @Published private(set) var quickTimeMovies: [QuickTimeMovie] = []
+    @Published private(set) var quickTimeScanFailed = false
+    @Published private(set) var selectedQuickTimeMovieID: String? {
+        didSet {
+            if selectedQuickTimeMovieID != oldValue { playbackContextRevision &+= 1 }
+        }
+    }
+    var selectedTargetIsQuickTime: Bool { selectedTargetID == BuiltInApps.quickTime.id }
+
+    func selectQuickTimeMovie(_ id: String) {
+        guard quickTimeMovies.contains(where: { $0.id == id }) else { return }
+        selectedQuickTimeMovieID = id
+    }
+
+    func refreshQuickTimeMovies() async {
+        guard selectedTargetIsQuickTime else { return }
+        let context = playbackTargetContext
+        let movies = await pollRunner.run { [quickTimeController] in quickTimeController.scan() }
+        guard context == playbackTargetContext else { return }
+        quickTimeScanFailed = movies == nil
+        quickTimeMovies = movies ?? []
+        if !quickTimeMovies.contains(where: { $0.id == selectedQuickTimeMovieID }) {
+            selectedQuickTimeMovieID = quickTimeMovies.first(where: { $0.isPlaying })?.id
+                ?? quickTimeMovies.first?.id
+        }
+    }
+
+    private func toggleQuickTimeMovie(_ movie: QuickTimeMovie) async -> Bool {
+        await scripting.run { [quickTimeController] in quickTimeController.toggle(movie) }
+    }
     /// Launches the hooked app for a play/pause press it would otherwise swallow.
     private let targetLauncher: TargetLauncher
     /// Per-browser playback recency used to keep the menu bounded to the three
@@ -409,7 +451,13 @@ final class AppState: ObservableObject {
         case .mute:       handleMuteKey()
         default:
             guard let command = key.command else { return }
-            if selectedTargetIsBrowser, browserMediaInjectionAvailable == true {
+            if selectedTargetIsQuickTime {
+                guard command == .playPause else { return }
+                let context = playbackTargetContext
+                Task {
+                    if await togglePlayPauseTarget(in: context) { await announcePlayPause() }
+                }
+            } else if selectedTargetIsBrowser, browserMediaInjectionAvailable == true {
                 guard let candidate = selectedBrowserMediaCandidate,
                       candidate.supportsTransport
                 else { return }
@@ -428,7 +476,8 @@ final class AppState: ObservableObject {
                     // meaningful target.
                     if routed {
                         await self.announcePlayPause()
-                    } else {
+                    } else if let id = self.selectedTargetID,
+                              let app = self.registry.app(withID: id), !app.isReady {
                         await self.launchTargetAndPlay()
                     }
                 }
@@ -510,14 +559,14 @@ final class AppState: ObservableObject {
             app,
             isStillHooked: { [weak self] in self?.selectedTargetID == id },
             onLaunchStarted: { HookHUD.shared.showLaunching(appName: displayName) })
-        // Only the two failure modes a user can actually report ("I pressed play
-        // and nothing happened") are worth a log line; .skipped/.alreadyPlaying/
-        // .played are all either silent by design or already visible via the HUD.
+        // Report launch and command failures; successful playback has its HUD.
         switch outcome {
         case .notInstalled:
             Self.log.error("launch-on-play: \(displayName, privacy: .public) is not installed")
         case .timedOut:
             Self.log.error("launch-on-play: \(displayName, privacy: .public) timed out waiting for readiness")
+        case .commandFailed:
+            Self.log.error("launch-on-play: playback command failed for \(displayName, privacy: .public)")
         case .played:
             // Close the loop opened by the "Starting …" overlay: the app is up
             // and playing. No state read needed — the launcher only reports
@@ -665,7 +714,8 @@ final class AppState: ObservableObject {
         PlaybackTargetContext(
             targetID: selectedTargetID,
             browserMediaID: selectedTargetIsBrowser ? selectedBrowserMediaID : nil,
-            revision: playbackContextRevision
+            revision: playbackContextRevision,
+            quickTimeMovieID: selectedTargetIsQuickTime ? selectedQuickTimeMovieID : nil
         )
     }
 
@@ -682,6 +732,7 @@ final class AppState: ObservableObject {
         let playing: Bool
         let at: Date
     }
+    @Published private(set) var automationDeniedBundleIDs: Set<String> = []
     @Published private(set) var playbackHints: [String: PlaybackHint] = [:]
     /// Apps with a toggle in flight. A poll that lands mid-toggle would read
     /// the state we just left (Spotify keeps reporting "paused" for a beat
@@ -697,9 +748,13 @@ final class AppState: ObservableObject {
     }
 
     /// From a periodic poll — dropped while that app's toggle is settling.
-    func notePolledPlayback(bundleID: String, playing: Bool) {
+    func notePolledPlayback(bundleID: String, playing: Bool?) {
         guard !playbackSettling.contains(bundleID) else { return }
-        notePlayback(bundleID: bundleID, playing: playing)
+        if let playing {
+            notePlayback(bundleID: bundleID, playing: playing)
+        } else {
+            playbackHints.removeValue(forKey: bundleID)
+        }
     }
 
     func playbackHint(for bundleID: String) -> Bool? {
@@ -775,7 +830,10 @@ final class AppState: ObservableObject {
         guard context == playbackTargetContext, let id = context.targetID else { return nil }
 
         let result: Bool?
-        if let browser = BrowserKind.target(id: id) {
+        if id == BuiltInApps.quickTime.id, let movieID = context.quickTimeMovieID {
+            guard let movie = quickTimeMovies.first(where: { $0.id == movieID }) else { return nil }
+            result = await runner.run { [quickTimeController] in quickTimeController.isPlaying(movie) }
+        } else if let browser = BrowserKind.target(id: id) {
             guard browserMediaInjectionAvailable == true,
                   let candidate = browserMediaCandidates.first(where: {
                       $0.id == context.browserMediaID && $0.browser == browser
@@ -787,7 +845,8 @@ final class AppState: ObservableObject {
         } else {
             guard let app = registry.app(withID: id) else { return nil }
             result = await runner.run { app.isPlaying() }
-            if notingHint, let result, context == playbackTargetContext {
+            await refreshPlaybackPermission(bundleID: app.bundleID, state: result)
+            if notingHint, context == playbackTargetContext {
                 notePolledPlayback(bundleID: app.bundleID, playing: result)
             }
         }
@@ -798,6 +857,26 @@ final class AppState: ObservableObject {
 
     func togglePlayPauseTarget(in context: PlaybackTargetContext) async -> Bool {
         guard context == playbackTargetContext else { return false }
+        if selectedTargetIsQuickTime {
+            if let movieID = context.quickTimeMovieID {
+                guard let movie = quickTimeMovies.first(where: { $0.id == movieID }) else { return false }
+                return await toggleQuickTimeMovie(movie)
+            }
+            // A hardware key can arrive before the menu's first scan. Resolve a
+            // movie now, but never redirect a command for an explicit selection.
+            let movies = await scripting.run { [quickTimeController] in quickTimeController.scan() }
+            guard context == playbackTargetContext else { return false }
+            quickTimeScanFailed = movies == nil
+            quickTimeMovies = movies ?? []
+            guard let movie = quickTimeMovies.first(where: { $0.isPlaying }) ?? quickTimeMovies.first else {
+                if !isRunning(bundleID: BuiltInApps.quickTime.bundleID) {
+                    Task { await launchTargetAndPlay() }
+                }
+                return false
+            }
+            selectedQuickTimeMovieID = movie.id
+            return await toggleQuickTimeMovie(movie)
+        }
         if selectedTargetIsBrowser, browserMediaInjectionAvailable != true {
             MediaKeyTap.postNativePlayPause()
             return true
@@ -815,8 +894,7 @@ final class AppState: ObservableObject {
             }
             let performed = await scripting.run {
                 guard app.isReady else { return false }
-                app.perform(.playPause)
-                return true
+                return app.perform(.playPause)
             }
             // Nothing delivered: the app isn't running. Kick off the launch
             // fallback without awaiting it — awaiting here would hold
@@ -825,7 +903,7 @@ final class AppState: ObservableObject {
             // that playback started. Returning false immediately releases the
             // button; TargetLauncher's single-flight guard stops a second press
             // from starting a second launch.
-            if !performed { Task { await launchTargetAndPlay() } }
+            if !performed && !app.isReady { Task { await launchTargetAndPlay() } }
             return performed
         }
     }
@@ -837,7 +915,27 @@ final class AppState: ObservableObject {
         guard let app = registry.allApps().first(where: { $0.bundleID == bundleID }) else {
             return nil
         }
-        return await pollRunner.run { app.isPlaying() }
+        let result = await pollRunner.run { app.isPlaying() }
+        await refreshPlaybackPermission(bundleID: bundleID, state: result)
+        return result
+    }
+
+    private func refreshPlaybackPermission(bundleID: String, state: Bool?) async {
+        guard let definition = availableApps.first(where: { $0.bundleID == bundleID }),
+              definition.menuControl == nil else { return }
+        let denied: Bool
+        if state != nil {
+            denied = false
+        } else {
+            denied = await pollRunner.run { AutomationPermission.isAllowed(bundleID: bundleID) == false }
+        }
+        if denied {
+            automationDeniedBundleIDs.insert(bundleID)
+            playbackHints.removeValue(forKey: bundleID)
+            volumeByBundle.removeValue(forKey: bundleID)
+        } else {
+            automationDeniedBundleIDs.remove(bundleID)
+        }
     }
 
     func togglePlayPause(bundleID: String) async -> Bool {
@@ -866,6 +964,11 @@ final class AppState: ObservableObject {
 
     func setTarget(_ id: String?, showConfirmation: Bool = true) {
         menuBrowserHookRevision &+= 1
+        if id != selectedTargetID {
+            selectedQuickTimeMovieID = nil
+            quickTimeMovies = []
+            quickTimeScanFailed = false
+        }
         selectedTargetID = id
         targetManager.selectedTargetID = id
         configureBrowserTransportForPendingScan()
@@ -877,6 +980,9 @@ final class AppState: ObservableObject {
         // prompt lands while the user is still looking at their choice.
         if selectedTargetIsBrowser {
             Task { await refreshBrowserMedia() }
+        }
+        if selectedTargetIsQuickTime {
+            Task { await refreshQuickTimeMovies() }
         }
         // Confirm the new hook with a centre-screen HUD (user-initiated, so always).
         if showConfirmation, let def = currentTargetDefinition() {

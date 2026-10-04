@@ -34,6 +34,7 @@ public enum TargetLaunchOutcome: Equatable {
     /// The app resumed playback on its own; nothing was sent.
     case alreadyPlaying
     case played
+    case commandFailed
 }
 
 /// Launches the hooked app and starts playback, for a play/pause press that
@@ -108,8 +109,7 @@ public final class TargetLauncher {
             // An app that resumed on its own would be PAUSED by an unconditional
             // playPause. Unknown state (nil) counts as not playing.
             if app.isPlaying() == true { return .alreadyPlaying }
-            app.perform(.playPause)
-            return .played
+            return app.perform(.playPause) ? .played : .commandFailed
         }
     }
 }

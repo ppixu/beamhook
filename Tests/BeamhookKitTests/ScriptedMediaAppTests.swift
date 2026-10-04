@@ -2,6 +2,20 @@ import XCTest
 @testable import BeamhookKit
 
 final class ScriptedMediaAppTests: XCTestCase {
+    func testDeniedMusicCommandReportsFailureThenRecoversAfterGrant() {
+        let executor = MockScriptExecutor()
+        let presence = MockPresence()
+        presence.runningBundleIDs = [BuiltInApps.music.bundleID]
+        let app = ScriptedMediaApp(definition: BuiltInApps.music, executor: executor, presence: presence)
+        executor.succeed = false
+        executor.cannedOutput = "playing"
+        XCTAssertFalse(app.perform(.playPause))
+        XCTAssertNil(app.isPlaying())
+        executor.succeed = true
+        XCTAssertTrue(app.perform(.playPause))
+        XCTAssertEqual(app.isPlaying(), true)
+    }
+
     private func makeVLC(executor: MockScriptExecutor, presence: MockPresence) -> ScriptedMediaApp {
         ScriptedMediaApp(definition: BuiltInApps.vlc, executor: executor, presence: presence)
     }

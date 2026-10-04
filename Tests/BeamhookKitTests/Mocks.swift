@@ -66,7 +66,12 @@ final class MockMediaApp: MediaApp {
         self.isRunning = isRunning
     }
 
-    func perform(_ command: MediaCommand) { performedCommands.append(command) }
+    var commandSucceeds = true
+    @discardableResult
+    func perform(_ command: MediaCommand) -> Bool {
+        performedCommands.append(command)
+        return commandSucceeds
+    }
     func currentVolume() -> Int? { volumeValue }
     func setVolume(_ percent: Int) { setVolumeCalls.append(percent) }
     func isPlaying() -> Bool? { playingState }

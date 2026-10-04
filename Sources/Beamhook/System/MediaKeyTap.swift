@@ -273,7 +273,7 @@ final class MediaKeyTap: @unchecked Sendable {
             }
         }
 
-        // Everything else (ff/rewind) passes through.
+        // Any other decoded key passes through.
         return Unmanaged.passUnretained(event)
     }
 

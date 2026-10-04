@@ -12,6 +12,14 @@ final class TargetLauncherTests: XCTestCase {
                        timeout: timeout, pollInterval: pollInterval)
     }
 
+    func testRejectedCommandDoesNotReportPlaybackStarted() async {
+        let app = MockMediaApp(id: "music", isRunning: true)
+        app.commandSucceeds = false
+        let subject = makeSubject(launcher: MockAppLauncher(), sleeper: CountingSleeper())
+        let result = await subject.launchAndPlay(app, isStillHooked: { true }, onLaunchStarted: {})
+        XCTAssertEqual(result, .commandFailed)
+    }
+
     /// Not running: launch it, wait for readiness, then play.
     func testLaunchesAndPlaysWhenNotRunning() async {
         let app = MockMediaApp(id: "spotify", isRunning: false)

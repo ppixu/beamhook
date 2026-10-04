@@ -6,10 +6,20 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ## [Unreleased]
 
+### Added
+
+- QuickTime movie picker: select an open movie by title and keep media keys
+  aimed at it when windows are reordered.
+
 ### Fixed
 
-- Playback subtitles use 50% black in light mode and 50% white in dark mode.
+- QuickTime play/pause now uses valid AppleScript and preserves playback position.
+- Unknown playback state no longer appears paused. Blocked Automation access
+  shows a Settings link, and failed commands no longer report success.
+- Both next/previous key-code pairs route to the hooked app. Unsupported
+  commands do not reach an unrelated player, and repeats do not skip extra tracks.
 
+- Playback subtitles use 50% black in light mode and 50% white in dark mode.
 - Running players such as VLC now enter the shortlist when playing, even
   without audible samples. Playback discovery no longer depends on an app's
   row already being visible under “Show all.”

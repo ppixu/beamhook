@@ -64,7 +64,7 @@ private final class DiscoveryPlayer: MediaApp, @unchecked Sendable {
     var playing: Bool? = true
     var readCount = 0
     init(bundleID: String = "com.beamhook.tests.hidden-vlc") { self.bundleID = bundleID }
-    func perform(_ command: MediaCommand) {}
+    func perform(_ command: MediaCommand) -> Bool { true }
     var supportsVolume: Bool { true }
     func currentVolume() -> Int? { 0 }
     func setVolume(_ percent: Int) {}

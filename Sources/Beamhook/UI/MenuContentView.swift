@@ -7,6 +7,11 @@ private struct MenuRefreshContext: Hashable {
     let isVisible: Bool
 }
 
+private struct PlaybackPollContext: Hashable {
+    let target: PlaybackTargetContext
+    let isVisible: Bool
+}
+
 /// The NSPopover supplies the system's glass material. Keep the content transparent
 /// so the compact rows inherit the same Liquid Glass appearance as the old menu.
 struct MenuContentView: View {
@@ -54,6 +59,7 @@ struct MenuContentView: View {
             guard state.isMenuVisible else { return }
             while !Task.isCancelled {
                 await state.refreshBrowserMedia()
+                await state.refreshQuickTimeMovies()
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
             }
         }
@@ -283,6 +289,7 @@ private struct AppVolumeRow: View {
     private var isTarget: Bool { state.targetManager.targetBundleID == playing.bundleID }
     private var isBrowser: Bool { BrowserKind.browser(bundleID: playing.bundleID) != nil }
     private var isHooked: Bool { isTarget }
+    private var automationDenied: Bool { state.automationDeniedBundleIDs.contains(playing.bundleID) }
     private var canPlayPause: Bool { state.canPlayPauseVolumeSource(.app(bundleID: playing.bundleID)) }
     private var canChangeVolume: Bool {
         state.isRunning(bundleID: playing.bundleID) && state.canControlVolume(bundleID: playing.bundleID)
@@ -290,7 +297,8 @@ private struct AppVolumeRow: View {
     }
     private var isMuted: Bool { state.isAppMuted(playing.bundleID) || volume == 0 }
     private var playbackContext: PlaybackTargetContext {
-        PlaybackTargetContext(targetID: playing.bundleID, browserMediaID: nil, revision: 0)
+        isTarget ? state.playbackTargetContext
+            : PlaybackTargetContext(targetID: playing.bundleID, browserMediaID: nil, revision: 0)
     }
     private var browserSources: [BrowserMediaCandidate] {
         guard let browser = BrowserKind.browser(bundleID: playing.bundleID) else { return [] }
@@ -341,7 +349,7 @@ private struct AppVolumeRow: View {
                 Text(state.launchTargetOnPlay ? "Play to launch \(playing.displayName)" : "\(playing.displayName) is not running")
                     .font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 9)
             }
-            if availability == .permissionDenied {
+            if availability == .permissionDenied || automationDenied {
                 Button("Allow control of \(playing.displayName)…") { state.permissions.openAutomationSettings() }
                     .buttonStyle(.link).font(.caption2).padding(.horizontal, 9)
             }
@@ -352,9 +360,27 @@ private struct AppVolumeRow: View {
                 Button("Allow System Audio Recording…") { state.permissions.openAudioCaptureSettings() }
                     .buttonStyle(.link).font(.caption2).padding(.horizontal, 9)
             }
+            if isTarget && state.selectedTargetIsQuickTime {
+                if state.quickTimeScanFailed {
+                    Text("Cannot read QuickTime movies. Check Automation access in System Settings.")
+                        .font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 9)
+                } else if state.quickTimeMovies.isEmpty {
+                    Text("No playable QuickTime movies open.")
+                        .font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 9)
+                } else {
+                    Picker("QuickTime movie", selection: Binding(
+                        get: { state.selectedQuickTimeMovieID ?? "" },
+                        set: { state.selectQuickTimeMovie($0) })) {
+                        ForEach(state.quickTimeMovies) { movie in
+                            Text((movie.isPlaying ? "▶ " : "") + movie.title).tag(movie.id)
+                        }
+                    }
+                    .pickerStyle(.menu).controlSize(.small).padding(.horizontal, 9)
+                }
+            }
             ForEach(browserSources) { candidate in BrowserVolumeRow(candidate: candidate) }
         }
-        .task(id: "\(state.isMenuVisible):\(state.perAppMuteEnabled)") {
+        .task(id: "\(state.isMenuVisible):\(state.perAppMuteEnabled):\(automationDenied)") {
             guard state.isMenuVisible else { return }
             if let value = await state.volume(for: playing.bundleID) {
                 if !isEditing { volume = Double(value) }
@@ -369,17 +395,19 @@ private struct AppVolumeRow: View {
         .onChange(of: state.processVolumeLevels[playing.bundleID]) { _, value in
             if !isEditing, let value { volume = Double(value) }
         }
-        .task(id: state.isMenuVisible) {
+        .task(id: PlaybackPollContext(target: playbackContext, isVisible: state.isMenuVisible)) {
             let context = playbackContext
             playback.reset(for: context)
             guard state.isMenuVisible, canPlayPause else { return }
             while !Task.isCancelled {
                 if let observation = playback.observation(for: context) {
-                    let latest = await state.isPlaying(bundleID: playing.bundleID)
-                    guard !Task.isCancelled else { return }
+                    let latest = isTarget
+                        ? await state.isTargetPlaying(in: context)
+                        : await state.isPlaying(bundleID: playing.bundleID)
+                    guard !Task.isCancelled, context == playbackContext else { return }
                     playback.accept(latest, from: observation)
-                    if let current = playback.isPlaying, !playback.commandInFlight {
-                        state.notePolledPlayback(bundleID: playing.bundleID, playing: current)
+                    if !playback.commandInFlight {
+                        state.notePolledPlayback(bundleID: playing.bundleID, playing: playback.isPlaying)
                     }
                 }
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -389,6 +417,10 @@ private struct AppVolumeRow: View {
 
     private var playPauseButton: some View {
         Button {
+            if automationDenied {
+                state.permissions.openAutomationSettings()
+                return
+            }
             let context = playbackContext
             let previous = playback.isPlaying
             guard playback.beginToggle(for: context) else { return }
@@ -399,21 +431,31 @@ private struct AppVolumeRow: View {
                 let succeeded = wasTarget
                     ? await state.togglePlayPauseTarget(in: targetContext)
                     : await state.togglePlayPause(bundleID: playing.bundleID)
-                let confirmed = succeeded && wasTarget
-                    ? await state.confirmTargetPlaying(in: targetContext, after: previous) : nil
+                let confirmed: Bool?
+                if succeeded && wasTarget {
+                    confirmed = await state.confirmTargetPlaying(in: targetContext, after: previous)
+                } else if succeeded {
+                    try? await Task.sleep(nanoseconds: 350_000_000)
+                    confirmed = await state.isPlaying(bundleID: playing.bundleID)
+                } else {
+                    confirmed = nil
+                }
+                guard context == playbackContext else { return }
                 playback.finishToggle(succeeded: succeeded, confirmedState: confirmed,
                                       previousState: previous, for: context)
-                if !succeeded, let previous { state.notePlayback(bundleID: playing.bundleID, playing: previous) }
+                if !succeeded { state.notePolledPlayback(bundleID: playing.bundleID, playing: previous) }
             }
         } label: {
-            Image(systemName: playback.isPlaying == true ? "pause.fill" : "play.fill")
+            Image(systemName: automationDenied ? "lock.fill" : PlaybackStatus.symbol(for: playback.isPlaying))
                 .font(.system(size: 10, weight: .semibold)).frame(width: 22, height: 26)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain).hoverHighlight(cornerRadius: 5, behind: true)
         .disabled(playback.commandInFlight)
-        .accessibilityLabel("\(playback.isPlaying == true ? "Pause" : "Play") \(playing.displayName)")
-        .help("\(playback.isPlaying == true ? "Pause" : "Play") \(playing.displayName)")
+        .accessibilityLabel(automationDenied ? "Allow control of \(playing.displayName)"
+                            : PlaybackStatus.actionLabel(for: playback.isPlaying, name: playing.displayName))
+        .help(automationDenied ? "Allow control of \(playing.displayName) in System Settings"
+              : PlaybackStatus.actionLabel(for: playback.isPlaying, name: playing.displayName))
     }
 
     private var showsEmittingArcs: Bool {

@@ -24,6 +24,13 @@ final class MediaKeyDecoderTests: XCTestCase {
         XCTAssertEqual(MediaKeyDecoder.decode(subtype: 8, data1: 0x120A00)?.key, .previous)
     }
 
+    func testAlternateTrackKeyCodes() {
+        XCTAssertEqual(MediaKeyDecoder.decode(subtype: 8, data1: 0x130A00)?.key, .fastForward)
+        XCTAssertEqual(MediaKeyDecoder.decode(subtype: 8, data1: 0x140A00)?.key, .rewind)
+        XCTAssertEqual(MediaKeyDecoder.decode(subtype: 8, data1: 0x130A00)?.key.command, .next)
+        XCTAssertEqual(MediaKeyDecoder.decode(subtype: 8, data1: 0x140A00)?.key.command, .previous)
+    }
+
     func testVolumeKeys() {
         XCTAssertEqual(MediaKeyDecoder.decode(subtype: 8, data1: 0x000A00)?.key, .volumeUp)   // SOUND_UP = 0
         XCTAssertEqual(MediaKeyDecoder.decode(subtype: 8, data1: 0x010A00)?.key, .volumeDown) // SOUND_DOWN = 1
@@ -43,13 +50,16 @@ final class MediaKeyDecoderTests: XCTestCase {
         XCTAssertTrue(MediaKey.next.isHandledTransport)
         XCTAssertTrue(MediaKey.previous.isHandledTransport)
         XCTAssertFalse(MediaKey.volumeUp.isHandledTransport)
-        XCTAssertFalse(MediaKey.fastForward.isHandledTransport)
+        XCTAssertTrue(MediaKey.fastForward.isHandledTransport)
+        XCTAssertTrue(MediaKey.rewind.isHandledTransport)
     }
 
     func testCommandMapping() {
         XCTAssertEqual(MediaKey.playPause.command, .playPause)
         XCTAssertEqual(MediaKey.next.command, .next)
         XCTAssertEqual(MediaKey.previous.command, .previous)
+        XCTAssertEqual(MediaKey.fastForward.command, .next)
+        XCTAssertEqual(MediaKey.rewind.command, .previous)
         XCTAssertNil(MediaKey.volumeUp.command)
     }
 }

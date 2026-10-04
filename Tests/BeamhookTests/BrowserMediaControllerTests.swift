@@ -334,6 +334,28 @@ final class BrowserMediaControllerTests: XCTestCase {
 }
 
 final class PlaybackStatusTests: XCTestCase {
+    func testUnknownPlaybackIsNotRenderedOrToggledAsPaused() {
+        let music = context(target: "music", revision: 1)
+        var status = PlaybackStatus()
+        status.reset(for: music)
+        XCTAssertEqual(PlaybackStatus.symbol(for: status.isPlaying), "playpause.fill")
+        XCTAssertTrue(status.beginToggle(for: music))
+        XCTAssertNil(status.isPlaying)
+        status.finishToggle(succeeded: false, confirmedState: nil, previousState: nil, for: music)
+        XCTAssertNil(status.isPlaying)
+    }
+
+    func testFirstGrantedCommandUsesConfirmedState() {
+        let music = context(target: "music", revision: 1)
+        var status = PlaybackStatus()
+        status.reset(for: music)
+        XCTAssertTrue(status.beginToggle(for: music))
+        status.finishToggle(succeeded: true, confirmedState: false, previousState: nil, for: music)
+        XCTAssertEqual(status.isPlaying, false)
+        XCTAssertEqual(PlaybackStatus.symbol(for: status.isPlaying), "play.fill")
+        XCTAssertEqual(PlaybackStatus.symbol(for: true), "pause.fill")
+    }
+
     func testLatePollFromPreviousTargetIsIgnored() throws {
         let safari = context(target: "safari-youtube", source: "safari:video", revision: 1)
         let spotify = context(target: "spotify", revision: 2)

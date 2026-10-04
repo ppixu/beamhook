@@ -139,7 +139,16 @@ public enum BuiltInApps {
     // and there is no next/previous. (Verified against its scripting dictionary.)
     public static let quickTime = AppDefinition(
         id: "quicktime", displayName: "QuickTime Player", bundleID: "com.apple.QuickTimePlayerX", isBuiltIn: true,
-        playPauseScript: "tell application \"QuickTime Player\" to if playing of document 1 then pause document 1 else play document 1",
+        playPauseScript: """
+        tell application "QuickTime Player"
+            if not (exists document 1) then return
+            if playing of document 1 then
+                stop document 1
+            else
+                play document 1
+            end if
+        end tell
+        """,
         nextScript: nil,
         previousScript: nil,
         volumeScaleKind: .none,
