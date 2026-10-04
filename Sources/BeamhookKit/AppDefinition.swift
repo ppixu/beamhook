@@ -16,11 +16,18 @@ public struct AppDefinition: Codable, Identifiable, Equatable, Sendable {
     /// their menu items instead. When present the scripts above are unused.
     /// Optional so definitions persisted before this existed still decode.
     public var menuControl: MenuControl?
+    /// Returns `podcast` or `music`. Optional, like every field added after
+    /// definitions were first persisted.
+    public var playbackKindScript: String?
+    /// Jumps by `{seconds}` (signed integer). The arithmetic must stay inside the
+    /// script: reading a position as text gives `107,69` on comma locales.
+    public var seekScript: String?
 
     public init(id: String, displayName: String, bundleID: String, isBuiltIn: Bool,
                 playPauseScript: String, nextScript: String?, previousScript: String?,
                 volumeScaleKind: VolumeScaleKind, volumeGetScript: String?, volumeSetScript: String?,
-                playStateScript: String? = nil, menuControl: MenuControl? = nil) {
+                playStateScript: String? = nil, menuControl: MenuControl? = nil,
+                playbackKindScript: String? = nil, seekScript: String? = nil) {
         self.id = id
         self.displayName = displayName
         self.bundleID = bundleID
@@ -33,6 +40,8 @@ public struct AppDefinition: Codable, Identifiable, Equatable, Sendable {
         self.volumeSetScript = volumeSetScript
         self.playStateScript = playStateScript
         self.menuControl = menuControl
+        self.playbackKindScript = playbackKindScript
+        self.seekScript = seekScript
     }
 
     /// A target with no scripting dictionary, driven through its menu bar. The

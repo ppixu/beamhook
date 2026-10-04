@@ -91,7 +91,20 @@ public enum BuiltInApps {
         volumeScaleKind: .integer(max: 100),
         volumeGetScript: "tell application \"Spotify\" to return sound volume",
         volumeSetScript: "tell application \"Spotify\" to set sound volume to {volume}",
-        playStateScript: "tell application \"Spotify\" to return (player state as text)")
+        playStateScript: "tell application \"Spotify\" to return (player state as text)",
+        playbackKindScript: """
+        tell application "Spotify"
+            if (id of current track) starts with "spotify:episode:" then return "podcast"
+            return "music"
+        end tell
+        """,
+        seekScript: """
+        tell application "Spotify"
+            set newPosition to (player position) + ({seconds})
+            if newPosition < 0 then set newPosition to 0
+            set player position to newPosition
+        end tell
+        """)
 
     public static let music = AppDefinition(
         id: "music", displayName: "Apple Music", bundleID: "com.apple.Music", isBuiltIn: true,
@@ -101,7 +114,14 @@ public enum BuiltInApps {
         volumeScaleKind: .integer(max: 100),
         volumeGetScript: "tell application \"Music\" to return sound volume",
         volumeSetScript: "tell application \"Music\" to set sound volume to {volume}",
-        playStateScript: "tell application \"Music\" to return (player state as text)")
+        playStateScript: "tell application \"Music\" to return (player state as text)",
+        seekScript: """
+        tell application "Music"
+            set newPosition to (player position) + ({seconds})
+            if newPosition < 0 then set newPosition to 0
+            set player position to newPosition
+        end tell
+        """)
 
     public static let vlc = AppDefinition(
         id: "vlc", displayName: "VLC", bundleID: "org.videolan.vlc", isBuiltIn: true,
@@ -111,7 +131,14 @@ public enum BuiltInApps {
         volumeScaleKind: .integer(max: 512),
         volumeGetScript: "tell application \"VLC\" to return audio volume",
         volumeSetScript: "tell application \"VLC\" to set audio volume to {volume}",
-        playStateScript: "tell application \"VLC\" to return (playing as text)")
+        playStateScript: "tell application \"VLC\" to return (playing as text)",
+        seekScript: """
+        tell application "VLC"
+            set newTime to (current time) + ({seconds})
+            if newTime < 0 then set newTime to 0
+            set current time to newTime
+        end tell
+        """)
 
     public static let vox = AppDefinition(
         id: "vox", displayName: "VOX", bundleID: "com.coppertino.Vox", isBuiltIn: true,

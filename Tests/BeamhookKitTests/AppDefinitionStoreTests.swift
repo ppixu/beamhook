@@ -80,4 +80,11 @@ final class AppDefinitionStoreTests: XCTestCase {
         XCTAssertEqual(all.count, BuiltInApps.all.count + 1)
         XCTAssertEqual(all.last, custom)
     }
+
+    func testDefinitionStoredBeforeSeekingFieldsStillDecodes() throws {
+        let json = #"{"id":"x","displayName":"X","bundleID":"com.x","isBuiltIn":false,"playPauseScript":"pp","volumeScaleKind":{"none":{}}}"#
+        let decoded = try JSONDecoder().decode(AppDefinition.self, from: Data(json.utf8))
+        XCTAssertNil(decoded.playbackKindScript)
+        XCTAssertNil(decoded.seekScript)
+    }
 }

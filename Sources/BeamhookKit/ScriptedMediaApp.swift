@@ -2,7 +2,7 @@ import Foundation
 
 /// Immutable after init; its collaborators (executor, presence) are stateless, so
 /// it is safe to hand to `ScriptRunning.run` and touch on the scripting queue.
-public final class ScriptedMediaApp: MediaApp, @unchecked Sendable {
+public final class ScriptedMediaApp: SeekingMediaApp, @unchecked Sendable {
     public let definition: AppDefinition
     private let executor: ScriptExecuting
     private let presence: AppPresenceChecking
@@ -70,5 +70,31 @@ public final class ScriptedMediaApp: MediaApp, @unchecked Sendable {
         if out == "playing" || out == "true" { return true }
         if out == "paused" || out == "stopped" || out == "false" { return false }
         return nil
+    }
+
+    // MARK: - Seeking
+
+    public var canSeek: Bool { !(definition.seekScript ?? "").isEmpty }
+    public var skipSeconds: SkipSeconds { .standard }
+    public var seeksByMenu: Bool { false }
+
+    /// No kind script means the app only plays music, so only always-skip seeks.
+    public func playbackKind() -> PlaybackKind {
+        guard let script = definition.playbackKindScript, !script.isEmpty else { return .music }
+        guard isReady else { return .unknown }
+        let result = executor.run(script)
+        guard result.succeeded,
+              let out = result.output?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        else { return .unknown }
+        switch out {
+        case "podcast": return .podcast
+        case "music": return .music
+        default: return .unknown
+        }
+    }
+
+    public func seek(by seconds: Int) -> Bool {
+        guard canSeek, isReady, let template = definition.seekScript else { return false }
+        return executor.run(template.replacingOccurrences(of: "{seconds}", with: String(seconds))).succeeded
     }
 }

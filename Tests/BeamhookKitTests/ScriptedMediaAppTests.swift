@@ -175,4 +175,52 @@ final class ScriptedMediaAppTests: XCTestCase {
             XCTAssertEqual(exec.ranScripts, [expected], "command: \(cmd)")
         }
     }
+
+    // MARK: - Seeking
+
+    private func seekingApp(kindScript: String? = "KIND", seekScript: String? = "SEEK {seconds}",
+                            output: String? = nil, succeed: Bool = true)
+        -> (ScriptedMediaApp, MockScriptExecutor) {
+        let executor = MockScriptExecutor()
+        executor.cannedOutput = output
+        executor.succeed = succeed
+        let presence = MockPresence()
+        presence.runningBundleIDs = ["com.example.seek"]
+        let definition = AppDefinition(
+            id: "seek", displayName: "Seek", bundleID: "com.example.seek", isBuiltIn: false,
+            playPauseScript: "PP", nextScript: "NEXT", previousScript: "PREV",
+            volumeScaleKind: .none, volumeGetScript: nil, volumeSetScript: nil,
+            playbackKindScript: kindScript, seekScript: seekScript)
+        return (ScriptedMediaApp(definition: definition, executor: executor, presence: presence), executor)
+    }
+
+    func testPlaybackKindParsesTheScriptsAnswer() {
+        XCTAssertEqual(seekingApp(output: "podcast").0.playbackKind(), .podcast)
+        XCTAssertEqual(seekingApp(output: " music\n").0.playbackKind(), .music)
+        XCTAssertEqual(seekingApp(output: "garbage").0.playbackKind(), .unknown)
+        XCTAssertEqual(seekingApp(output: "podcast", succeed: false).0.playbackKind(), .unknown)
+        XCTAssertEqual(seekingApp(kindScript: nil).0.playbackKind(), .music)
+    }
+
+    func testSeekSubstitutesSignedSeconds() {
+        let (app, executor) = seekingApp()
+        XCTAssertTrue(app.seek(by: -15))
+        XCTAssertEqual(executor.ranScripts.last, "SEEK -15")
+    }
+
+    func testNoSeekScriptMeansNoSeeking() {
+        let (app, executor) = seekingApp(seekScript: nil)
+        XCTAssertFalse(app.canSeek)
+        XCTAssertFalse(app.seek(by: 15))
+        XCTAssertTrue(executor.ranScripts.isEmpty)
+    }
+
+    func testSpotifyReportsEpisodesAsPodcasts() {
+        let spotify = BuiltInApps.spotify
+        XCTAssertTrue(spotify.playbackKindScript?.contains("spotify:episode:") == true)
+        XCTAssertTrue(spotify.seekScript?.contains("{seconds}") == true)
+        XCTAssertFalse(spotify.seekScript?.contains("as text") == true)
+        XCTAssertNotNil(BuiltInApps.music.seekScript)
+        XCTAssertNotNil(BuiltInApps.vlc.seekScript)
+    }
 }
