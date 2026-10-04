@@ -135,11 +135,17 @@ final class AppState: ObservableObject {
         selectedQuickTimeMovieID = id
     }
 
+    private static let quickTimeLog = Logger(subsystem: "com.github.ppixu.beamhook", category: "QuickTime")
+
     func refreshQuickTimeMovies() async {
         guard selectedTargetIsQuickTime else { return }
         let context = playbackTargetContext
         let movies = await pollRunner.run { [quickTimeController] in quickTimeController.scan() }
-        guard context == playbackTargetContext else { return }
+        guard context == playbackTargetContext else {
+            Self.quickTimeLog.info("Movie scan discarded: playback target changed during the scan")
+            return
+        }
+        Self.quickTimeLog.info("Movie scan: \(movies.map { "\($0.count) movies" } ?? "failed", privacy: .public)")
         quickTimeScanFailed = movies == nil
         quickTimeMovies = movies ?? []
         if !quickTimeMovies.contains(where: { $0.id == selectedQuickTimeMovieID }) {

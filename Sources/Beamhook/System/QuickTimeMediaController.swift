@@ -1,4 +1,5 @@
 import AppKit
+import os
 import BeamhookKit
 
 struct QuickTimeMovie: Identifiable, Equatable, Sendable {
@@ -13,6 +14,7 @@ struct QuickTimeMovie: Identifiable, Equatable, Sendable {
 /// Window IDs survive window reordering. The process ID prevents a stale choice
 /// from addressing a reused window ID after QuickTime restarts.
 final class QuickTimeMediaController: @unchecked Sendable {
+    private static let log = Logger(subsystem: "com.github.ppixu.beamhook", category: "QuickTime")
     private let executor: ScriptExecuting
     private let processID: () -> Int32?
 
@@ -28,11 +30,26 @@ final class QuickTimeMediaController: @unchecked Sendable {
 
     /// nil means unavailable; an empty array means no playable movies.
     func scan() -> [QuickTimeMovie]? {
-        guard let pid = processID() else { return [] }
+        guard let pid = processID() else {
+            Self.log.info("Movie scan: QuickTime Player is not running")
+            return []
+        }
         let result = executor.run(Self.scanScript)
         guard result.succeeded, let output = result.output,
-              output.hasPrefix("OK\n"), processID() == pid else { return nil }
-        return output.split(separator: "\n").dropFirst().compactMap { row in
+              output.hasPrefix("OK\n"), processID() == pid else {
+            Self.log.error("Movie scan failed: succeeded=\(result.succeeded), output=\(result.output ?? "nil", privacy: .public)")
+            return nil
+        }
+        let rows = output.split(separator: "\n").dropFirst()
+        let movies = parse(rows, pid: pid)
+        if movies.count != rows.count {
+            Self.log.error("Movie scan parsed \(movies.count) of \(rows.count) rows: \(output, privacy: .public)")
+        }
+        return movies
+    }
+
+    private func parse(_ rows: ArraySlice<Substring>, pid: Int32) -> [QuickTimeMovie] {
+        rows.compactMap { row in
             let fields = row.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
             guard fields.count == 3, let id = Int(fields[0]), id > 0,
                   fields[1] == "true" || fields[1] == "false" else { return nil }
