@@ -118,6 +118,8 @@ final class AppState: ObservableObject {
     // Discovery must not wait behind row polling (or delay user commands).
     private let menuPlaybackRunner = ScriptRunner()
     private let metadataRunner = ScriptRunner()
+    // HAL process discovery can take ~1 second. Keep it off the UI and command lanes.
+    private let audioDiscoveryRunner = ScriptRunner()
     private let browserMediaController: BrowserMediaController
     private var menuBrowserHookRevision: UInt64 = 0
     private let quickTimeController = QuickTimeMediaController()
@@ -2262,14 +2264,12 @@ final class AppState: ObservableObject {
 
     private var volumePickerApps: [PlayingApp] = []
 
-    /// Bundle ids with a live audio output stream. Before macOS 14.2 there's no
-    /// per-process audio API, so every running supported browser stands in (its
-    /// tabs are still scanned) and no other apps are offered.
+    /// Seed the picker from cached discovery and playback history. Never query
+    /// HAL here: this runs synchronously before the overlay's first frame.
+    /// The session refresh replaces the snapshot off main after it opens.
     private func audibleBundleIDs() -> Set<String> {
         if #available(macOS 14.2, *) {
-            let monitor = AudioProcessMonitor()
-            monitor.refresh()
-            volumePickerApps = playingAppRows(monitor.playingApps)
+            volumePickerApps = playingAppRows(volumePickerApps.filter { isRunning(bundleID: $0.bundleID) })
             return Set(volumePickerApps.map(\.bundleID))
         }
         return Set(BrowserKind.allCases.map(\.bundleID).filter { isRunning(bundleID: $0) })
@@ -2318,6 +2318,18 @@ final class AppState: ObservableObject {
         volumeSessionRefresh?.cancel()
         volumeSessionRefresh = Task { [weak self] in
             guard let self else { return }
+            var audible = audible
+            if #available(macOS 14.2, *) {
+                let apps = await self.audioDiscoveryRunner.run { AudioProcessMonitor.scanPlayingApps() }
+                // A closed/replaced session must not be revived by a late scan.
+                guard !Task.isCancelled, self.volumeSession != nil else { return }
+                self.volumePickerApps = self.playingAppRows(apps)
+                audible = Set(self.volumePickerApps.map(\.bundleID))
+                self.volumeSession?.replace(target: self.hookedVolumeEntry(),
+                                            apps: self.playingVolumeApps(audible: audible),
+                                            tabs: self.browserVolumeTabs())
+                self.showVolumeSessionHUD()
+            }
             for entry in self.volumeSession?.entries ?? [] {
                 guard !Task.isCancelled else { return }
                 let bundleID: String?

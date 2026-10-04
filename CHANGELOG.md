@@ -6,6 +6,11 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ## [Unreleased]
 
+### Fixed
+
+- Volume-key overlays open from cached app data immediately, with slow audio
+  discovery moved off the main thread.
+
 ## [1.4.1] — 2026-10-04
 
 ### Fixed

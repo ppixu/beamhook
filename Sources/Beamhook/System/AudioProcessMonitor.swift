@@ -1,7 +1,7 @@
 import AppKit
 import CoreAudio
 
-struct PlayingApp: Identifiable, Equatable {
+struct PlayingApp: Identifiable, Equatable, Sendable {
     let id: String          // bundle identifier
     let displayName: String
     let bundleID: String
@@ -29,6 +29,13 @@ final class AudioProcessMonitor: ObservableObject {
     }
 
     func refresh() {
+        let apps = Self.scanPlayingApps()
+        if apps != playingApps { playingApps = apps }
+    }
+
+    /// Blocking HAL discovery, separated from publication so callers can scan
+    /// off main without moving an observable monitor between threads.
+    static func scanPlayingApps() -> [PlayingApp] {
         var apps: [PlayingApp] = []
         for obj in Self.processObjectIDs() where Self.isRunningOutput(obj) {
             guard let identity = Self.resolve(obj) else { continue }
@@ -43,7 +50,7 @@ final class AudioProcessMonitor: ObservableObject {
                                        bundleID: identity.bundleID))
             }
         }
-        if apps != playingApps { playingApps = apps }
+        return apps
     }
 
     /// (displayName, bundleID) for one HAL process, or nil when it can't be
