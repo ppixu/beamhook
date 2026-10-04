@@ -11,6 +11,9 @@ final class HookHUD {
     static let shared = HookHUD()
     private init() {}
 
+    /// Watches the system theme so the panel can be rebuilt when it flips.
+    private var appearanceObservation: NSKeyValueObservation?
+
     /// One row of the volume-source picker. `percent` nil means the volume
     /// is unavailable (or hasn't been read yet). `muted` is the app's per-app (process-tap) mute;
     /// a volume of 0 reads as muted too, which is how a tab is muted.
@@ -245,6 +248,7 @@ final class HookHUD {
     /// it with near-zero window alpha lets the compositor skip the expensive
     /// backdrop pass, which merely postpones initialization until the first show.
     func prewarm(completion: @escaping @MainActor () -> Void) {
+        observeSystemAppearance()
         let panel = ensurePanel()
         if #available(macOS 26.0, *), box is NSGlassEffectView {
             panel.alphaValue = 1
@@ -558,31 +562,59 @@ final class HookHUD {
         }
     }
 
-    /// Use the opposite of the system appearance so the HUD stands apart from
-    /// the desktop while preserving the user's high-contrast preference.
-    private func applyContrastingAppearance(to panel: NSPanel) {
-        let systemAppearance = NSApp.effectiveAppearance.bestMatch(from: [
+    /// An existing glass panel keeps drawing the backdrop it was built under,
+    /// even after its appearance is reassigned, so a theme switch left the HUD
+    /// in the old look until relaunch. Rebuild and prewarm it instead.
+    private func observeSystemAppearance() {
+        guard appearanceObservation == nil else { return }
+        appearanceObservation = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self?.rebuildIfAppearanceChanged() }
+            }
+        }
+    }
+
+    private func rebuildIfAppearanceChanged() {
+        guard let panel,
+              panel.appearance?.name != Self.contrastingAppearance().name
+        else { return }
+        hideWork?.cancel()
+        commandReleaseTimer?.invalidate()
+        commandReleaseTimer = nil
+        generation += 1
+        if panel.alphaValue > 0.01 {
+            // Showing mid-switch: report the hide that orderOut skips past.
+            setVolumeVisible(false)
+            updateSpotifyTrack("")
+            onVisibilityChange?(false)
+            updateSourceActivity([:])
+        }
+        panel.orderOut(nil)
+        self.panel = nil
+        prewarm {}
+    }
+
+    /// The opposite of the system appearance, keeping high contrast, plus
+    /// whether the system itself is dark.
+    private static func contrastingAppearance()
+        -> (name: NSAppearance.Name, systemUsesDarkColors: Bool) {
+        switch NSApp.effectiveAppearance.bestMatch(from: [
             .aqua,
             .darkAqua,
             .accessibilityHighContrastAqua,
             .accessibilityHighContrastDarkAqua,
-        ])
-        let contrastingAppearance: NSAppearance.Name
-        let systemUsesDarkColors: Bool
-        switch systemAppearance {
-        case .darkAqua:
-            contrastingAppearance = .aqua
-            systemUsesDarkColors = true
-        case .accessibilityHighContrastDarkAqua:
-            contrastingAppearance = .accessibilityHighContrastAqua
-            systemUsesDarkColors = true
-        case .accessibilityHighContrastAqua:
-            contrastingAppearance = .accessibilityHighContrastDarkAqua
-            systemUsesDarkColors = false
-        default:
-            contrastingAppearance = .darkAqua
-            systemUsesDarkColors = false
+        ]) {
+        case .darkAqua: return (.aqua, true)
+        case .accessibilityHighContrastDarkAqua: return (.accessibilityHighContrastAqua, true)
+        case .accessibilityHighContrastAqua: return (.accessibilityHighContrastDarkAqua, false)
+        default: return (.darkAqua, false)
         }
+    }
+
+    /// Use the opposite of the system appearance so the HUD stands apart from
+    /// the desktop while preserving the user's high-contrast preference.
+    private func applyContrastingAppearance(to panel: NSPanel) {
+        let (contrastingAppearance, systemUsesDarkColors) = Self.contrastingAppearance()
         // Reassigning an identical appearance makes Liquid Glass rebuild its
         // backdrop, producing a black first frame on the launch notification.
         if panel.appearance?.name != contrastingAppearance {
