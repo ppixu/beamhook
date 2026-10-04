@@ -7,7 +7,7 @@
 
 <h1 align="center">Beamhook</h1>
 
-<p align="center">Hook your media keys to a specific app.</p>
+<p align="center">Control each app’s volume. Hook your Mac’s media keys.</p>
 
 <p align="center">
   <a href="https://beamhook.app/"><b>Website</b></a>
@@ -23,7 +23,8 @@
   <img src="docs/demo.gif" width="720" alt="Demo: hooking the media keys to Spotify, then to Safari's YouTube tab, and back">
 </p>
 
-Beamhook makes your Mac's media keys predictable. It sends play/pause,
+Beamhook puts individual app volume and mute controls in your Mac’s menu bar
+and makes your media keys predictable. It sends play/pause,
 next, and previous to **one app you choose** — so macOS can't redirect them
 to Apple Music, YouTube, or whichever player it remembers. It also lets you
 control the volume of apps that are currently playing audio and mute them,
