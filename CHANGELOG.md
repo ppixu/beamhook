@@ -10,11 +10,12 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ### Added
 
-- ⏭ and ⏮ skip forward and back on podcasts instead of changing track: Spotify
-  episodes, Apple Podcasts, long YouTube videos and web pages with no next
-  button. YouTube playlists and Bandcamp albums keep next/previous. On by
-  default; a sub-option makes the keys always skip wherever Beamhook can seek.
-- Apple Podcasts is a built-in target.
+- **⏭ and ⏮ skip ahead and back on podcasts.** Spotify episodes, Apple
+  Podcasts, long YouTube videos and web pages with no next button skip a few
+  seconds instead of changing track. YouTube playlists and Bandcamp albums keep
+  next/previous. On by default; a sub-option makes the keys always skip
+  wherever Beamhook can seek.
+- **Apple Podcasts is a built-in target.**
 
 ### Changed
 

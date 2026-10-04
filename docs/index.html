@@ -281,9 +281,9 @@
     }
   }
 
-  .page{flex:1;display:flex;align-items:center;justify-content:center;padding:48px 32px 56px}
+  .page{flex:1;display:flex;align-items:center;justify-content:center;padding:96px 32px 64px}
   .card{max-width:470px;width:100%;text-align:center;animation:fade .7s cubic-bezier(.2,.7,.2,1) both}
-  .mark{width:min(430px,100%);margin:0 auto 10px}
+  .mark{width:min(430px,100%);margin:0 auto 18px}
   .mark svg{width:100%;height:auto;display:block}
   .mark .keys path{fill:var(--line);stroke:var(--line);stroke-width:14;stroke-linejoin:round}
   .mark .keys rect{fill:var(--line)}
@@ -480,14 +480,14 @@
     .glass-slider.mini > i{background:rgba(190,190,200,.6)}
     .glass-brand-icon{filter:invert(1)}
   }
-  .brand{font-size:1rem;font-weight:700;margin:0 0 14px}
-  h1{font-size:clamp(1.65rem,5.5vw,2.15rem);font-weight:800;letter-spacing:-.03em;margin:0 0 12px;line-height:1.05}
+  .brand{font-size:1rem;font-weight:700;margin:0 0 36px}
+  h1{font-size:clamp(1.65rem,5.5vw,2.15rem);font-weight:800;letter-spacing:-.03em;margin:0 0 28px;line-height:1.05}
   .tag{font-size:1.16rem;font-weight:500;margin:0 0 28px;line-height:1.35;text-wrap:balance}
   .desc a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line)}
   .desc a:hover{border-color:var(--ink)}
-  .desc{color:var(--soft);font-size:1.02rem;line-height:1.55;margin:0 auto 30px;max-width:42ch}
+  .desc{color:var(--soft);font-size:1.02rem;line-height:1.55;margin:0 auto 22px;max-width:42ch}
 
-  .paths{text-align:left;margin:0 0 30px}
+  .paths{text-align:left;margin:56px 0 30px}
   .path + .path{margin-top:24px;padding-top:24px;border-top:1px solid var(--line)}
   .path-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 12px}
   .path-title{font-size:1.05rem;font-weight:700;letter-spacing:-.01em;margin:0}
@@ -528,7 +528,7 @@
   .links a:hover{border-color:var(--ink)}
   .meta{margin-top:30px;font-family:var(--mono);font-size:.76rem;color:var(--faint);letter-spacing:.02em}
   @media (max-width:560px){
-    .page{padding:36px 22px 44px;align-items:flex-start}
+    .page{padding:56px 22px 44px;align-items:flex-start}
     :root{--tray-right:14px}
     .hover-hint{width:min(96px,25.5vw);right:calc(var(--tray-center-from-right) - 2px);top:36px}
   }
@@ -690,9 +690,9 @@
     </div>
     <ul class="changes-list">
 <!--site:changes-->
-      <li><span class="v">1.4.0</span><span>⏭ and ⏮ skip forward and back on podcasts instead of changing track: Spotify episodes, Apple Podcasts, long YouTube…</span></li>
-      <li><span class="v">1.3.3</span><span>QuickTime movie picker: select an open movie by title and keep media keys aimed at it when windows are reordered.</span></li>
-      <li><span class="v">1.3.2</span><span>Sound detection now checks every sample instead of skipping through the buffer, fixing missed right-channel and…</span></li>
+      <li><span class="v">1.4</span><span>⏭ and ⏮ skip ahead and back on podcasts. Apple Podcasts is a built-in target.</span></li>
+      <li><span class="v">1.3</span><span>Per-app volume, even without AppleScript. An expanded volume overlay.</span></li>
+      <li><span class="v">1.2</span><span>Mute any app from the menu — even ones Beamhook can't otherwise control. The speaker shows what is actually making sound.</span></li>
 <!--/site:changes-->
     </ul>
   </section>
