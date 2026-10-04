@@ -38,7 +38,7 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
 <li>The volume overlay follows a switch between light and dark mode right away instead of keeping the old look until Beamhook restarts. This also fixes play/pause icons that turned white and hard to see after a switch.</li>
 </ul>
 ]]></description>
-            <enclosure url="https://updates.beamhook.app/Beamhook-1.4.0.zip" length="2737588" type="application/octet-stream" sparkle:edSignature="WVTj15Ajw8PRqFAWRX4bHi99HSXVKvpr3aa3DfEgGAvWYmqoNItl6ntMw+LDJGPn4a1HPLr0RBYq8fWfN69IBw=="/>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.4.0-build24.zip" length="2737588" type="application/octet-stream" sparkle:edSignature="WVTj15Ajw8PRqFAWRX4bHi99HSXVKvpr3aa3DfEgGAvWYmqoNItl6ntMw+LDJGPn4a1HPLr0RBYq8fWfN69IBw=="/>
         </item>
         <item>
             <title>1.3.3</title>
@@ -379,6 +379,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: iCdwdZxuiXczmZtggBdZmf1RBcQgg9RDoFFjXFOgGBLeES+lXCAMJSjK9rsfaoXou2lP1A5lLFhQcWdLLftSAQ==
-length: 32122
+edSignature: iRtBFOK1zddizuBsGMKIQXZmcVhP8Yfv6DTkuCOIqpZvKtxCmdvOBYaomjZX+xr8lxkC7TGyuEXBsZzGuveODw==
+length: 32130
 -->
