@@ -1017,7 +1017,9 @@ final class HookHUD {
         line.spacing = 6
         line.edgeInsets = NSEdgeInsets(top: row.indented ? 6 : 12, left: row.indented ? 24 : 8, bottom: row.indented ? 6 : 12, right: 12)
         line.wantsLayer = true
-        line.layer?.cornerRadius = 18
+        // Tab rows are ~32 pt tall; 18 would exceed half their height and pinch
+        // the highlight's ends, so keep the same proportion as the app rows.
+        line.layer?.cornerRadius = row.indented ? 12 : 18
         line.layer?.cornerCurve = .continuous
         let dark = panel?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         if selected {
