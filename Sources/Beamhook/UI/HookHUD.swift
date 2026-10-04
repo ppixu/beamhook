@@ -135,6 +135,8 @@ final class HookHUD {
         /// `isPlaying` is nil when the app reports no play state — the glyph then
         /// stays neutral rather than claiming a direction it doesn't know.
         case playback(appName: String, isPlaying: Bool?, subtitle: String)
+        /// A track key that became a short skip on a podcast.
+        case skip(appName: String, text: String, forward: Bool)
         /// A play/pause press the tap handed back to macOS while a browser was
         /// hooked. The notice names why, so the key controlling another app
         /// reads as the system routing it — not as Beamhook misfiring.
@@ -146,6 +148,7 @@ final class HookHUD {
             switch self {
             case .hooked(let appName, _), .volume(let appName, _, _),
                  .launching(let appName), .playback(let appName, _, _),
+                 .skip(let appName, _, _),
                  .passthrough(let appName, _), .mute(let appName, _): appName
             case .volumeSources(let rows, let selectedIndex):
                 rows.indices.contains(selectedIndex) ? rows[selectedIndex].name : "volume sources"
@@ -166,6 +169,7 @@ final class HookHUD {
             case .volumeSources: 2.5
             case .launching: 2.0
             case .playback: 1.4
+            case .skip: 1.2
             case .mute: 1.4
             // The remediation line is a sentence; leave time to read it.
             case .passthrough(let appName, let notice):
@@ -323,6 +327,18 @@ final class HookHUD {
         return generation
     }
 
+    func showSkip(appName: String, seconds: Int, byMenu: Bool) {
+        show(.skip(appName: appName, text: Self.skipText(seconds: seconds, byMenu: byMenu),
+                   forward: seconds > 0))
+    }
+
+    /// Podcasts' own items pick the length, so name the action instead of
+    /// claiming a number of seconds we didn't choose.
+    nonisolated static func skipText(seconds: Int, byMenu: Bool) -> String {
+        if byMenu { return seconds > 0 ? "Skip forward" : "Skip back" }
+        return seconds > 0 ? "+\(seconds) s" : "\u{2212}\(-seconds) s"
+    }
+
     func updatePlaybackSubtitle(_ text: String, generation expected: Int) {
         guard generation == expected, let panel, panel.isVisible else { return }
         trackSubtitle?.stringValue = text
@@ -451,6 +467,16 @@ final class HookHUD {
             hookIcon?.isHidden = true
             transportIcon?.isHidden = false
             transportIcon?.image = Self.transportSymbol(isPlaying: isPlaying)
+            volumeRow?.isHidden = true
+        case .skip(let appName, let text, let forward):
+            label?.stringValue = appName
+            trackSubtitle?.stringValue = text
+            trackSubtitle?.isHidden = false
+            hintRow?.isHidden = true
+            hookIcon?.isHidden = true
+            transportIcon?.isHidden = false
+            transportIcon?.image = NSImage(systemSymbolName: forward ? "goforward" : "gobackward",
+                                           accessibilityDescription: text)
             volumeRow?.isHidden = true
         case .mute(let appName, let muted):
             label?.stringValue = muted ? "\(appName) muted" : "\(appName) unmuted"

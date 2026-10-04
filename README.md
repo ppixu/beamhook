@@ -63,6 +63,10 @@ control needs macOS 14.2. Tested on macOS Tahoe 26.5.
 ### Media keys
 
 - Hook the media keys to one app or browser tab. Nothing else can take them.
+- On podcasts, ⏭/⏮ skip forward and back instead of changing track: Spotify
+  episodes, Apple Podcasts, long videos and pages without a next button.
+  Playlists and albums keep next/previous. Settings can turn this off or make
+  the keys always skip.
 - If the hooked app isn't running, play/pause starts it. (An app launched with
   an empty queue, such as TIDAL, has nothing to play.) Can be turned off in
   Settings.
@@ -93,8 +97,8 @@ let go of ⌘.
 - Browsers: Safari, Chrome, Brave, Arc and Vivaldi. You pick the tab. Turn on
   **Allow JavaScript from Apple Events** first
   ([guide with pictures](https://beamhook.app/help/)).
-- Through their menus: IINA, Amazon Music, Plexamp and Deezer. Only IINA is
-  tested so far. If one doesn't respond,
+- Through their menus: IINA, Amazon Music, Plexamp, Deezer and Podcasts.
+  Only IINA is tested so far. If one doesn't respond,
   [open an issue](https://github.com/ppixu/beamhook/issues).
 - Any other app, with your own AppleScript commands. Some apps don't offer the
   AppleScript controls this needs.

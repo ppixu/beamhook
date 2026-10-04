@@ -295,6 +295,8 @@ final class AppState: ObservableObject {
     @Published var launchTargetOnPlay: Bool = LaunchOnPlayPreference.isEnabled(.standard)
     /// Whether a hooked play/pause press flashes the overlay.
     @Published var showPlayPauseHUD: Bool = PlayPauseHUDPreference.isEnabled(.standard)
+    @Published var skipOnPodcasts: Bool = TrackKeyPreference.skipOnPodcasts(.standard)
+    @Published var alwaysSkip: Bool = TrackKeyPreference.alwaysSkip(.standard)
     /// Whether ⌘ + a volume key reaches the hooked app when the plain keys don't.
     @Published var commandVolumeRouting: Bool = CommandVolumePreference.isEnabled(.standard)
     /// Whether the per-app mute buttons are shown. Default ON; the System Audio
@@ -458,29 +460,40 @@ final class AppState: ObservableObject {
         default:
             guard let command = key.command else { return }
             if selectedTargetIsQuickTime {
-                guard command == .playPause else { return }
-                let context = playbackTargetContext
-                Task {
-                    if await togglePlayPauseTarget(in: context) { await announcePlayPause() }
+                if command == .playPause {
+                    let context = playbackTargetContext
+                    Task {
+                        if await togglePlayPauseTarget(in: context) { await announcePlayPause() }
+                    }
+                } else if skipOnPodcasts {
+                    // A movie has no next to lose, so its track keys always skip.
+                    Task { await seekQuickTime(by: command == .next ? 15 : -15) }
                 }
             } else if selectedTargetIsBrowser, browserMediaInjectionAvailable == true {
                 guard let candidate = selectedBrowserMediaCandidate,
                       candidate.supportsTransport
                 else { return }
                 Task {
+                    if command != .playPause, await self.skipBrowserIfPodcast(command, on: candidate) {
+                        return
+                    }
                     let performed = await self.performBrowserCommand(command, on: candidate)
                     guard performed, command == .playPause else { return }
                     await self.announcePlayPause()
                 }
             } else {
                 Task {
-                    let routed = await self.targetManager.route(key)
+                    let outcome = await self.targetManager.routeKey(key)
+                    if case .skipped(let seconds, let byMenu) = outcome {
+                        self.announceSkip(seconds: seconds, byMenu: byMenu)
+                        return
+                    }
                     guard command == .playPause else { return }
-                    // route() returning false means nothing was delivered — no
-                    // target, or the app isn't ready. Only play/pause gets the
+                    // routeKey returning .notDelivered means nothing was delivered —
+                    // no target, or the app isn't ready. Only play/pause gets the
                     // launch fallback: next/previous on a quit app have no
                     // meaningful target.
-                    if routed {
+                    if outcome != .notDelivered {
                         await self.announcePlayPause()
                     } else if let id = self.selectedTargetID,
                               let app = self.registry.app(withID: id), !app.isReady {
@@ -538,6 +551,12 @@ final class AppState: ObservableObject {
         let isPlaying = await confirmTargetPlaying(in: context, after: previous)
         guard showPlayPauseHUD, context == playbackTargetContext else { return }
         showPlaybackHUD(appName: def.displayName, bundleID: def.bundleID, isPlaying: isPlaying)
+    }
+
+    /// Same gate as the play/pause overlay: both confirm a transport key.
+    private func announceSkip(seconds: Int, byMenu: Bool) {
+        guard showPlayPauseHUD, let def = currentTargetDefinition() else { return }
+        HookHUD.shared.showSkip(appName: def.displayName, seconds: seconds, byMenu: byMenu)
     }
 
     private func showPlaybackHUD(appName: String, bundleID: String, isPlaying: Bool?) {
@@ -955,6 +974,37 @@ final class AppState: ObservableObject {
         await performBrowserCommand(.playPause, on: candidate)
     }
 
+    /// True when the key became a short skip. Any unreadable page or refused
+    /// seek returns false so the caller sends the plain track command.
+    private func skipBrowserIfPodcast(_ command: MediaCommand,
+                                      on candidate: BrowserMediaCandidate) async -> Bool {
+        guard skipOnPodcasts else { return false }
+        let always = alwaysSkip
+        let seconds: Int? = await scripting.run { [browserMediaController] in
+            guard let facts = browserMediaController.transportFacts(candidate) else { return nil }
+            let action = TransportDecision.decide(
+                command: command, kind: BrowserPlaybackKind.classify(facts),
+                canSeek: BrowserPlaybackKind.canSeek(facts),
+                skip: BrowserPlaybackKind.skipSeconds(host: facts.host),
+                skipOnPodcasts: true, alwaysSkip: always)
+            guard case .seek(let seconds) = action,
+                  browserMediaController.seek(by: seconds, on: candidate) else { return nil }
+            return seconds
+        }
+        guard let seconds else { return false }
+        announceSkip(seconds: seconds, byMenu: false)
+        return true
+    }
+
+    private func seekQuickTime(by seconds: Int) async {
+        guard let id = selectedQuickTimeMovieID,
+              let movie = quickTimeMovies.first(where: { $0.id == id }) else { return }
+        let moved = await scripting.run { [quickTimeController] in
+            quickTimeController.seek(movie, by: seconds)
+        }
+        if moved { announceSkip(seconds: seconds, byMenu: false) }
+    }
+
     private func performBrowserCommand(
         _ command: MediaCommand,
         on candidate: BrowserMediaCandidate
@@ -1281,6 +1331,16 @@ final class AppState: ObservableObject {
     func setShowPlayPauseHUD(_ on: Bool) {
         showPlayPauseHUD = on
         PlayPauseHUDPreference.setEnabled(on, in: .standard)
+    }
+
+    func setSkipOnPodcasts(_ on: Bool) {
+        skipOnPodcasts = on
+        TrackKeyPreference.setSkipOnPodcasts(on, in: .standard)
+    }
+
+    func setAlwaysSkip(_ on: Bool) {
+        alwaysSkip = on
+        TrackKeyPreference.setAlwaysSkip(on, in: .standard)
     }
 
     func setCommandVolumeRouting(_ on: Bool) {

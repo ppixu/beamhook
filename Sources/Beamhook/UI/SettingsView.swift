@@ -22,8 +22,8 @@ struct SettingsView: View {
         // includes `.resizable`, and a hard-fixed frame here would leave it
         // draggable but visually inert. The Apps tab's list is the one that
         // actually benefits — it only fits ~5 rows at the original 300pt.
-        // 340pt fits the General tab's five rows with captions.
-        .frame(minWidth: 440, idealWidth: 440, minHeight: 340, idealHeight: 340)
+        // 440pt fits the General tab's seven rows with captions.
+        .frame(minWidth: 440, idealWidth: 440, minHeight: 440, idealHeight: 440)
     }
 }
 
@@ -54,6 +54,20 @@ private struct GeneralSettingsTab: View {
                 caption: "Flashes the app the keys reached, like the volume overlay.",
                 isOn: Binding(get: { state.showPlayPauseHUD },
                               set: { state.setShowPlayPauseHUD($0) }))
+
+            settingRow(
+                title: "⏭ skips 15 s on podcasts instead of next track",
+                caption: "Spotify episodes, Apple Podcasts, long videos and pages without a next button. Playlists and albums keep next/previous.",
+                isOn: Binding(get: { state.skipOnPodcasts },
+                              set: { state.setSkipOnPodcasts($0) }))
+
+            settingRow(
+                title: "Always skip instead of changing track",
+                caption: "Also for music, wherever Beamhook can seek.",
+                isOn: Binding(get: { state.alwaysSkip },
+                              set: { state.setAlwaysSkip($0) }))
+                .padding(.leading, 20)
+                .disabled(!state.skipOnPodcasts)
 
             // The tap API behind the mute buttons is macOS 14.2+; on 14.0/14.1
             // the row is omitted rather than shown dead.
