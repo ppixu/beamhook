@@ -690,7 +690,13 @@ final class HookHUD {
         text.font = .systemFont(ofSize: 15, weight: .semibold)
         text.textColor = .labelColor
         text.lineBreakMode = .byTruncatingTail
+        text.maximumNumberOfLines = 1
+        text.cell?.wraps = false
+        text.cell?.usesSingleLineMode = true
         text.translatesAutoresizingMaskIntoConstraints = false
+        // A hooked browser tab names the HUD after its page title, which can be
+        // a whole sentence; truncate rather than stretch the panel across the screen.
+        text.widthAnchor.constraint(lessThanOrEqualToConstant: 280).isActive = true
 
         let transport = NSImageView()
         transport.symbolConfiguration = .init(pointSize: 22, weight: .medium)
