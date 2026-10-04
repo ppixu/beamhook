@@ -4,20 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Browser setup &amp; per-app volume help — Beamhook</title>
-<meta name="description" content="Set up Beamhook browser tabs, per-app volume and mute on Mac. Enable JavaScript from Apple Events and learn volume keyboard shortcuts and permissions.">
+<meta name="description" content="Set up Beamhook’s browser tab controls, per-app volume and mute on Mac: turn on JavaScript from Apple Events, grant permissions, and learn the volume shortcuts.">
 <link rel="canonical" href="https://beamhook.app/help/">
 
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Beamhook">
 <meta property="og:url" content="https://beamhook.app/help/">
 <meta property="og:title" content="Browser setup &amp; per-app volume help — Beamhook">
-<meta property="og:description" content="How to turn on “Allow JavaScript from Apple Events” in Safari, Chrome, Brave, Arc and Vivaldi, so Beamhook can hook your media keys to one specific browser tab.">
+<meta property="og:description" content="How to turn on “Allow JavaScript from Apple Events” in Safari, Chrome, Brave, Arc and Vivaldi, so Beamhook can control a single browser tab.">
 <meta property="og:image" content="https://beamhook.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Browser setup &amp; per-app volume help — Beamhook">
-<meta name="twitter:description" content="How to turn on “Allow JavaScript from Apple Events” in Safari, Chrome, Brave, Arc and Vivaldi, so Beamhook can hook your media keys to one specific browser tab.">
+<meta name="twitter:description" content="How to turn on “Allow JavaScript from Apple Events” in Safari, Chrome, Brave, Arc and Vivaldi, so Beamhook can control a single browser tab.">
 <meta name="twitter:image" content="https://beamhook.app/og.png">
 
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
@@ -156,24 +156,24 @@
 
   <p><a href="/per-app-volume-mac/">Individual app volume on Mac</a> · <a href="/help/#volume-controls">Volume shortcuts</a></p>
   <h1>Browser setup and per-app volume help</h1>
-  <p class="tag">A one-time switch, per browser, so Beamhook can hook your keys to one specific tab.</p>
+  <p class="tag">Each browser needs one setting turned on before Beamhook can control a single tab.</p>
 
-  <p class="compat"><strong>Firefox tab and playback control is not supported.</strong> Beamhook's browser controls work with Safari,
+  <p class="compat"><strong>Firefox tabs aren't supported.</strong> Browser controls work in Safari,
   Chrome, Brave, Arc and Vivaldi.</p>
 
-  <p class="lede">Beamhook controls a native app like Spotify with a single AppleScript command. Browsers work
-  differently: to see which tabs are playing — and to send play/pause to the one you picked — Beamhook asks the
-  browser to run a small piece of JavaScript in each tab. macOS ships with that ability turned off.</p>
+  <p class="lede">Beamhook controls apps like Spotify with AppleScript. Browsers need one more step: to see
+  which tabs are playing and control the one you picked, Beamhook runs a small script in each tab. Browsers
+  block this until you allow it.</p>
 
-  <p class="lede">Without it your media keys still reach the browser; macOS just decides for itself which tab
-  hears them. That's what the notice in Beamhook is telling you. Turning it on takes about twenty seconds.</p>
+  <p class="lede">Until then, media keys still reach the browser, but macOS picks the tab. That's what the
+  notice in Beamhook means. Turning it on takes a few seconds.</p>
 
   <h2 id="safari">Safari</h2>
 
-  <h3>1. Reveal the developer settings</h3>
-  <p>Choose <span class="path">Safari → Settings</span> (<kbd>⌘,</kbd>), click <span class="path">Advanced</span>,
-  and tick <span class="path">Show features for web developers</span>. This is what puts the
-  <span class="path">Developer</span> tab in the Settings toolbar.</p>
+  <h3>1. Show the developer settings</h3>
+  <p>Open <span class="path">Safari → Settings</span> (<kbd>⌘,</kbd>), click <span class="path">Advanced</span>,
+  and tick <span class="path">Show features for web developers</span>. This adds a
+  <span class="path">Developer</span> tab to Settings.</p>
 
   <figure>
     <div class="shot">
@@ -192,11 +192,9 @@
     <figcaption>Safari → Settings → Advanced, at the bottom of the pane.</figcaption>
   </figure>
 
-  <h3>2. Tick the box</h3>
-  <p>A <span class="path">Developer</span> tab now sits at the right-hand end of the Settings toolbar, after
-  <span class="path">Advanced</span>. Open it and tick the third box under
-  <span class="path">Automation</span>: <span class="path">Allow JavaScript from Apple Events</span>.
-  That's it — no restart, no reload.</p>
+  <h3>2. Allow JavaScript from Apple Events</h3>
+  <p>Open the new <span class="path">Developer</span> tab. Under <span class="path">Automation</span>, tick
+  <span class="path">Allow JavaScript from Apple Events</span>. No restart needed.</p>
 
   <figure>
     <div class="shot">
@@ -223,14 +221,13 @@
         </div>
       </div>
     </div>
-    <figcaption>Safari → Settings → Developer. Three boxes sit under Automation; you want the last one.</figcaption>
+    <figcaption>Safari → Settings → Developer. It's the third box under Automation.</figcaption>
   </figure>
 
   <h3>On older versions of Safari</h3>
-  <p>Before the Developer tab existed, the same switch lived in the menu bar: step 1 added a
-  <span class="path">Develop</span> menu, and <span class="path">Allow JavaScript from Apple Events</span>
-  sat inside it. If your Settings window has no Developer tab, look there instead — it's one setting either
-  way, so ticking it in one place ticks it in the other.</p>
+  <p>Older versions have no Developer tab. Step 1 adds a <span class="path">Develop</span> menu to the
+  menu bar instead, and <span class="path">Allow JavaScript from Apple Events</span> is in that menu. It's the
+  same setting either way.</p>
 
   <figure>
     <div class="shot">
@@ -249,13 +246,13 @@
         </div>
       </div>
     </div>
-    <figcaption>The older route: the Develop menu in the menu bar. Neighbouring items vary by version.</figcaption>
+    <figcaption>Older Safari: the Develop menu. Other items vary by version.</figcaption>
   </figure>
 
   <h2 id="chrome">Chrome</h2>
 
-  <p>In the menu bar, choose <span class="path">View → Developer → Allow JavaScript from Apple Events</span>.
-  A checkmark means it's on. There's nothing to switch on first.</p>
+  <p>Choose <span class="path">View → Developer → Allow JavaScript from Apple Events</span>.
+  A checkmark means it's on.</p>
 
   <figure>
     <div class="shot">
@@ -286,40 +283,38 @@
 
   <h3>The other browsers</h3>
   <ul>
-    <li><b>Brave</b> and <b>Arc</b> — same path as Chrome: <span class="path">View → Developer →
+    <li><b>Brave</b> and <b>Arc</b>: same as Chrome, <span class="path">View → Developer →
       Allow JavaScript from Apple Events</span>.</li>
-    <li><b>Vivaldi</b> — it lives in Vivaldi's own settings instead of a menu:
-      <span class="path">Vivaldi → Settings → Privacy</span>. Typing <i>Apple Events</i> into the search box at
-      the top of Settings jumps straight to it.</li>
+    <li><b>Vivaldi</b>: <span class="path">Vivaldi → Settings → Privacy</span>. Or search Settings for
+      <i>Apple Events</i>.</li>
   </ul>
 
   <h2>After you turn it on</h2>
   <ul>
-    <li>The first time Beamhook talks to the browser, macOS asks whether Beamhook may control it. Choose
-      <span class="path">OK</span>. If you dismissed that prompt, you can grant it later under
+    <li>The first time Beamhook talks to the browser, macOS asks if Beamhook may control it. Click
+      <span class="path">OK</span>. If you missed it, go to
       <span class="path">System Settings → Privacy &amp; Security → Automation → Beamhook</span>.</li>
-    <li>Open the Beamhook menu again. Where the notice was, you'll now find a list of the tabs that are
-      playing, and the keys follow whichever one you pick.</li>
-    <li>The switch stays on until you turn it off, and it's per browser — turning it on in Safari does
-      nothing for Chrome.</li>
-    <li>It doesn't hand anything to websites. It lets applications you've already allowed under
-      <span class="path">Automation</span> run JavaScript in your tabs — Beamhook uses it to read what's
-      playing and to send play, pause and volume.</li>
+    <li>Open Beamhook again. The notice is gone, and the playing tabs are listed instead. Hook a tab and
+      the media keys go to it.</li>
+    <li>The setting is per browser and stays on until you turn it off.</li>
+    <li>It doesn't give websites anything. It lets apps you've allowed under
+      <span class="path">Automation</span> run JavaScript in your tabs. Beamhook uses it to see what's
+      playing and to play, pause and change volume.</li>
   </ul>
 
   <h2 id="volume-controls">Volume and mute controls</h2>
-  <p>Each app has a volume slider and a speaker button for mute. A browser's
-  main row controls the whole browser; indented rows control individual tabs.
-  Raising the volume of a muted source unmutes it. Muting remembers the previous
-  level so you can restore it.</p>
-  <p>Per-app volume and mute require macOS 14.2 or later and
-  <b>System Audio Recording</b> permission. Audio is processed live and never
-  stored. Native app controls remain in use where available. Browser-tab controls
-  also require the JavaScript and Automation permissions described above.</p>
+  <p>Each app has a volume slider and a speaker button to mute it. A browser's
+  main row sets the whole browser; the indented rows under it are single tabs.
+  Raising a muted source's volume unmutes it, and unmuting brings back the old
+  level.</p>
+  <p>Per-app volume and mute need macOS 14.2 or later and
+  <b>System Audio Recording</b> permission. Audio is adjusted as it plays and
+  never saved. If an app has its own volume control, Beamhook uses it. Tab
+  controls also need the browser setting and Automation access above.</p>
   <h3>The expanded overlay</h3>
   <p>With the menu's <b>Volume keys</b> toggle off, press <b>Command + Volume</b>
-  or <b>Command + Play</b> to open the app-and-tab selector. While a regular
-  Beamhook overlay is visible, Command plus an arrow opens it too.</p>
+  or <b>Command + Play</b> to open the app and tab picker. If a Beamhook overlay
+  is already showing, Command + an arrow key opens it too.</p>
   <ul>
     <li><b>Command + Up/Down:</b> select a source.</li>
     <li><b>Command + Left/Right:</b> adjust its volume.</li>
@@ -327,26 +322,23 @@
     <li><b>Command + Mute:</b> mute or restore it.</li>
     <li><b>Command + H:</b> hook the selected app or tab.</li>
   </ul>
-  <p>Turn <b>Volume keys</b> on to open the selector with plain volume keys
-  and use these shortcuts without Command while it is visible. In this mode,
-  <b>Command + Volume always controls system volume</b>. With the toggle off,
-  releasing Command closes the selector; with it on, the selector fades after
-  inactivity. Playback controls appear only for sources that support them,
-  and browsers show playback controls on their tabs.</p>
+  <p>With <b>Volume keys</b> on, the plain volume keys open the picker, and
+  the shortcuts work without Command while it's open. <b>Command + Volume then
+  always changes system volume</b>. With the toggle off, the picker closes when
+  you let go of Command; with it on, it fades when you stop using it. Play
+  buttons only appear for sources that support them, and for browser tabs.</p>
   <h3>Which apps appear?</h3>
-  <p>The compact lists show apps producing sound or heard within the last two
-  hours, plus the hooked source. Choose <b>Show all</b> in the menu to see other
-  available apps. Recently played browser tabs remain available after pausing
-  for up to two hours, with up to three shown per browser. Closed tabs disappear
-  on the next scan; this history clears when Beamhook quits.</p>
-  <p>Animated speaker arcs indicate activity. Their number follows the volume
-  setting, with at least one animated arc when sound is detected; they are not
-  a live loudness meter.</p>
+  <p>The menu lists apps that are playing or played in the last two hours,
+  plus the hooked one. Click <b>Show all</b> to see the rest. Paused browser
+  tabs stay listed for up to two hours, at most three per browser. Closed tabs
+  drop off on the next check, and the list resets when Beamhook quits.</p>
+  <p>The speaker arcs animate while sound plays. How many arcs you see follows
+  the volume setting, not how loud the sound is.</p>
 
   <p class="foot">Still stuck, or does your browser look different?
-  <a href="https://github.com/ppixu/beamhook/issues">Open an issue on GitHub</a> and tell us what you see —
-  including your macOS and browser versions. &nbsp;·&nbsp; <a href="/">beamhook.app</a></p>
-<p class="author">Made by <a href="https://github.com/ppixu" rel="author">Olli Pikkarainen (ppixu)</a>, the developer of Beamhook. I built it after getting tired of media keys controlling the wrong app. <a href="https://github.com/ppixu/beamhook">The source is public</a>; bug reports and feature requests are welcome.</p>
+  <a href="https://github.com/ppixu/beamhook/issues">Open an issue on GitHub</a> with your macOS and
+  browser versions. &nbsp;·&nbsp; <a href="/">beamhook.app</a></p>
+<p class="author">Made by <a href="https://github.com/ppixu" rel="author">Olli Pikkarainen (ppixu)</a>. I built Beamhook because my media keys kept controlling the wrong app. <a href="https://github.com/ppixu/beamhook">The source is on GitHub</a>, and bug reports and feature requests are welcome.</p>
 </div>
 </body>
 </html>

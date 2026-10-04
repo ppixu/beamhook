@@ -23,14 +23,17 @@
   <img src="docs/demo.gif" width="720" alt="Demo: hooking the media keys to Spotify, then to Safari's YouTube tab, and back">
 </p>
 
-Beamhook puts individual app volume and mute controls in your Mac’s menu bar
-and makes your media keys predictable. It sends play/pause,
-next, and previous to **one app you choose** — so macOS can't redirect them
-to Apple Music, YouTube, or whichever player it remembers. It also lets you
-control the volume of apps that are currently playing audio and mute them,
-even without AppleScript support. Requires
-macOS 14.0 or later; the active-audio source list and process-tap volume/mute require
-macOS 14.2. Tested on macOS Tahoe 26.5.
+Beamhook is a menu-bar app that does two things:
+
+- **Per-app volume.** Every app playing sound gets its own volume slider and
+  mute button, and browsers get one for each tab. Turn Spotify down or mute a
+  noisy app without touching anything else.
+- **Media keys that stay put.** Play/pause, next and previous go to **one app
+  you choose**, not to Apple Music, a forgotten YouTube tab, or whatever macOS
+  remembers.
+
+Requires macOS 14.0 or later. Per-app volume for apps without their own volume
+control needs macOS 14.2. Tested on macOS Tahoe 26.5.
 
 > [!IMPORTANT]
 > Firefox is not supported. Browser control works with Safari, Chrome, Brave,
@@ -38,74 +41,67 @@ macOS 14.2. Tested on macOS Tahoe 26.5.
 
 ## Features
 
-- Hook the media keys to one target app — nothing else can steal them.
-- Play/pause button that reflects what's actually playing.
-- Volume sliders for apps that are currently playing audio, whether or not
-  they are hooked. Apps without native volume controls use Core Audio process
-  taps on macOS 14.2+, with the same System Audio Recording permission as mute.
-  Levels range from 0–100%, persist by app, and are preserved when muting and
-  unmuting. Native controls and browser-tab sliders keep their existing behavior.
-  Process-tap playback currently supports mono and stereo Float32 outputs;
-  unsupported formats show an error and leave the original output intact.
-- Browser app rows control the volume of the whole browser, including Safari
-  and Brave, through process taps. Child tab sliders remain independent and need
-  [JavaScript from Apple Events](https://beamhook.app/help/) enabled.
-- Open the expanded volume list with ⌘ + a volume key or ⌘ + Play, or press
-  ⌘ + any arrow while a Beamhook overlay is visible. ⌘↑/↓ selects a source,
-  ⌘←/→ changes its volume, and ⌘ + Play/Mute controls the selected source.
-- Recently observed playing tabs stay eligible for two hours after pausing,
-  with up to three shown per browser. Closed tabs are removed on the next scan;
-  restarting Beamhook clears this history.
-- Optionally route the keyboard's volume keys to the selected app.
-- **Command flips which volume the keys control.** With the volume keys routed
-  to the app, ⌘ + a volume key reaches the Mac's system volume; with them left
-  to the system, ⌘ + a volume key reaches the hooked app. Either way the plain
-  keys keep their usual meaning. Can be turned off in Settings.
-- **Mute any app.** Every app in the menu has a speaker button — including
-  apps with no AppleScript at all, such as Electron apps and chat apps with
-  notification chimes. Works through a Core Audio process tap; needs macOS 14.2
-  and the System Audio Recording permission, which macOS asks for when Beamhook
-  first starts. Audio is processed live and never stored. Turn off **Per-app
-  volume and mute** in Settings to restore normal output and clear saved levels
-  and mutes.
-- The speaker icon animates while an app or tab is actually making sound.
-- ⌘ + mute toggles the hooked app's mute, following the same rule as the volume
-  keys. The menu-bar icon shows a slash through the hooked app's badge while it
-  is muted.
-- **Pick the source from the overlay.** Command + volume or Play opens the
-  expanded list. Command-Up/Down selects, Command-Left/Right adjusts volume,
-  Command-Play toggles playback, Command-Mute mutes, and Command-H hooks the
-  selection. With the volume-key toggle on, plain volume keys open the list
-  and these shortcuts work without Command; Command-volume controls system
-  volume. The legend follows the toggle. With the toggle off, releasing Command
-  dismisses the list; with it on, the list fades after inactivity.
-- **Volume and mute are independent per app and per browser tab.** App sliders
-  affect the whole app; indented tab sliders affect that tab. Raising a muted
-  source's volume unmutes it. Muting remembers its previous level. The speaker
-  arcs animate outward when sound is detected, with 1–3 active arcs based on
-  the volume setting; they are an activity indicator, not a loudness meter.
-- Lists focus on recently sounding apps, with **Show all** in the menu for
-  the rest. Spotify's current artist and song appear beside its name and under
-  the title in its small playback overlay.
-- If the hooked app isn't running, play/pause starts it and begins playback. Can
-  be turned off in Settings. (A menu-driven app launched with an empty queue —
-  TIDAL, for instance — has nothing to play.)
-- Built in: Spotify, Apple Music, Apple TV, Safari, Chrome, Brave, Arc,
-  Vivaldi, VLC, VOX, QuickTime Player, and Downcast.
-- Also built in, driven through their menus rather than AppleScript: IINA,
-  Amazon Music, Plexamp, and Deezer. IINA is tested; the other three are not yet
-  — if one does nothing when you press play,
-  [tell us](https://github.com/ppixu/beamhook/issues) and it can be fixed.
-  These targets use process taps for their volume sliders on macOS 14.2+.
-- Add another app with your own AppleScript commands.
+### Volume and mute
 
-Some apps do not expose suitable AppleScript controls and cannot be controlled
-this way.
+- A volume slider (0–100%) and mute button for each app that is playing or
+  played recently. **Show all** lists the rest.
+- Works for apps with no AppleScript, such as Electron and chat apps, through a
+  Core Audio process tap. This needs macOS 14.2 and the System Audio Recording
+  permission. Audio is adjusted live and never stored. Apps with their own
+  volume control are adjusted through it instead.
+- A browser's row sets the whole browser. The indented rows under it set single
+  tabs, which needs [JavaScript from Apple Events](https://beamhook.app/help/).
+- Levels are remembered per app. Unmuting restores the previous level, and
+  raising a muted slider unmutes it.
+- The speaker arcs animate while sound plays. The number of arcs follows the
+  volume setting, not loudness.
+- Process taps support mono and stereo Float32 output. Other formats show an
+  error and leave the sound alone.
+- Turn off **Per-app volume and mute** in Settings to restore normal output and
+  clear saved levels.
 
-The browser targets control the active YouTube tab. Enable **Allow JavaScript
-from Apple Events** in Safari's Develop menu or the Chromium browser's
-View → Developer menu before using them —
-[step-by-step guide with pictures](https://beamhook.app/help/).
+### Media keys
+
+- Hook the media keys to one app or browser tab. Nothing else can take them.
+- If the hooked app isn't running, play/pause starts it. (An app launched with
+  an empty queue, such as TIDAL, has nothing to play.) Can be turned off in
+  Settings.
+- Optionally send the volume keys to the hooked app too. ⌘ + volume then
+  controls system volume. With the volume keys left to the system, it's the
+  other way around: ⌘ + volume controls the hooked app.
+- ⌘ + Mute mutes the hooked app, following the same rule. The menu-bar icon
+  shows a slash while it's muted.
+- Spotify shows the current artist and song in the menu and the overlay.
+
+### Keyboard picker
+
+Press ⌘ + a volume key or ⌘ + Play to open the source picker, or ⌘ + an arrow
+key while a Beamhook overlay is showing.
+
+- ⌘↑ / ⌘↓ selects a source.
+- ⌘← / ⌘→ changes its volume.
+- ⌘ + Play plays or pauses it, ⌘ + Mute mutes it, ⌘ + H hooks it.
+
+With the volume keys routed to the hooked app, the plain volume keys open the
+picker and the shortcuts work without ⌘. Otherwise the picker closes when you
+let go of ⌘.
+
+### Supported apps
+
+- AppleScript: Spotify, Apple Music, Apple TV, VLC, VOX, QuickTime Player and
+  Downcast.
+- Browsers: Safari, Chrome, Brave, Arc and Vivaldi. You pick the tab. Turn on
+  **Allow JavaScript from Apple Events** first
+  ([guide with pictures](https://beamhook.app/help/)).
+- Through their menus: IINA, Amazon Music, Plexamp and Deezer. Only IINA is
+  tested so far. If one doesn't respond,
+  [open an issue](https://github.com/ppixu/beamhook/issues).
+- Any other app, with your own AppleScript commands. Some apps don't offer the
+  AppleScript controls this needs.
+
+Recently played tabs stay listed for two hours after pausing, up to three per
+browser. Closed tabs drop off on the next scan, and the list clears when
+Beamhook quits.
 
 ## Build it yourself — free
 
@@ -120,23 +116,20 @@ Then grant **Accessibility** when prompted, pick your app, and press play.
 
 ## Or get the official build — €5
 
-Rather not build it yourself? The **€5 one-time purchase** on Gumroad includes
-the signed and notarized, ready-to-run app and all Beamhook 1.x updates. It is
-the same complete app as the open-source version, and your purchase supports
-continued development.
+Rather not build it? The **€5 one-time purchase** on Gumroad gets you the
+signed, notarized, ready-to-run app with all 1.x updates. It's the same app as
+the source, and buying it supports development.
 
 [![Get the official build on Gumroad](https://img.shields.io/badge/Official%20build-%E2%82%AC5-ff90e8?style=for-the-badge&logo=gumroad)](https://ppixu.gumroad.com/l/beamhook)
 
 ## Bugs and requests
 
-Found a bug, or want an app supported that isn't in the list? Please open a
-[GitHub issue](https://github.com/ppixu/beamhook/issues) — that's the place for
-it, whether you bought the official build or built it yourself. Search the
-[open issues](https://github.com/ppixu/beamhook/issues) first in case it's
-already known, and include your macOS version, the Beamhook version, and the app
-you were controlling.
+Found a bug, or want another app supported?
+[Open an issue](https://github.com/ppixu/beamhook/issues), whether you bought
+the app or built it yourself. Check the existing issues first, and include your
+macOS version, Beamhook version and the app you were controlling.
 
 ## License
 
-[GPL-3.0](LICENSE). Use it, study it, change it, share it — derivative works
-must stay under the GPL.
+[GPL-3.0](LICENSE). Use it, change it and share it. Derivative works must
+stay under the GPL.

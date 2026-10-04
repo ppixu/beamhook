@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Beamhook — Per-app volume &amp; media keys for Mac</title>
-<meta name="description" content="Control individual app volume on Mac, mute apps and browser tabs, and hook media keys to your chosen player. Open source; €5 for the ready-to-run app.">
+<meta name="description" content="Set each app’s volume on your Mac, mute apps and browser tabs, and keep the media keys on the player you choose. Open source, or €5 for the ready-to-run app.">
 <link rel="canonical" href="https://beamhook.app/">
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Beamhook">
 <meta property="og:url" content="https://beamhook.app/">
 <meta property="og:title" content="Beamhook — Per-app volume &amp; media keys for Mac">
-<meta property="og:description" content="Control individual app volume on Mac, mute apps and browser tabs, and hook media keys to your chosen player. Open source; €5 for the ready-to-run app.">
+<meta property="og:description" content="Set each app’s volume on your Mac, mute apps and browser tabs, and keep the media keys on the player you choose. Open source, or €5 for the ready-to-run app.">
 <meta property="og:image" content="https://beamhook.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Beamhook — your Mac's media keys, hooked to the app you choose.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Beamhook — Per-app volume &amp; media keys for Mac">
-<meta name="twitter:description" content="Control individual app volume on Mac, mute apps and browser tabs, and hook media keys to your chosen player. Open source; €5 for the ready-to-run app.">
+<meta name="twitter:description" content="Set each app’s volume on your Mac, mute apps and browser tabs, and keep the media keys on the player you choose. Open source, or €5 for the ready-to-run app.">
 <meta name="twitter:image" content="https://beamhook.app/og.png">
 
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
@@ -31,7 +31,7 @@
   "@type": "SoftwareApplication",
   "name": "Beamhook",
   "url": "https://beamhook.app/",
-  "description": "A macOS menu-bar app for individual app volume, per-app mute, browser-tab volume and media keys that stay hooked to your chosen player. Process-tap volume and mute require macOS 14.2 or later.",
+  "description": "A Mac menu-bar app for per-app volume and mute, browser-tab volume, and media keys that stay on the player you choose. Per-app volume for apps without their own volume control needs macOS 14.2 or later.",
   "applicationCategory": "MultimediaApplication",
   "applicationSubCategory": "Menu bar utility",
   "operatingSystem": "macOS 14.0 or later",
@@ -79,7 +79,7 @@
       "name": "Can I control individual app volume on my Mac?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. Beamhook gives apps playing audio their own volume sliders and mute buttons. Apps without native volume controls use Core Audio process taps on macOS 14.2 or later. Your other apps keep their own levels."
+        "text": "Yes. Each app playing sound gets its own volume slider and mute button, and other apps keep their levels. Apps without their own volume control need macOS 14.2 or later."
       }
     },
     {
@@ -87,7 +87,7 @@
       "name": "Can I change one browser tab’s volume?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. Beamhook has separate tab controls for Safari, Chrome, Brave, Arc and Vivaldi after you enable Allow JavaScript from Apple Events. You can also adjust the whole browser. Firefox tab and playback control is not supported."
+        "text": "Yes, in Safari, Chrome, Brave, Arc and Vivaldi. Turn on Allow JavaScript from Apple Events in the browser first. You can also change the whole browser’s volume. Firefox tabs aren’t supported."
       }
     },
     {
@@ -95,7 +95,7 @@
       "name": "Why does Beamhook ask for System Audio Recording permission?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "macOS requires this permission for the process taps used by per-app volume and mute. Beamhook processes audio live and never stores it. Process-tap playback supports mono and stereo Float32 outputs; unsupported formats show an error and leave the original output intact."
+        "text": "macOS asks for it whenever an app changes the volume of other apps. Beamhook adjusts the sound as it plays and never records or saves it."
       }
     },
     {
@@ -103,7 +103,7 @@
       "name": "Is Beamhook free?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Beamhook is open source and free to build yourself. The signed, notarized, ready-to-run app costs €5 once and includes all Beamhook 1.x updates."
+        "text": "The source code is free, and you can build the app yourself. The signed, ready-to-run app costs €5 once and includes all 1.x updates."
       }
     }
   ]
@@ -283,7 +283,7 @@
 
   .page{flex:1;display:flex;align-items:center;justify-content:center;padding:48px 32px 56px}
   .card{max-width:470px;width:100%;text-align:center;animation:fade .7s cubic-bezier(.2,.7,.2,1) both}
-  .mark{width:min(430px,100%);margin:0 auto 26px}
+  .mark{width:min(430px,100%);margin:0 auto 10px}
   .mark svg{width:100%;height:auto;display:block}
   .mark .keys path{fill:var(--line);stroke:var(--line);stroke-width:14;stroke-linejoin:round}
   .mark .keys rect{fill:var(--line)}
@@ -350,7 +350,7 @@
   .glass-label{font-size:10.5px;color:rgba(60,60,67,.72);margin:0;text-align:center;cursor:grab;touch-action:none;user-select:none}
   .popup.is-dragging .glass-label{cursor:grabbing}
   .glass-select,.glass-target-menu button,.glass-play,.glass-pill,.glass-mini-play,.glass-check,.glass-add,.glass-toggle,
-  .glass-gear,.glass-quit,.settings-close{
+  .glass-quit{
     appearance:none;-webkit-appearance:none;border:0;font:inherit;text-align:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
   .glass-target-picker{position:relative}
   /* Borderless like the app's Menu: centred title + chevron, no chrome until hover. */
@@ -435,11 +435,6 @@
   .glass-brand{display:flex;align-items:center;gap:6px;min-width:0;flex:none;font-size:11.5px;font-weight:650}
   .glass-brand-icon{width:13px;height:13px;object-fit:contain;flex:none}
   .glass-version{flex:none;margin-right:auto;font-size:9.5px;color:rgba(60,60,67,.42)}
-  /* Borderless, like the gearshape button that replaced the inline settings rows. */
-  .glass-gear{display:grid;place-items:center;width:18px;height:18px;flex:none;padding:0;
-    background:transparent;color:rgba(60,60,67,.75)}
-  .glass-gear svg{width:13px;height:13px;display:block}
-  .glass-gear:hover{color:rgba(60,60,67,1)}
   .glass-play:hover,.glass-pill:hover,.glass-check:hover,.glass-add:hover,.glass-toggle:hover,.glass-quit:hover{
     filter:brightness(.94)}
   .glass-play:disabled:hover{filter:none}
@@ -447,52 +442,8 @@
   .glass-select:active,.glass-play:active,.glass-pill:active,.glass-add:active,.glass-quit:active{transform:scale(.98)}
   .glass-select:focus-visible,.glass-play:focus-visible,.glass-pill:focus-visible,.glass-slider:focus-visible,
   .glass-mini-play:focus-visible,.glass-check:focus-visible,.glass-add:focus-visible,.glass-toggle:focus-visible,
-  .glass-gear:focus-visible,.glass-quit:focus-visible,.settings-close:focus-visible{
+  .glass-quit:focus-visible{
     outline:2px solid #007aff;outline-offset:2px}
-
-  /*
-   * The gear opens a real window in the app, so this is a window and not another
-   * popover section: opening it dismisses the popover, the way a transient
-   * NSPopover gives way when Settings takes key.
-   */
-  .settings-window{position:fixed;left:auto;right:8px;top:42px;z-index:60;
-    width:min(300px,calc(100vw - 16px));border-radius:12px;overflow:hidden;
-    background:rgba(246,246,246,.98);color:#1c1c1e;
-    font-family:var(--sans);font-size:12.5px;line-height:1.3;-webkit-font-smoothing:antialiased;
-    border:1px solid rgba(0,0,0,.14);
-    box-shadow:0 24px 60px rgba(0,0,0,.22),0 6px 16px rgba(0,0,0,.1);
-    animation:settings-in .18s cubic-bezier(.2,.7,.2,1) both}
-  .settings-window[hidden]{display:none}
-  @keyframes settings-in{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
-  @media (prefers-reduced-motion:reduce){.settings-window{animation:none}}
-  .settings-titlebar{display:flex;align-items:center;gap:8px;padding:7px 10px;
-    background:rgba(0,0,0,.03);border-bottom:1px solid rgba(60,60,67,.14)}
-  .settings-title{flex:1;text-align:center;font-size:11.5px;font-weight:650}
-  /* Reads as a key window's close control: red at rest, glyph on hover. */
-  .settings-close{display:grid;place-items:center;width:13px;height:13px;flex:none;padding:0;
-    border-radius:50%;background:#ff5f57;color:transparent;
-    box-shadow:inset 0 0 0 .5px rgba(0,0,0,.12)}
-  .settings-close svg{width:6px;height:6px;display:block;fill:currentColor}
-  .settings-close:hover{color:rgba(0,0,0,.5)}
-  /* Balances the close button so the title stays optically centred. */
-  .settings-titlebar .spacer{width:13px;flex:none}
-  .settings-body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:14px}
-  .settings-row{display:flex;align-items:flex-start;gap:16px}
-  .settings-row .label{flex:1;min-width:0}
-  .settings-row .caption{display:block;margin-top:3px;font-size:10.5px;color:rgba(60,60,67,.6)}
-  .settings-add{display:flex;align-items:center;gap:8px}
-  .settings-add .caption{font-size:10.5px;color:rgba(60,60,67,.6)}
-  .settings-hr{height:1px;flex:none;margin:0;background:rgba(60,60,67,.12);border:0}
-
-  @media (prefers-color-scheme:dark){
-    .settings-window{background:rgba(38,38,40,.98);color:#f5f5f7;border-color:rgba(255,255,255,.16);
-      box-shadow:0 24px 60px rgba(0,0,0,.55),0 6px 16px rgba(0,0,0,.3)}
-    .settings-titlebar{background:rgba(255,255,255,.04);border-bottom-color:rgba(235,235,245,.16)}
-    .settings-row .caption,.settings-add .caption{color:rgba(235,235,245,.55)}
-    .settings-hr{background:rgba(235,235,245,.14)}
-    .glass-gear{color:rgba(235,235,245,.7)}
-    .glass-gear:hover{color:#f5f5f7}
-  }
 
   @media (prefers-color-scheme:dark){
     .popup-panel{background:rgba(40,40,42,.48);color:#f5f5f7;border-color:rgba(255,255,255,.18);
@@ -622,12 +573,6 @@
   .popup{width:min(340px,calc(100vw - 16px))}
   .preview-header{display:flex;align-items:center;justify-content:space-between}
   .preview-header .glass-label{text-align:left;font-weight:600;flex:1;padding:4px}
-  .preview-options{position:relative}
-  .preview-options summary{cursor:pointer;list-style:none;letter-spacing:2px;padding:2px 6px;opacity:.65}
-  .preview-options summary::-webkit-details-marker{display:none}
-  .preview-options > div{position:absolute;right:0;top:100%;z-index:20;padding:5px;min-width:150px;background:Canvas;color:CanvasText;border-radius:10px;box-shadow:0 6px 25px #0003}
-  .preview-options button{display:block;background:none;border:0;color:inherit;padding:8px;font:inherit;font-size:12px;cursor:pointer;width:100%;text-align:left}
-  .preview-options .glass-gear{height:auto;margin:0}
   .preview-apps{display:flex;flex-direction:column;gap:3px;max-height:310px;overflow:auto}
   .preview-row{display:grid;grid-template-columns:minmax(0,1fr) 20px 22px 68px;align-items:center;gap:5px;padding:9px 7px;border-radius:12px;min-height:40px}
   .preview-row.hooked,.preview-row.muted{background:rgba(120,120,128,.12)}
@@ -638,7 +583,7 @@
   .hooked .preview-title{font-weight:650}
   .subitem .preview-title{font-size:11px}
   .preview-hook{opacity:.28;flex:none;width:12px;height:18px}
-  .preview-hook svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  .preview-hook svg{width:100%;height:100%;fill:currentColor}
   .hooked .preview-hook{opacity:1}
   .preview-play{width:20px;height:22px;display:grid;place-items:center}
   .preview-play svg{width:10px;height:10px;fill:currentColor}
@@ -654,7 +599,7 @@
   @keyframes preview-wave{0%,100%{opacity:.3}50%{opacity:1}}
   @keyframes preview-ticker{0%,12%{transform:translateX(0)}100%{transform:translateX(-50%)}}
   @media(prefers-reduced-motion:reduce){.preview-wave.sounding,.preview-track > span{animation:none}.preview-wave.sounding{opacity:1!important}}
-  .preview-row button:focus-visible,.preview-show-all:focus-visible,.preview-options summary:focus-visible{outline:2px solid #007aff;outline-offset:2px}
+  .preview-row button:focus-visible,.preview-show-all:focus-visible{outline:2px solid #007aff;outline-offset:2px}
 </style>
 
 <canvas id="bg-fx" aria-hidden="true"></canvas>
@@ -685,13 +630,6 @@
     <div class="glass-body">
       <div class="preview-header">
         <p class="glass-label">Beamhook</p>
-        <details class="preview-options">
-          <summary aria-label="More options">•••</summary>
-          <div>
-            <button class="glass-gear" type="button" aria-label="Settings" aria-controls="beamhook-settings" aria-expanded="false">Settings…</button>
-            <button type="button" onclick="quitBeamhook()">Quit Beamhook</button>
-          </div>
-        </details>
       </div>
       <div class="preview-apps" aria-label="Audio apps"></div>
       <button class="preview-show-all" type="button" aria-expanded="false">Show all</button>
@@ -704,49 +642,10 @@
   </div>
 </div>
 
-<div class="settings-window" id="beamhook-settings" role="dialog" aria-label="Beamhook Settings" aria-modal="false" hidden>
-  <div class="settings-titlebar">
-    <button class="settings-close" type="button" aria-label="Close Settings">
-      <svg viewBox="0 0 8 8" aria-hidden="true"><path d="M1.1.3 4 3.2 6.9.3l.8.8L4.8 4l2.9 2.9-.8.8L4 4.8 1.1 7.7l-.8-.8L3.2 4 .3 1.1Z"/></svg>
-    </button>
-    <span class="settings-title">Settings</span>
-    <span class="spacer"></span>
-  </div>
-  <div class="settings-body">
-    <div class="settings-row">
-      <span class="label">Launch at login</span>
-      <button class="glass-toggle" type="button" role="switch" aria-label="Launch at login" aria-checked="true"></button>
-    </div>
-    <div class="settings-row">
-      <span class="label">Launch the hooked app on play/pause
-        <span class="caption">Starts the app if it isn't running.</span>
-      </span>
-      <button class="glass-toggle" type="button" role="switch" aria-label="Launch the hooked app on play/pause" aria-checked="true"></button>
-    </div>
-    <div class="settings-row">
-      <span class="label">⌘ + volume keys control the hooked app
-        <span class="caption">When the volume keys aren't hooked, hold ⌘ to change the hooked app's volume instead of the system's.</span>
-      </span>
-      <button class="glass-toggle" type="button" role="switch" aria-label="Command plus volume keys control the hooked app" aria-checked="true"></button>
-    </div>
-    <div class="settings-row">
-      <span class="label">Show an overlay on play/pause
-        <span class="caption">Flashes the app the keys reached, like the volume overlay.</span>
-      </span>
-      <button class="glass-toggle" type="button" role="switch" aria-label="Show an overlay on play/pause" aria-checked="true"></button>
-    </div>
-    <hr class="settings-hr">
-    <div class="settings-add">
-      <button class="glass-add" type="button">＋ Add an app…</button>
-      <span class="caption">(experimental)</span>
-    </div>
-  </div>
-</div>
-
 <div class="page">
 <div class="card">
   <div class="mark">
-    <svg viewBox="0 0 1002 290" role="img" aria-label="Beamhook — media keys around a fishhook">
+    <svg viewBox="-21 0 1002 256" role="img" aria-label="Beamhook — media keys around a fishhook">
       <g class="keys">
         <path d="M97 136 97 178 70 157Z"/>
         <path d="M151 136 151 178 124 157Z"/>
@@ -761,8 +660,8 @@
   </div>
   <p class="brand">Beamhook</p>
   <h1>Control each app’s volume.<br>Hook your Mac’s media keys.</h1>
-  <p class="desc">Turn down Spotify, mute a noisy app, or lower a browser tab without changing everything else. Individual app volume controls, right in your Mac’s menu bar.</p>
-  <p class="desc">Keep play/pause, next and previous hooked to the app you choose. <a href="/media-keys-wrong-app/">Stop media keys controlling the wrong app</a>, and <a href="/per-app-volume-mac/">control volume per app</a> from one place.</p>
+  <p class="desc">Turn Spotify down, mute a noisy app, or lower one browser tab. Everything else stays where it was. It all lives in your menu bar.</p>
+  <p class="desc">Play/pause, next and previous go to the app you pick, not whatever played last. Read <a href="/media-keys-wrong-app/">why media keys hit the wrong app</a> or <a href="/per-app-volume-mac/">how per-app volume works</a>.</p>
 
   <div class="paths">
     <section class="path">
@@ -770,7 +669,7 @@
         <h2 class="path-title">Get the app</h2>
         <span class="path-note">€5 · one time</span>
       </div>
-      <p class="path-desc">The signed &amp; notarized, ready-to-run app with all Beamhook 1.x updates. Same complete app as the source; your purchase supports continued development.</p>
+      <p class="path-desc">Signed, notarized and ready to run, with all 1.x updates. It’s the same app you’d build from the source. Buying it supports development.</p>
       <div class="buy-wrap">
         <a class="buy" href="https://ppixu.gumroad.com/l/beamhook">Get it on Gumroad</a>
       </div>
@@ -780,7 +679,7 @@
         <h2 class="path-title">Or build it yourself</h2>
         <span class="path-note">free · open source</span>
       </div>
-      <p class="path-desc">The code’s open — you can see exactly what handles your keystrokes. Clone it and build in one step; the <a href="https://github.com/ppixu/beamhook">README</a> has the details.</p>
+      <p class="path-desc">The code is open, so you can check exactly what Beamhook does with your keys. Clone it and build with one command. The <a href="https://github.com/ppixu/beamhook">README</a> explains how.</p>
     </section>
   </div>
 
@@ -798,15 +697,15 @@
     </ul>
   </section>
 
-  <section class="faq" aria-labelledby="faq-title"><h2 id="faq-title">Per-app volume and media keys: FAQ</h2>
-<h3>Can I control individual app volume on my Mac?</h3><p>Yes. Beamhook gives apps playing audio their own volume sliders and mute buttons. Apps without native volume controls use Core Audio process taps on macOS 14.2 or later. Your other apps keep their own levels.</p>
-<h3>Can I change one browser tab’s volume?</h3><p>Yes. Beamhook has separate tab controls for Safari, Chrome, Brave, Arc and Vivaldi after you enable Allow JavaScript from Apple Events. You can also adjust the whole browser. Firefox tab and playback control is not supported.</p>
-<h3>Why does Beamhook ask for System Audio Recording permission?</h3><p>macOS requires this permission for the process taps used by per-app volume and mute. Beamhook processes audio live and never stores it. Process-tap playback supports mono and stereo Float32 outputs; unsupported formats show an error and leave the original output intact.</p>
-<h3>Is Beamhook free?</h3><p>Beamhook is open source and free to build yourself. The signed, notarized, ready-to-run app costs €5 once and includes all Beamhook 1.x updates.</p>
+  <section class="faq" aria-labelledby="faq-title"><h2 id="faq-title">FAQ</h2>
+<h3>Can I control individual app volume on my Mac?</h3><p>Yes. Each app playing sound gets its own volume slider and mute button, and other apps keep their levels. Apps without their own volume control need macOS 14.2 or later.</p>
+<h3>Can I change one browser tab’s volume?</h3><p>Yes, in Safari, Chrome, Brave, Arc and Vivaldi. Turn on Allow JavaScript from Apple Events in the browser first. You can also change the whole browser’s volume. Firefox tabs aren’t supported.</p>
+<h3>Why does Beamhook ask for System Audio Recording permission?</h3><p>macOS asks for it whenever an app changes the volume of other apps. Beamhook adjusts the sound as it plays and never records or saves it.</p>
+<h3>Is Beamhook free?</h3><p>The source code is free, and you can build the app yourself. The signed, ready-to-run app costs €5 once and includes all 1.x updates.</p>
 </section>
-  <p class="author">Made by <a href="https://github.com/ppixu" rel="author">Olli Pikkarainen (ppixu)</a>, the developer of Beamhook. I built it after getting tired of media keys controlling the wrong app. <a href="https://github.com/ppixu/beamhook">The source is public</a>; bug reports and feature requests are welcome.</p>
+  <p class="author">Made by <a href="https://github.com/ppixu" rel="author">Olli Pikkarainen (ppixu)</a>. I built Beamhook because my media keys kept controlling the wrong app. <a href="https://github.com/ppixu/beamhook">The source is on GitHub</a>, and bug reports and feature requests are welcome.</p>
 
-  <p class="support">Found a bug, or an app you'd like supported?&nbsp;<br>Please <a href="https://github.com/ppixu/beamhook/issues">open an issue on GitHub</a>.</p>
+  <p class="support">Found a bug, or want another app supported?&nbsp;<br><a href="https://github.com/ppixu/beamhook/issues">Open an issue on GitHub</a>.</p>
 
   <div class="links">
     <a href="/media-keys-wrong-app/">How media keys work</a>
@@ -839,37 +738,9 @@
     setPopupOpen(!visiblyOpen);
   });
   tray.addEventListener('pointerleave', () => {
-    if (settingsOpen) return;
     if (window.matchMedia('(hover:hover) and (pointer:fine)').matches) popup.classList.remove('is-dismissed');
   });
 
-  const settingsWindow = document.querySelector('.settings-window');
-  const gear = popup.querySelector('.glass-gear');
-  let settingsOpen = false;
-
-  // Opening Settings dismisses the popover: the real one is transient, so it
-  // closes the moment the Settings window takes key. is-dismissed keeps a stray
-  // hover from pulling it back out while that window is up.
-  function setSettingsOpen(open) {
-    settingsOpen = open;
-    settingsWindow.hidden = !open;
-    gear.setAttribute('aria-expanded', String(open));
-    popup.classList.toggle('is-dismissed', open);
-    if (open) {
-      popup.querySelector(".preview-options").open = false;
-      setPopupOpen(false);
-      settingsWindow.querySelector('.settings-close').focus();
-    }
-  }
-
-  gear.addEventListener('click', (event) => {
-    event.stopPropagation();
-    setSettingsOpen(!settingsOpen);
-  });
-  settingsWindow.querySelector('.settings-close').addEventListener('click', () => {
-    setSettingsOpen(false);
-    gear.focus();
-  });
   tray.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
@@ -877,8 +748,6 @@
   });
 
   document.addEventListener('pointerdown', (event) => {
-    // Settings is a window, not a popover — clicking it doesn't dismiss it.
-    if (settingsWindow.contains(event.target)) return;
     if (popup.contains(event.target) || tray.contains(event.target)) return;
     setPopupOpen(false);
     if (popup.contains(document.activeElement)) document.activeElement.blur();
@@ -887,11 +756,6 @@
 
   document.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return;
-    if (settingsOpen) {
-      setSettingsOpen(false);
-      gear.focus();
-      return;
-    }
     if (!popup.classList.contains('is-open')) return;
     setPopupOpen(false);
     tray.focus();
@@ -910,7 +774,8 @@
   const rowsElement = popup.querySelector('.preview-apps');
   const routing = popup.querySelector('.preview-routing');
   const showAllButton = popup.querySelector('.preview-show-all');
-  const hookIcon = '<svg viewBox="0 0 16 24" aria-hidden="true"><circle cx="6" cy="4" r="2.5"/><path d="M6 7v11a4 4 0 0 0 8 0v-5l-3 3"/></svg>';
+  // Same hook path as the logo mark, cropped to its bounds.
+  const hookIcon = '<svg viewBox="429 49 105 195" aria-hidden="true"><path d="M462 49A33 33 0 1 0 462 115 33 33 0 1 0 462 49ZM462 68.5A13.5 13.5 0 1 1 462 95.5 13.5 13.5 0 1 1 462 68.5ZM452 100 452 203A41 41 0 0 0 534 203L534 149 504 183 515 197 515 203A21 21 0 0 1 473 203L473 100Z"/></svg>';
   const playIcon = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5 10 6 3 10.5Z"/></svg>';
   const pauseIcon = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1h3v10H2zM7 1h3v10H7z"/></svg>';
   function isHooked(row) {
@@ -981,20 +846,6 @@
   });
   renderPreview();
 
-  // Launch at login and Add an app… now live in the Settings window, not the popover.
-  settingsWindow.querySelectorAll('.glass-toggle').forEach((toggle) => {
-    toggle.addEventListener('click', () => {
-      toggle.setAttribute('aria-checked', String(toggle.getAttribute('aria-checked') !== 'true'));
-    });
-  });
-
-  const addButton = settingsWindow.querySelector('.glass-add');
-  addButton.addEventListener('click', () => {
-    const added = addButton.getAttribute('aria-pressed') === 'true';
-    addButton.setAttribute('aria-pressed', String(!added));
-    addButton.textContent = added ? '＋ Add an app…' : '✓ Add an app…';
-  });
-
   const dragHandle = popup.querySelector('.glass-label');
   let dragOffset = null;
   let dragPointerId = null;
@@ -1030,7 +881,6 @@
 
   function quitBeamhook() {
     setPopupOpen(false);
-    setSettingsOpen(false);
     if (popup) {
       popup.style.display = 'none';
     }

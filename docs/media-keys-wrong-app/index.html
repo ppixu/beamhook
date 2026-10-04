@@ -4,20 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Why your Mac's media keys control the wrong app — and how to fix it</title>
-<meta name="description" content="You press play and a forgotten YouTube tab starts instead of Spotify. Here's why macOS routes the media keys the way it does, the fixes that need no extra software, and how to pin the keys to one app for good.">
+<meta name="description" content="You press play and an old YouTube tab starts instead of Spotify. Why macOS does this, fixes that need no extra software, and how to keep the keys on one app.">
 <link rel="canonical" href="https://beamhook.app/media-keys-wrong-app/">
 
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Beamhook">
 <meta property="og:url" content="https://beamhook.app/media-keys-wrong-app/">
 <meta property="og:title" content="Why your Mac's media keys control the wrong app — and how to fix it">
-<meta property="og:description" content="You press play and a forgotten YouTube tab starts instead of Spotify. Why macOS does this, the fixes that need no extra software, and how to pin the keys to one app for good.">
+<meta property="og:description" content="You press play and an old YouTube tab starts instead of Spotify. Why macOS does this, fixes that need no extra software, and how to keep the keys on one app.">
 <meta property="og:image" content="https://beamhook.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Why your Mac's media keys control the wrong app — and how to fix it">
-<meta name="twitter:description" content="You press play and a forgotten YouTube tab starts instead of Spotify. Why macOS does this, and how to pin the keys to one app for good.">
+<meta name="twitter:description" content="You press play and an old YouTube tab starts instead of Spotify. Why macOS does this, and how to keep the keys on one app.">
 <meta name="twitter:image" content="https://beamhook.app/og.png">
 
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
@@ -34,7 +34,7 @@
       "name": "Why do my Mac's media keys control the wrong app?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "macOS sends the hardware media keys to whichever app most recently registered itself as the system's \"now playing\" source. That is usually the last thing that played audio — often a browser tab you have forgotten about — rather than the app you are looking at. There is no built-in setting that pins the keys to a chosen app."
+        "text": "macOS sends the media keys to the app that most recently became the \"now playing\" source. That is usually whatever played audio last, often a forgotten browser tab, not the app you are using. macOS has no setting to pick the app."
       }
     },
     {
@@ -42,7 +42,7 @@
       "name": "How do I stop a YouTube tab from stealing the play/pause key?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Closing the tab releases the keys. In Chrome and other Chromium browsers you can also turn off hardware media key handling entirely at chrome://flags/#hardware-media-key-handling, which stops the browser answering the keys at all. Safari has no equivalent switch."
+        "text": "Close the tab. In Chrome and other Chromium browsers you can also set chrome://flags/#hardware-media-key-handling to Disabled, so the browser ignores the media keys completely. Safari has no such setting."
       }
     },
     {
@@ -50,7 +50,7 @@
       "name": "Is there a macOS setting to choose which app the media keys control?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "No. macOS exposes no preference for pinning the media keys to a specific app. System Settings only lets you change whether the top row acts as media keys or as standard function keys, which changes how the keys are pressed, not where they are sent. Pinning requires a third-party utility."
+        "text": "No. System Settings only lets you choose whether the top row works as media keys or function keys. That changes how you press them, not where they go. To pick the app, you need a third-party tool."
       }
     },
     {
@@ -58,7 +58,7 @@
       "name": "Why does Apple Music open when I press play?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "When no app is currently registered as the now-playing source, the play key falls through to the system default, which launches Apple Music. Keeping your intended player registered — or pinning the keys to it — prevents this."
+        "text": "If no app is the now-playing source, the play key goes to the system default, which opens Apple Music. Keeping your player as the now-playing source, or hooking the keys to it, stops this."
       }
     }
   ]
@@ -138,55 +138,55 @@
 
   <p><a href="/per-app-volume-mac/">Individual app volume on Mac</a> · <a href="/help/#volume-controls">Volume shortcuts</a></p>
   <h1>Why your Mac's media keys control the wrong app</h1>
-  <p class="tag">You press play expecting Spotify, and a YouTube tab you forgot about starts blasting instead. Here's what's actually happening, and every way to fix it.</p>
+  <p class="tag">You press play expecting Spotify, and a YouTube tab you forgot about starts instead. Here's why, and how to fix it.</p>
 
   <div class="answer">
-    <p><strong>The short answer:</strong> macOS sends the media keys to whichever app most recently registered itself as the system's “now playing” source — not to the app you're looking at, and not to the app you'd expect. There is no built-in setting to pin them.</p>
+    <p><strong>Short answer:</strong> macOS sends the media keys to the app that most recently became the “now playing” source. That isn't always the app in front, or the one you want. There's no setting to change it.</p>
   </div>
 
   <h2>Why macOS does this</h2>
 
-  <p>The play/pause, next and previous keys on a Mac keyboard aren't wired to any particular application. When you press one, macOS decides where to deliver it, and the rule it uses is roughly “the most recent thing that played audio.”</p>
+  <p>The play/pause, next and previous keys aren't tied to any app. macOS picks where each press goes, and the rule is roughly: whatever played audio last.</p>
 
-  <p>That rule works fine when one app is playing. It falls apart the moment two things can play, which on a modern Mac is nearly always. A video in a background tab, a podcast you paused an hour ago, an autoplaying clip on a page you've already scrolled past — any of them can claim the keys, and none of them announce that they have.</p>
+  <p>That works when only one thing is playing. But most Macs have several things that can play: a video in a background tab, a podcast you paused an hour ago, an autoplaying clip on a page you scrolled past. Any of them can take the keys, and you won't be told.</p>
 
-  <p>Browsers make it worse, because a browser doesn't register as one source. Individual pages register, so “Safari has the keys” really means “one particular tab in one particular window has the keys,” and you may have no idea which.</p>
+  <p>Browsers make this harder to track, because each page registers on its own. “Safari has the keys” really means one tab in one window has them, and you may not know which.</p>
 
-  <p>If nothing is registered at all, the play key falls through to the system default and launches Apple Music — which is why pressing play on a freshly booted Mac so often opens a music library you didn't ask for.</p>
+  <p>If nothing is registered, the play key opens Apple Music. That's why pressing play right after startup often opens a music library you didn't ask for.</p>
 
-  <h2>Fixes that don't need extra software</h2>
+  <h2>Fixes that need no extra software</h2>
 
-  <p>These are worth trying first, and for some people they're enough.</p>
+  <p>Try these first. For some people they're enough.</p>
 
   <h3>Close whatever is holding the keys</h3>
-  <p>Closing the offending tab or quitting the app releases its claim, and the keys fall back to whatever registered before it. This works reliably. It's also the fix you have to perform again every time it happens, which is the real problem with it.</p>
+  <p>Close the tab or quit the app, and the keys go back to whatever played before it. This works, but you have to do it every time.</p>
 
-  <p>Finding the culprit is the hard part. In Chrome and other Chromium browsers, tabs playing audio show a speaker icon you can click through. In Safari, the speaker icon in the address bar lists the tabs currently making sound.</p>
+  <p>The hard part is finding the culprit. Chrome and other Chromium browsers show a speaker icon on tabs that are playing. In Safari, click the speaker icon in the address bar to see which tabs are making sound.</p>
 
   <h3>Stop your browser answering the keys at all</h3>
-  <p>Chromium browsers have a hidden switch for this. Open <code>chrome://flags/#hardware-media-key-handling</code>, set it to <strong>Disabled</strong>, and relaunch. The browser then ignores the media keys entirely, so they go to your music app instead.</p>
+  <p>Chromium browsers have a hidden setting for this. Open <code>chrome://flags/#hardware-media-key-handling</code>, set it to <strong>Disabled</strong> and relaunch. The browser then ignores the media keys, so they go to your music app.</p>
 
-  <p class="note">This is all-or-nothing: with it disabled, the keys will no longer control video in that browser either, which is a real loss if you use the keys to pause YouTube. Safari has no equivalent setting.</p>
+  <p class="note">It's all or nothing: the keys won't pause YouTube in that browser anymore either. Safari has no such setting.</p>
 
   <h3>Make the keys harder to press by accident</h3>
-  <p>In <span class="path">System Settings → Keyboard</span>, turning on “Use F1, F2, etc. keys as standard function keys” means the top row sends function keys unless you hold <kbd>fn</kbd>. This doesn't change <em>where</em> a media key goes — only how you press it — but if your complaint is mostly accidental presses, it helps.</p>
+  <p>In <span class="path">System Settings → Keyboard</span>, turn on “Use F1, F2, etc. keys as standard function keys.” The top row then sends F-keys unless you hold <kbd>fn</kbd>. This doesn't change <em>where</em> media keys go, only how you press them. It helps if your problem is mostly accidental presses.</p>
 
   <h3>What isn't available</h3>
-  <p>There's no macOS preference that says “send the media keys to this app.” People look for it in Keyboard settings, in Sound, in the Shortcuts app; it isn't in any of them. Choosing a target requires software that intercepts the keys before macOS routes them.</p>
+  <p>macOS has no setting that says “send the media keys to this app.” It isn't in Keyboard, Sound or Shortcuts. To choose the app, you need software that catches the keys before macOS routes them.</p>
 
   <h2>Pinning the keys to one app</h2>
-<p>Beamhook also provides <a href="/per-app-volume-mac/">individual app volume and mute controls</a>, including apps without AppleScript support on macOS 14.2 or later.</p>
+  <p><a href="/">Beamhook</a> does this. It's a small open-source menu-bar app. Pick an app, and play/pause, next and previous go there until you pick another. Background tabs, Apple Music and the app in front can't take them.</p>
 
-  <p>That's the gap <a href="/">Beamhook</a> fills. It's a small open-source menu-bar app: you pick one target, and play/pause, next and previous go there until you change your mind. Nothing can steal them in the meantime — not a background tab, not Apple Music, not the app you happen to be looking at.</p>
+  <p>Beamhook catches the keys before macOS routes them, so “last player wins” never applies. In a browser you hook <em>one tab</em>, not the whole browser. Beamhook can take the volume keys too, and <kbd>⌘</kbd> + volume still changes system volume.</p>
 
-  <p>It captures the keys with an event tap before macOS gets to route them, so the “most recent player wins” rule never applies. Browsers are hooked to <em>one specific tab</em> rather than to the whole browser, so it's that YouTube tab that answers rather than whichever page most recently made noise. It'll take the volume keys too if you want, with <kbd>⌘</kbd> + volume still adjusting system volume.</p>
+  <p>Built-in support: Spotify, Apple Music, Apple TV, VLC, VOX, QuickTime Player, Downcast, IINA, Amazon Music, Plexamp and Deezer, plus Safari, Chrome, Brave, Arc and Vivaldi. You can add other apps with AppleScript. Needs macOS 14 or later.</p>
 
-  <p>Built-in targets include Spotify, Apple Music, Apple TV, VLC, VOX, QuickTime Player, Downcast, IINA, Amazon Music, Plexamp and Deezer, plus Safari, Chrome, Brave, Arc and Vivaldi. You can add your own with AppleScript. It needs macOS 14 or later.</p>
+  <p>Beamhook also has <a href="/per-app-volume-mac/">per-app volume and mute</a>, including for apps without AppleScript support (macOS 14.2 or later).</p>
 
   <div class="cta">
     <a class="primary" href="https://github.com/ppixu/beamhook">Build it free from source</a>
     <a class="primary" href="https://ppixu.gumroad.com/l/beamhook">Get the signed build — €5</a>
-    <p class="note" style="margin-top:12px">Beamhook is GPL-3.0. Building it yourself costs nothing and takes one command; the €5 purchase gets you the signed, notarized, ready-to-run app and funds the work.</p>
+    <p class="note" style="margin-top:12px">Beamhook is GPL-3.0. Building it yourself is free and takes one command. The €5 version is signed, notarized and ready to run, and supports development.</p>
   </div>
 
   <div class="foot">
@@ -194,7 +194,7 @@
     <a href="https://github.com/ppixu/beamhook">GitHub ↗</a>
     <a href="/help/">Browser setup guide</a>
   </div>
-<p class="author">Made by <a href="https://github.com/ppixu" rel="author">Olli Pikkarainen (ppixu)</a>, the developer of Beamhook. I built it after getting tired of media keys controlling the wrong app. <a href="https://github.com/ppixu/beamhook">The source is public</a>; bug reports and feature requests are welcome.</p>
+<p class="author">Made by <a href="https://github.com/ppixu" rel="author">Olli Pikkarainen (ppixu)</a>. I built Beamhook because my media keys kept controlling the wrong app. <a href="https://github.com/ppixu/beamhook">The source is on GitHub</a>, and bug reports and feature requests are welcome.</p>
 </div>
 </body>
 </html>

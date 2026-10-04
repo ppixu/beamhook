@@ -1,12 +1,12 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Per-app volume control for Mac — Beamhook</title>
-<meta name="description" content="Change individual app volume on Mac with Beamhook. Mute apps, adjust browser tabs and use keyboard shortcuts. Setup, requirements and limits explained.">
+<meta name="description" content="Change each app’s volume on your Mac with Beamhook. Mute apps, adjust browser tabs and use keyboard shortcuts. Setup, requirements and limits.">
 <link rel="canonical" href="https://beamhook.app/per-app-volume-mac/">
 <link rel="icon" type="image/png" href="/icon.png">
 <meta property="og:type" content="article"><meta property="og:site_name" content="Beamhook">
 <meta property="og:title" content="Per-app volume control for Mac — Beamhook">
-<meta property="og:description" content="Turn one app down. Keep everything else where you left it. Individual app volume, mute and browser-tab controls for Mac.">
+<meta property="og:description" content="Turn one app down and leave the rest alone. Per-app volume, mute and browser-tab controls for Mac.">
 <meta property="og:url" content="https://beamhook.app/per-app-volume-mac/"><meta property="og:image" content="https://beamhook.app/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <script type="application/ld+json">
@@ -19,7 +19,7 @@
       "name": "Can I control individual app volume on my Mac?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. Beamhook gives apps playing audio their own volume sliders and mute buttons. Apps without native volume controls use Core Audio process taps on macOS 14.2 or later. Your other apps keep their own levels."
+        "text": "Yes. Each app playing sound gets its own volume slider and mute button, and other apps keep their levels. Apps without their own volume control need macOS 14.2 or later."
       }
     },
     {
@@ -27,7 +27,7 @@
       "name": "Can I change one browser tab’s volume?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Yes. Beamhook has separate tab controls for Safari, Chrome, Brave, Arc and Vivaldi after you enable Allow JavaScript from Apple Events. You can also adjust the whole browser. Firefox tab and playback control is not supported."
+        "text": "Yes, in Safari, Chrome, Brave, Arc and Vivaldi. Turn on Allow JavaScript from Apple Events in the browser first. You can also change the whole browser’s volume. Firefox tabs aren’t supported."
       }
     },
     {
@@ -35,7 +35,7 @@
       "name": "Why does Beamhook ask for System Audio Recording permission?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "macOS requires this permission for the process taps used by per-app volume and mute. Beamhook processes audio live and never stores it. Process-tap playback supports mono and stereo Float32 outputs; unsupported formats show an error and leave the original output intact."
+        "text": "macOS asks for it whenever an app changes the volume of other apps. Beamhook adjusts the sound as it plays and never records or saves it."
       }
     },
     {
@@ -43,7 +43,7 @@
       "name": "Is Beamhook free?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Beamhook is open source and free to build yourself. The signed, notarized, ready-to-run app costs €5 once and includes all Beamhook 1.x updates."
+        "text": "The source code is free, and you can build the app yourself. The signed, ready-to-run app costs €5 once and includes all 1.x updates."
       }
     }
   ]
@@ -118,25 +118,25 @@ ol{padding-left:22px}.author{margin-top:32px;font-size:.92rem;color:var(--soft)}
 </head><body><main class="wrap">
 <nav class="back" aria-label="Breadcrumb"><a href="/">Beamhook</a> / <span aria-current="page">Per-app volume on Mac</span></nav>
 <h1>Per-app volume control for Mac</h1>
-<p class="tag">Turn one app down. Keep everything else where you left it.</p>
-<p>Beamhook adds individual app volume sliders and mute buttons to your Mac’s menu bar. Lower Spotify while a video plays, silence a noisy app, or adjust your browser without changing system volume.</p>
+<p class="tag">Turn one app down. Leave the rest alone.</p>
+<p>Beamhook puts a volume slider and mute button for each app in your menu bar. Lower Spotify while a video plays, silence a noisy app, or turn your browser down without touching system volume.</p>
 <h2>How to change an app’s volume</h2>
-<ol><li>Open Beamhook on macOS 14.2 or later. Allow System Audio Recording when prompted so per-app audio controls can work.</li><li>Play audio in the app you want to adjust, then open Beamhook from the menu bar.</li><li>Move that app’s slider from 0–100%, or click its speaker button to mute it. Other apps keep their levels.</li></ol>
-<p>App levels are remembered. Muting and unmuting restores the previous level. Apps with native volume controls use those controls; apps without them use Core Audio process taps.</p>
+<ol><li>Open Beamhook on macOS 14.2 or later. Allow System Audio Recording when asked.</li><li>Play something in the app you want to adjust, then click Beamhook in the menu bar.</li><li>Drag that app’s slider, or click its speaker to mute it. Other apps stay where they are.</li></ol>
+<p>Beamhook remembers each app’s level, and unmuting brings the old level back. If an app has its own volume control, Beamhook uses it. For the rest, it uses Core Audio process taps.</p>
 <h2>Whole-browser volume and separate tab controls</h2>
-<p>The browser’s app row changes volume for the whole browser. Child tab sliders let you lower an individual playing tab instead. Separate tab controls support Safari, Chrome, Brave, Arc and Vivaldi and need <a href="/help/">Allow JavaScript from Apple Events</a>. Firefox tab and playback control is not supported.</p>
+<p>The browser’s own row changes the whole browser. The tab rows under it change one tab each. Tab controls work in Safari, Chrome, Brave, Arc and Vivaldi once you turn on <a href="/help/">Allow JavaScript from Apple Events</a>. Firefox tabs aren’t supported.</p>
 <h2>Control volume from the keyboard</h2>
-<p>Open the expanded source list with <kbd>⌘</kbd> + a volume key or <kbd>⌘</kbd> + Play. Use <kbd>⌘↑</kbd> / <kbd>⌘↓</kbd> to pick a source and <kbd>⌘←</kbd> / <kbd>⌘→</kbd> to adjust its volume. See the <a href="/help/#volume-controls">volume and mute shortcuts</a> for the full controls.</p>
-<p>You can also <a href="/media-keys-wrong-app/">hook your media keys to a specific player</a>, so play/pause, next and previous stay with the app you chose.</p>
+<p>Press <kbd>⌘</kbd> + a volume key or <kbd>⌘</kbd> + Play to open the source list. <kbd>⌘↑</kbd> / <kbd>⌘↓</kbd> picks a source and <kbd>⌘←</kbd> / <kbd>⌘→</kbd> changes its volume. All shortcuts are listed under <a href="/help/#volume-controls">volume and mute shortcuts</a>.</p>
+<p>You can also <a href="/media-keys-wrong-app/">hook your media keys to one player</a>, so play/pause, next and previous always go to it.</p>
 <h2>Requirements and limits</h2>
-<p>Beamhook runs on macOS 14.0 or later. Active audio discovery and process-tap volume/mute require macOS 14.2 or later and System Audio Recording permission. Audio is processed live and never stored.</p>
-<p>Process-tap playback currently supports mono and stereo Float32 output. Unsupported formats show an error and leave the original output intact. Per-app volume is not an equalizer, volume booster or per-app output-device router.</p>
-<h2>Frequently asked questions</h2>
-<h3>Can I control individual app volume on my Mac?</h3><p>Yes. Beamhook gives apps playing audio their own volume sliders and mute buttons. Apps without native volume controls use Core Audio process taps on macOS 14.2 or later. Your other apps keep their own levels.</p>
-<h3>Can I change one browser tab’s volume?</h3><p>Yes. Beamhook has separate tab controls for Safari, Chrome, Brave, Arc and Vivaldi after you enable Allow JavaScript from Apple Events. You can also adjust the whole browser. Firefox tab and playback control is not supported.</p>
-<h3>Why does Beamhook ask for System Audio Recording permission?</h3><p>macOS requires this permission for the process taps used by per-app volume and mute. Beamhook processes audio live and never stores it. Process-tap playback supports mono and stereo Float32 outputs; unsupported formats show an error and leave the original output intact.</p>
-<h3>Is Beamhook free?</h3><p>Beamhook is open source and free to build yourself. The signed, notarized, ready-to-run app costs €5 once and includes all Beamhook 1.x updates.</p>
+<p>Beamhook needs macOS 14.0 or later. Finding which apps are playing, and per-app volume and mute, need macOS 14.2 or later and System Audio Recording permission. Audio is adjusted as it plays and never saved.</p>
+<p>Per-app volume works with mono and stereo Float32 output. With other formats, Beamhook shows an error and leaves the sound alone. It isn’t an equalizer, a volume booster, or a way to send apps to different speakers.</p>
+<h2>FAQ</h2>
+<h3>Can I control individual app volume on my Mac?</h3><p>Yes. Each app playing sound gets its own volume slider and mute button, and other apps keep their levels. Apps without their own volume control need macOS 14.2 or later.</p>
+<h3>Can I change one browser tab’s volume?</h3><p>Yes, in Safari, Chrome, Brave, Arc and Vivaldi. Turn on Allow JavaScript from Apple Events in the browser first. You can also change the whole browser’s volume. Firefox tabs aren’t supported.</p>
+<h3>Why does Beamhook ask for System Audio Recording permission?</h3><p>macOS asks for it whenever an app changes the volume of other apps. Beamhook adjusts the sound as it plays and never records or saves it.</p>
+<h3>Is Beamhook free?</h3><p>The source code is free, and you can build the app yourself. The signed, ready-to-run app costs €5 once and includes all 1.x updates.</p>
 
-<div class="cta"><a class="primary" href="https://ppixu.gumroad.com/l/beamhook">Get the signed build — €5</a><a class="primary" href="https://github.com/ppixu/beamhook">Build it free</a><p>One purchase includes all Beamhook 1.x updates.</p></div>
-<p class="author">Made by <a href="https://github.com/ppixu" rel="author">Olli Pikkarainen (ppixu)</a>, the developer of Beamhook. I built it after getting tired of media keys controlling the wrong app. <a href="https://github.com/ppixu/beamhook">The source is public</a>; bug reports and feature requests are welcome.</p><footer class="foot"><a href="/">Beamhook</a><a href="/help/">Setup and help</a><a href="/media-keys-wrong-app/">Media keys guide</a></footer>
+<div class="cta"><a class="primary" href="https://ppixu.gumroad.com/l/beamhook">Get the signed build — €5</a><a class="primary" href="https://github.com/ppixu/beamhook">Build it free</a><p>One purchase includes all 1.x updates.</p></div>
+<p class="author">Made by <a href="https://github.com/ppixu" rel="author">Olli Pikkarainen (ppixu)</a>. I built Beamhook because my media keys kept controlling the wrong app. <a href="https://github.com/ppixu/beamhook">The source is on GitHub</a>, and bug reports and feature requests are welcome.</p><footer class="foot"><a href="/">Beamhook</a><a href="/help/">Setup and help</a><a href="/media-keys-wrong-app/">Media keys guide</a></footer>
 </main></body></html>
