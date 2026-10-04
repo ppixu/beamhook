@@ -8,9 +8,8 @@ import BeamhookKit
 /// uncontrollable apps — Electron players, chat apps with notification dings —
 /// mutable from the popover.
 ///
-/// A tap alone does NOT mute: `CATapMuteBehavior.muted` only suppresses the
-/// process's output while the tap is actually being read (verified on macOS 26
-/// — a bare muted tap changes nothing audible). So each muted process gets the
+/// Use `mutedWhenTapped` so suppression lasts only while IO reads the tap,
+/// including when setup fails or a device stops. Each muted process gets the
 /// full assembly: a muted tap, plus a private aggregate device containing the
 /// tap and the default output device (as the clock), plus a do-nothing IO proc
 /// whose only job is to keep the tap read. Mute-only callbacks ignore the data.
@@ -64,6 +63,7 @@ final class ProcessMuteController: ObservableObject {
     private var mutes: [AudioObjectID: ActiveMute] = [:]
     private var timer: Timer?
     private var controlledIdentity: [AudioObjectID: String] = [:]
+    private var renderFailures = RenderFailures()
     private var observedOutput: AudioObjectID?
     private var outputListener: AudioObjectPropertyListenerBlock?
 
@@ -97,6 +97,7 @@ final class ProcessMuteController: ObservableObject {
         mutedBundleIDs = []
         volumes = [:]
         volumeErrors = [:]
+        PerAppMutePreference.setMutedBundleIDs([], in: defaults)
         PerAppMutePreference.setVolumes([:], in: defaults)
         setMeterWatchlist([])
         applyAndReschedule()
@@ -108,9 +109,9 @@ final class ProcessMuteController: ObservableObject {
         guard !bundleID.hasPrefix("com.github.ppixu.beamhook") else { return }
         let next = min(100, max(0, percent))
         guard next != volume(for: bundleID) else { return }
-        // Keep a live renderer at 100% until the process exits so the final step
-        // ramps smoothly. Only levels below 100% survive a Beamhook restart.
-        volumes[bundleID] = next
+        // At unity there is nothing to control. Release capture and restore
+        // native playback instead of keeping an unnecessary muted tap alive.
+        volumes[bundleID] = next == 100 ? nil : next
         PerAppMutePreference.setVolumes(volumes, in: defaults)
         applyAndReschedule()
     }
@@ -162,7 +163,10 @@ final class ProcessMuteController: ObservableObject {
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.permissionGranted = granted
-                if granted { self.applyAndReschedule() }
+                if granted {
+                    self.engine.async { [weak self] in self?.renderFailures.clear() }
+                    self.applyAndReschedule()
+                }
             }
         }
     }
@@ -214,16 +218,9 @@ final class ProcessMuteController: ObservableObject {
             meterIdentity[obj] = nil
             loudLock.lock(); loudUntil[obj] = nil; loudLock.unlock()
         }
-        // The aggregate also carries the output device's own inputs (a USB
-        // interface's mic) ahead of the tap; measure only the tap's channels.
-        let deviceInputs = Self.defaultOutputDevice()
-            .map { ProcessVolumeRenderer.inputChannelCount(device: $0.id) } ?? 0
         for (obj, bid) in wanted where meters[obj] == nil {
-            let block: AudioDeviceIOBlock = { [weak self] _, inInputData, _, _, _ in
-                self?.notePeak(obj: obj, bufferList: inInputData, skippingChannels: deviceInputs)
-            }
             if case .success(let assembly) = buildAssembly(for: obj, muteBehavior: .unmuted,
-                                                           ioBlock: block) {
+                                                           metering: true) {
                 meters[obj] = assembly
                 meterIdentity[obj] = bid
             }
@@ -235,7 +232,7 @@ final class ProcessMuteController: ObservableObject {
         loudLock.unlock()
         let audible = Set(loudObjects.compactMap { meterIdentity[$0] ?? controlledIdentity[$0] }).intersection(watch)
         DispatchQueue.main.async { [weak self] in
-            guard let self, self.audibleApps != audible else { return }
+            guard let self, self.meterWatchlist == watch, self.audibleApps != audible else { return }
             self.audibleApps = audible
         }
     }
@@ -309,8 +306,10 @@ final class ProcessMuteController: ObservableObject {
             controlledIdentity[obj] = nil
             loudLock.lock(); loudUntil[obj] = nil; loudLock.unlock()
         }
-        var errors: [String: String] = [:]
+        renderFailures.reconcile(wanted: wanted, muted: muted, levels: levels)
+        var errors = renderFailures.errors
         for (obj, bid) in wanted {
+            guard !renderFailures.contains(obj) else { continue }
             let needsRenderer = levels[bid] != nil && !muted.contains(bid)
             let gain: Float = muted.contains(bid) ? 0 : Float(levels[bid] ?? 100) / 100
             if let assembly = mutes[obj] {
@@ -326,7 +325,7 @@ final class ProcessMuteController: ObservableObject {
             // on the same process alongside playback.
             if let meter = meters.removeValue(forKey: obj) { tearDown(meter) }
             meterIdentity[obj] = nil
-            switch buildAssembly(for: obj, muteBehavior: .muted,
+            switch buildAssembly(for: obj, muteBehavior: .mutedWhenTapped,
                                  playbackGain: needsRenderer ? gain : nil) {
             case .success(let assembly):
                 mutes[obj] = assembly
@@ -360,6 +359,48 @@ final class ProcessMuteController: ObservableObject {
             : "Audio control failed. Check System Audio Recording permission and try again."
     }
 
+    /// A bad live layout must release the original audio, not repeatedly
+    /// rebuild a tap that silences it. Retry only after the requested gain,
+    /// process, output device/format, or permission has changed.
+    struct RenderFailures {
+        private struct Failure {
+            let bundleID: String
+            let gain: Float
+        }
+        private var failures: [AudioObjectID: Failure] = [:]
+
+        mutating func record(_ obj: AudioObjectID, bundleID: String, gain: Float) {
+            failures[obj] = Failure(bundleID: bundleID, gain: gain)
+        }
+
+        mutating func reconcile(wanted: [AudioObjectID: String], muted: Set<String>, levels: [String: Int]) {
+            failures = failures.filter { obj, failure in
+                wanted[obj] == failure.bundleID && !muted.contains(failure.bundleID)
+                    && levels[failure.bundleID].map { Float($0) / 100 } == failure.gain
+            }
+        }
+
+        func contains(_ obj: AudioObjectID) -> Bool { failures[obj] != nil }
+        mutating func clear() { failures = [:] }
+        var errors: [String: String] {
+            failures.values.reduce(into: [:]) { result, failure in
+                result[failure.bundleID] = "Volume control stopped because the audio stream changed. Normal app audio is restored. Switch audio output or re-check System Audio Recording permission to retry."
+            }
+        }
+    }
+
+    private func releaseFailedRenderer(obj: AudioObjectID, aggregateID: AudioObjectID, gain: Float) {
+        guard let assembly = mutes[obj], assembly.aggregateID == aggregateID,
+              let bundleID = controlledIdentity[obj] else { return }
+        tearDown(assembly)
+        mutes[obj] = nil
+        controlledIdentity[obj] = nil
+        loudLock.lock(); loudUntil[obj] = nil; loudLock.unlock()
+        renderFailures.record(obj, bundleID: bundleID, gain: gain)
+        Self.log.error("Released failed volume renderer: app=\(bundleID, privacy: .public), process=\(obj)")
+        DispatchQueue.main.async { [weak self] in self?.applyAndReschedule() }
+    }
+
     private enum BuildResult {
         case success(ActiveMute)
         /// The process quit mid-build — not an error and says nothing about
@@ -369,11 +410,10 @@ final class ProcessMuteController: ObservableObject {
     }
 
     /// Engine-queue only. Assembles tap + private aggregate + running IO proc.
-    /// `ioBlock` nil means the do-nothing read that engages a mute; the meters
-    /// pass a block that measures the buffers instead.
+    /// Meters and renderers validate the actual aggregate before reading PCM.
     private func buildAssembly(for obj: AudioObjectID,
                                muteBehavior: CATapMuteBehavior,
-                               ioBlock: AudioDeviceIOBlock? = nil,
+                               metering: Bool = false,
                                playbackGain: Float? = nil) -> BuildResult {
         let outputDevice = Self.defaultOutputDevice()
         let bundleID = AudioProcessMonitor.rowBundleID(for: obj) ?? "unknown"
@@ -382,6 +422,11 @@ final class ProcessMuteController: ObservableObject {
             let detail = diagnostics.joined(separator: "; ")
             Self.log.error("Audio setup failed: app=\(bundleID, privacy: .public), process=\(obj), output=\(outputDevice?.id ?? 0), stage=\(stage, privacy: .public), status=\(status), details=\(detail, privacy: .public)")
             return status == kAudioHardwareBadObjectError ? .processGone : .failure(status)
+        }
+        // A tap-only aggregate has no playback clock. Never suppress an app
+        // when there is no physical output available to drive the IO.
+        guard outputDevice != nil else {
+            return failure(kAudioHardwareBadDeviceError, stage: "find output device")
         }
         let description = CATapDescription(stereoMixdownOfProcesses: [obj])
         description.muteBehavior = muteBehavior
@@ -429,8 +474,8 @@ final class ProcessMuteController: ObservableObject {
         // buffers are deliberately ignored; the HAL hands the output side to us
         // pre-zeroed, so leaving it untouched plays silence.
         var renderer: ProcessVolumeRenderer?
-        var callback = ioBlock ?? { _, _, _, _, _ in }
-        if let gain = playbackGain {
+        var callback: AudioDeviceIOBlock = { _, _, _, _, _ in }
+        if playbackGain != nil || metering {
             // A tap initially defaults to 48 kHz even on a 44.1 kHz output.
             // Set the private aggregate to the physical output's existing rate;
             // HAL converts the tap using drift compensation. Never retune the
@@ -444,30 +489,38 @@ final class ProcessMuteController: ObservableObject {
             }
             guard let configuration = ProcessVolumeRenderer.configuration(device: aggregateID,
                     deviceInputChannels: ProcessVolumeRenderer.inputChannelCount(device: outputDevice.id),
+                    requiresStereoOutput: playbackGain != nil,
                     diagnostic: { diagnostics.append($0) }) else {
                 AudioHardwareDestroyAggregateDevice(aggregateID)
                 AudioHardwareDestroyProcessTap(tapID)
                 return failure(kAudioDeviceUnsupportedFormatError, stage: "validate aggregate streams")
             }
-            let playback = ProcessVolumeRenderer(gain: gain, sampleRate: configuration.sampleRate,
-                                                 outputChannels: configuration.outputChannels,
-                                                 inputChannels: configuration.inputChannels,
-                                                 tapChannelOffset: configuration.tapChannelOffset)
-            renderer = playback
-            var invalidated = false // IO-queue confined, just like the renderer.
-            callback = { [weak self] _, input, _, output, _ in
-                guard playback.render(input: input, output: output) else {
-                    if !invalidated {
-                        invalidated = true
-                        self?.engine.async { [weak self] in
-                            guard let self, self.mutes[obj]?.aggregateID == aggregateID else { return }
-                            self.rebuildAssemblies()
+            if let gain = playbackGain {
+                let playback = ProcessVolumeRenderer(gain: gain, sampleRate: configuration.sampleRate,
+                                                     outputChannels: configuration.outputChannels,
+                                                     inputChannels: configuration.inputChannels,
+                                                     tapChannelOffset: configuration.tapChannelOffset)
+                renderer = playback
+                var invalidated = false // IO-queue confined, just like the renderer.
+                callback = { [weak self] _, input, _, output, _ in
+                    guard playback.render(input: input, output: output) else {
+                        if !invalidated {
+                            invalidated = true
+                            let failedGain = playback.targetGain
+                            self?.engine.async { [weak self] in
+                                self?.releaseFailedRenderer(obj: obj, aggregateID: aggregateID, gain: failedGain)
+                            }
                         }
+                        return
                     }
-                    return
+                    if playback.currentGain > 0 {
+                        self?.notePeak(obj: obj, bufferList: UnsafePointer(output))
+                    }
                 }
-                if playback.currentGain > 0 {
-                    self?.notePeak(obj: obj, bufferList: UnsafePointer(output))
+            } else {
+                callback = { [weak self] _, input, _, _, _ in
+                    self?.notePeak(obj: obj, bufferList: input,
+                                   skippingChannels: configuration.tapChannelOffset)
                 }
             }
         }
@@ -519,13 +572,17 @@ final class ProcessMuteController: ObservableObject {
     /// A Bluetooth profile or Audio MIDI Setup can change the format without
     /// changing the default device. Rebuild against its new clock/layout too.
     private func observeOutputFormat() {
-        let selectors: [AudioObjectPropertySelector] = [kAudioDevicePropertyNominalSampleRate,
-                                                        kAudioDevicePropertyStreamConfiguration]
+        // Input layout matters too: its channels precede the tap in a duplex
+        // aggregate. A changed mic configuration otherwise shifts playback.
+        let properties: [(AudioObjectPropertySelector, AudioObjectPropertyScope)] = [
+            (kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal),
+            (kAudioDevicePropertyStreamConfiguration, kAudioDevicePropertyScopeOutput),
+            (kAudioDevicePropertyStreamConfiguration, kAudioDevicePropertyScopeInput),
+        ]
         if let device = observedOutput, let listener = outputListener {
-            for selector in selectors {
+            for (selector, scope) in properties {
                 var address = AudioObjectPropertyAddress(mSelector: selector,
-                    mScope: selector == kAudioDevicePropertyStreamConfiguration
-                        ? kAudioDevicePropertyScopeOutput : kAudioObjectPropertyScopeGlobal,
+                    mScope: scope,
                     mElement: kAudioObjectPropertyElementMain)
                 AudioObjectRemovePropertyListenerBlock(device, &address, engine, listener)
             }
@@ -534,16 +591,16 @@ final class ProcessMuteController: ObservableObject {
         guard let device = observedOutput else { outputListener = nil; return }
         let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.rebuildAssemblies() }
         outputListener = listener
-        for selector in selectors {
+        for (selector, scope) in properties {
             var address = AudioObjectPropertyAddress(mSelector: selector,
-                mScope: selector == kAudioDevicePropertyStreamConfiguration
-                    ? kAudioDevicePropertyScopeOutput : kAudioObjectPropertyScopeGlobal,
+                mScope: scope,
                 mElement: kAudioObjectPropertyElementMain)
             AudioObjectAddPropertyListenerBlock(device, &address, engine, listener)
         }
     }
 
     private func rebuildAssemblies() {
+        renderFailures.clear()
         for assembly in mutes.values { tearDown(assembly) }
         mutes = [:]
         controlledIdentity = [:]

@@ -75,14 +75,20 @@ final class ProcessVolumeRenderer {
         for buffer in destinations {
             if let data = buffer.mData { memset(data, 0, Int(buffer.mDataByteSize)) }
         }
-        // HAL can omit capture data while a process is idle. This is a silent
-        // quantum, not a device failure that should tear down the tap.
-        if sources.allSatisfy({ $0.mData == nil || $0.mDataByteSize == 0 }) { return true }
-        guard let inputFrames = Self.frameCount(sources, channels: inputChannels),
+        // Validate playback even during silence: a missing output must not
+        // leave a muted tap running indefinitely. HAL may disable individual
+        // streams (nil mData), including unused hardware inputs or one side
+        // of planar stereo. Those input channels contribute silence.
+        guard tapChannelOffset >= 0, tapChannelOffset + 2 <= inputChannels,
               let outputFrames = Self.frameCount(destinations, channels: outputChannels),
-              inputFrames == outputFrames else { return false }
+              destinations.contains(where: { $0.mData != nil && $0.mDataByteSize > 0 })
+        else { return false }
+        // An entirely omitted capture list is a normal idle quantum.
+        if sources.isEmpty { return true }
+        guard Self.validInput(sources, channels: inputChannels,
+                             tapOffset: tapChannelOffset, frames: outputFrames) else { return false }
         let target = targetGain.isFinite ? min(1, max(0, targetGain)) : 0
-        for frame in 0..<inputFrames {
+        for frame in 0..<outputFrames {
             currentGain += min(rampStep, max(-rampStep, target - currentGain))
             let left = Self.sample(sources, channel: tapChannelOffset, frame: frame)
             let right = Self.sample(sources, channel: tapChannelOffset + 1, frame: frame)
@@ -102,7 +108,7 @@ final class ProcessVolumeRenderer {
         var frames: Int?
         for buffer in buffers {
             let count = Int(buffer.mNumberChannels)
-            guard count > 0, buffer.mData != nil,
+            guard count > 0,
                   Int(buffer.mDataByteSize) % (4 * count) == 0 else { return nil }
             let n = Int(buffer.mDataByteSize) / (4 * count)
             if let frames, n != frames { return nil }
@@ -112,12 +118,30 @@ final class ProcessVolumeRenderer {
         return total == channels ? frames : nil
     }
 
+    private static func validInput(_ buffers: UnsafeMutableAudioBufferListPointer,
+                                   channels: Int, tapOffset: Int, frames: Int) -> Bool {
+        var firstChannel = 0
+        for buffer in buffers {
+            let count = Int(buffer.mNumberChannels)
+            guard count > 0 else { return false }
+            defer { firstChannel += count }
+            // Hardware inputs ahead of the tap aren't rendered and may run
+            // with different buffer sizes or no data at all.
+            guard firstChannel + count > tapOffset, firstChannel < tapOffset + 2,
+                  buffer.mData != nil, buffer.mDataByteSize > 0 else { continue }
+            guard Int(buffer.mDataByteSize) == frames * count * MemoryLayout<Float>.size
+            else { return false }
+        }
+        return firstChannel == channels
+    }
+
     private static func sample(_ buffers: UnsafeMutableAudioBufferListPointer, channel: Int, frame: Int) -> Float {
         var channel = channel
         for buffer in buffers {
             let count = Int(buffer.mNumberChannels)
             if channel < count {
-                let value = buffer.mData!.assumingMemoryBound(to: Float.self)[frame * count + channel]
+                guard let data = buffer.mData, buffer.mDataByteSize > 0 else { return 0 }
+                let value = data.assumingMemoryBound(to: Float.self)[frame * count + channel]
                 return value.isFinite ? value : 0
             }
             channel -= count
@@ -131,7 +155,7 @@ final class ProcessVolumeRenderer {
         for buffer in buffers {
             let count = Int(buffer.mNumberChannels)
             if channel < count {
-                buffer.mData!.assumingMemoryBound(to: Float.self)[frame * count + channel] = value
+                buffer.mData?.assumingMemoryBound(to: Float.self)[frame * count + channel] = value
                 return
             }
             channel -= count
@@ -141,6 +165,7 @@ final class ProcessVolumeRenderer {
     /// Reports the actual stream descriptions and the exact rejected check.
     /// Kept separate from rendering: diagnostics run only on the engine queue.
     static func configuration(device: AudioObjectID, deviceInputChannels: Int = 0,
+                              requiresStereoOutput: Bool = true,
                               diagnostic: (String) -> Void = { _ in })
         -> (sampleRate: Double, outputChannels: Int, inputChannels: Int, tapChannelOffset: Int)? {
         func formats(scope: AudioObjectPropertyScope, name: String) -> [AudioStreamBasicDescription]? {
@@ -191,7 +216,7 @@ final class ProcessVolumeRenderer {
             return nil
         }
         let channels = Int(outputs.reduce(0, { $0 + $1.mChannelsPerFrame }))
-        guard channels == 1 || channels == 2 else {
+        guard !requiresStereoOutput || channels == 1 || channels == 2 else {
             diagnostic("output channel count: expected=1 or 2, actual=\(channels)")
             return nil
         }

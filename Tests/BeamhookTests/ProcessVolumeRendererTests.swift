@@ -20,8 +20,12 @@ final class ProcessVolumeRendererTests: XCTestCase {
             Array(UnsafeBufferPointer(start: list[index].mData!.assumingMemoryBound(to: Float.self),
                                       count: Int(list[index].mDataByteSize) / 4))
         }
+        func disable(_ index: Int) {
+            list[index].mData?.assumingMemoryBound(to: Float.self).deallocate()
+            list[index].mData = nil // HAL retains the byte count for disabled streams.
+        }
         deinit {
-            for buffer in list { buffer.mData!.assumingMemoryBound(to: Float.self).deallocate() }
+            for buffer in list { buffer.mData?.assumingMemoryBound(to: Float.self).deallocate() }
             free(list.unsafeMutablePointer)
         }
     }
@@ -77,6 +81,54 @@ final class ProcessVolumeRendererTests: XCTestCase {
         let renderer = ProcessVolumeRenderer(gain: 0.5, sampleRate: 48000, outputChannels: 2)
         XCTAssertTrue(renderer.render(input: input.list.unsafePointer, output: output.list.unsafeMutablePointer))
         XCTAssertEqual(output.samples(0), [0.5, -0.5, 0.2, -0.1])
+    }
+
+    @available(macOS 14.2, *)
+    func testRightOnlyAudioSurvivesDisabledLeftInputAndOutputStreams() {
+        let input = Buffers([[0, 0], [0.8, -0.4]], channels: [1, 1])
+        input.disable(0)
+        let output = Buffers([[99, 99], [99, 99]], channels: [1, 1])
+        output.disable(0)
+        let renderer = ProcessVolumeRenderer(gain: 0.5, sampleRate: 48000, outputChannels: 2)
+        XCTAssertTrue(renderer.render(input: input.list.unsafePointer, output: output.list.unsafeMutablePointer))
+        XCTAssertEqual(output.samples(1), [0.4, -0.2])
+        XCTAssertTrue(ProcessMuteController.containsAudibleSamples(output.list.unsafePointer))
+    }
+
+    func testEitherEmptyStereoChannelPreservesTheOtherChannel() {
+        for emptyChannel in 0...1 {
+            var samples: [[Float]] = [[0.8, -0.4], [0.8, -0.4]]
+            samples[emptyChannel] = []
+            let input = Buffers(samples, channels: [1, 1])
+            let output = Buffers([[99, 99, 99, 99]], channels: [2])
+            let renderer = ProcessVolumeRenderer(gain: 0.5, sampleRate: 48000, outputChannels: 2)
+            XCTAssertTrue(renderer.render(input: input.list.unsafePointer, output: output.list.unsafeMutablePointer))
+            XCTAssertEqual(output.samples(0), emptyChannel == 0 ? [0, 0.4, 0, -0.2] : [0.4, 0, -0.2, 0])
+        }
+    }
+
+    func testUnusedHardwareInputsDoNotInvalidateTapPlayback() {
+        for disabled in [false, true] {
+            // Different frame count from the tap, then the same with no data.
+            let input = Buffers([[0.9], [0, 0.8, 0, -0.4]], channels: [1, 2])
+            if disabled { input.disable(0) }
+            let output = Buffers([[99, 99, 99, 99]], channels: [2])
+            let renderer = ProcessVolumeRenderer(gain: 0.5, sampleRate: 48000, outputChannels: 2,
+                                                 inputChannels: 3, tapChannelOffset: 1)
+            XCTAssertTrue(renderer.render(input: input.list.unsafePointer, output: output.list.unsafeMutablePointer))
+            XCTAssertEqual(output.samples(0), [0, 0.4, 0, -0.2])
+        }
+    }
+
+    func testMissingOutputFailsEvenWhileInputIsIdle() {
+        let input = Buffers([[]], channels: [2])
+        let output = Buffers([[99, 99]], channels: [2])
+        output.disable(0)
+        let renderer = ProcessVolumeRenderer(gain: 0.5, sampleRate: 48000, outputChannels: 2)
+        XCTAssertFalse(renderer.render(input: input.list.unsafePointer, output: output.list.unsafeMutablePointer))
+        let wrongLayout = Buffers([[99, 99]], channels: [1])
+        XCTAssertFalse(renderer.render(input: input.list.unsafePointer, output: wrongLayout.list.unsafeMutablePointer))
+        XCTAssertEqual(wrongLayout.samples(0), [0, 0])
     }
 
     func testPlanarInputCanRenderInterleavedAndViceVersa() {
