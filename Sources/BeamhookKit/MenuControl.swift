@@ -49,14 +49,21 @@ public struct MenuControl: Codable, Equatable, Sendable {
     public var playingTitles: [String]
     /// Titles it shows while paused — it offers "Resume" or "Play".
     public var pausedTitles: [String]
+    /// The app's own short-skip items, for apps whose menus carry them. Their
+    /// lengths are the app's to decide, so nothing here records seconds.
+    public var skipForward: MenuItemPath?
+    public var skipBack: MenuItemPath?
 
     public init(playPause: MenuItemPath, next: MenuItemPath?, previous: MenuItemPath?,
-                playingTitles: [String], pausedTitles: [String]) {
+                playingTitles: [String], pausedTitles: [String],
+                skipForward: MenuItemPath? = nil, skipBack: MenuItemPath? = nil) {
         self.playPause = playPause
         self.next = next
         self.previous = previous
         self.playingTitles = playingTitles
         self.pausedTitles = pausedTitles
+        self.skipForward = skipForward
+        self.skipBack = skipBack
     }
 }
 

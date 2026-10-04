@@ -4,7 +4,7 @@ public enum BuiltInApps {
     public static let all: [AppDefinition] = [
         spotify, music, appleTV, safariYouTube, chromeYouTube, braveYouTube,
         arcYouTube, vivaldiYouTube, vlc, vox, quickTime, downcast,
-        iina, amazonMusic, plexamp, deezer,
+        iina, amazonMusic, plexamp, deezer, podcasts,
     ]
 
     // MARK: - Menu-driven targets
@@ -82,6 +82,28 @@ public enum BuiltInApps {
             next: .search(itemTitles: ["Next", "Next Track", "Next Song"]),
             previous: .search(itemTitles: ["Previous", "Previous Track", "Previous Song"]),
             playingTitles: ["Pause"], pausedTitles: ["Play", "Resume"]))
+
+    /// Apple Podcasts has no scripting dictionary. Its Controls menu (menu 5)
+    /// carries everything, observed 2026-10-04 on macOS 26 in English: Play 0,
+    /// Next 1, Previous 2, then the skip items 3 and 4. The skip titles follow
+    /// the user's skip-length settings, so every length Podcasts offers is
+    /// listed and the index catches anything else.
+    public static let podcasts = AppDefinition.menuDriven(
+        id: "podcasts", displayName: "Podcasts", bundleID: "com.apple.podcasts",
+        control: MenuControl(
+            playPause: MenuItemPath(menuIndex: 5, menuTitles: ["Controls"], itemIndex: 0,
+                                    itemTitles: ["Play", "Pause"]),
+            next: MenuItemPath(menuIndex: 5, menuTitles: ["Controls"], itemIndex: 1,
+                               itemTitles: ["Next"]),
+            previous: MenuItemPath(menuIndex: 5, menuTitles: ["Controls"], itemIndex: 2,
+                                   itemTitles: ["Previous"]),
+            playingTitles: ["Pause"], pausedTitles: ["Play"],
+            skipForward: MenuItemPath(menuIndex: 5, menuTitles: ["Controls"], itemIndex: 3,
+                                      itemTitles: ["Skip 10 sec", "Skip 15 sec", "Skip 30 sec",
+                                                   "Skip 45 sec", "Skip 60 sec"]),
+            skipBack: MenuItemPath(menuIndex: 5, menuTitles: ["Controls"], itemIndex: 4,
+                                   itemTitles: ["Rewind 10 sec", "Rewind 15 sec", "Rewind 30 sec",
+                                                "Rewind 45 sec", "Rewind 60 sec"])))
 
     public static let spotify = AppDefinition(
         id: "spotify", displayName: "Spotify", bundleID: "com.spotify.client", isBuiltIn: true,

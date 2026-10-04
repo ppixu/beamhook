@@ -142,7 +142,7 @@ final class MenuDrivenMediaAppTests: XCTestCase {
 
     func testShippedMenuDrivenTargets() {
         let menuDriven = BuiltInApps.all.filter { $0.menuControl != nil }.map(\.id)
-        XCTAssertEqual(menuDriven, ["iina", "amazon-music", "plexamp", "deezer"])
+        XCTAssertEqual(menuDriven, ["iina", "amazon-music", "plexamp", "deezer", "podcasts"])
     }
 
     func testRegistryResolvesMenuDrivenDefinitionsToMenuDrivenApps() {
@@ -161,5 +161,45 @@ final class MenuDrivenMediaAppTests: XCTestCase {
         let defaults = UserDefaults(suiteName: "MenuDrivenMediaAppTests")!
         defaults.removePersistentDomain(forName: "MenuDrivenMediaAppTests")
         return defaults
+    }
+
+    // MARK: - Podcasts skip items
+
+    private func podcastsApp(presser: MockMenuPresser) -> MenuDrivenMediaApp {
+        let presence = MockPresence()
+        presence.runningBundleIDs = ["com.apple.podcasts"]
+        return MenuDrivenMediaApp(definition: BuiltInApps.podcasts, presser: presser, presence: presence)!
+    }
+
+    func testPodcastsAlwaysReportsAPodcastAndSeeksByMenu() {
+        let app = podcastsApp(presser: MockMenuPresser())
+        XCTAssertTrue(app.canSeek)
+        XCTAssertTrue(app.seeksByMenu)
+        XCTAssertEqual(app.playbackKind(), .podcast)
+    }
+
+    func testSeekPressesSkipForwardOrRewindByDirection() {
+        let presser = MockMenuPresser()
+        let app = podcastsApp(presser: presser)
+        XCTAssertTrue(app.seek(by: 30))
+        XCTAssertTrue(app.seek(by: -15))
+        XCTAssertEqual(presser.pressed.map(\.path.itemIndex), [3, 4])
+        XCTAssertTrue(presser.pressed[0].path.itemTitles.contains("Skip 30 sec"))
+        XCTAssertTrue(presser.pressed[1].path.itemTitles.contains("Rewind 15 sec"))
+        XCTAssertEqual(presser.pressed.map(\.bundleID), ["com.apple.podcasts", "com.apple.podcasts"])
+    }
+
+    func testMenuAppsWithoutSkipItemsCannotSeek() {
+        let presence = MockPresence()
+        presence.runningBundleIDs = [BuiltInApps.iina.bundleID]
+        let presser = MockMenuPresser()
+        let app = MenuDrivenMediaApp(definition: BuiltInApps.iina, presser: presser, presence: presence)!
+        XCTAssertFalse(app.canSeek)
+        XCTAssertFalse(app.seek(by: 15))
+        XCTAssertTrue(presser.pressed.isEmpty)
+    }
+
+    func testPodcastsIsABuiltInTarget() {
+        XCTAssertTrue(BuiltInApps.all.contains { $0.id == "podcasts" })
     }
 }

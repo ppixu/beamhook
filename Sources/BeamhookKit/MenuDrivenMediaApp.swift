@@ -6,7 +6,7 @@ import Foundation
 /// Immutable after init and its collaborators are stateless, so it is safe to hand
 /// to `ScriptRunning.run` — which is required, since every call blocks on the other
 /// app answering an Accessibility request.
-public final class MenuDrivenMediaApp: MediaApp, @unchecked Sendable {
+public final class MenuDrivenMediaApp: SeekingMediaApp, @unchecked Sendable {
     public let definition: AppDefinition
     private let control: MenuControl
     private let presser: MenuItemPressing
@@ -60,5 +60,21 @@ public final class MenuDrivenMediaApp: MediaApp, @unchecked Sendable {
         // Localized title we don't know: unknown beats guessing, since the caller
         // renders this straight onto the play/pause button.
         return nil
+    }
+
+    // MARK: - Seeking
+
+    public var canSeek: Bool { control.skipForward != nil && control.skipBack != nil }
+    /// The menu items pick the length; this is never shown.
+    public var skipSeconds: SkipSeconds { .standard }
+    public var seeksByMenu: Bool { true }
+
+    /// Only podcast players carry skip items, so having them is the answer.
+    public func playbackKind() -> PlaybackKind { canSeek ? .podcast : .music }
+
+    public func seek(by seconds: Int) -> Bool {
+        guard isReady, seconds != 0,
+              let path = seconds > 0 ? control.skipForward : control.skipBack else { return false }
+        return presser.press(path, bundleID: definition.bundleID)
     }
 }
