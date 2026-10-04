@@ -937,7 +937,11 @@ final class HookHUD {
         marker.image = row.canPlayPause ? Self.playbackStateSymbol(row.isPlaying) : nil
         marker.symbolConfiguration = .init(pointSize: 11, weight: .semibold)
         marker.imageScaling = .scaleProportionallyDown
-        marker.contentTintColor = selected ? .labelColor : NSColor.labelColor.withAlphaComponent(0.65)
+        // Keep the tint dynamic so it follows the glass content's appearance.
+        // withAlphaComponent resolves labelColor now, under the panel's forced
+        // appearance, and can freeze it white even when the glass draws light.
+        marker.contentTintColor = .labelColor
+        marker.alphaValue = selected ? 1 : 0.65
         marker.setAccessibilityElement(false)
         sourcePlaybackIcons[row.sourceID] = marker
 

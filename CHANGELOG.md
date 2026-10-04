@@ -6,6 +6,11 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ## [Unreleased]
 
+### Fixed
+
+- Expanded-overlay play/pause icons keep their adaptive color when dimmed,
+  fixing white icons on light glass.
+
 ## [1.4.0] — 2026-10-04
 
 ### Added
