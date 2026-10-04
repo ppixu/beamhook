@@ -42,6 +42,35 @@ final class ProcessVolumeRendererTests: XCTestCase {
         XCTAssertFalse(ProcessMuteController.containsAudibleSamples(quiet.list.unsafePointer))
     }
 
+    /// An output device with its own inputs (e.g. a USB interface's mic) puts
+    /// those channels ahead of the tap's in the private aggregate.
+    func testTapLayoutPlacesTapAfterOutputDeviceInputs() {
+        XCTAssertEqual(ProcessVolumeRenderer.tapChannelOffset(inputChannels: 2, deviceInputChannels: 0), 0)
+        XCTAssertEqual(ProcessVolumeRenderer.tapChannelOffset(inputChannels: 6, deviceInputChannels: 4), 4)
+        XCTAssertNil(ProcessVolumeRenderer.tapChannelOffset(inputChannels: 6, deviceInputChannels: 0))
+        XCTAssertNil(ProcessVolumeRenderer.tapChannelOffset(inputChannels: 4, deviceInputChannels: 4))
+    }
+
+    func testRendererReadsTapChannelsAfterDeviceInputs() {
+        let mic: [Float] = [0.9, 0.9, 0.9, 0.9, 0.8, 0.8, 0.8, 0.8]
+        let input = Buffers([mic, [1, -1, 0.4, -0.2]], channels: [4, 2])
+        let output = Buffers([[99, 99, 99, 99]], channels: [2])
+        let renderer = ProcessVolumeRenderer(gain: 0.5, sampleRate: 44100, outputChannels: 2,
+                                             inputChannels: 6, tapChannelOffset: 4)
+        XCTAssertTrue(renderer.render(input: input.list.unsafePointer, output: output.list.unsafeMutablePointer))
+        XCTAssertEqual(output.samples(0), [0.5, -0.5, 0.2, -0.1])
+    }
+
+    @available(macOS 14.2, *)
+    func testAudibilityIgnoresDeviceInputsAheadOfTheTap() {
+        let micOnly = Buffers([[0.9, 0.9, 0.9, 0.9], [0, 0]], channels: [4, 2])
+        XCTAssertFalse(ProcessMuteController.containsAudibleSamples(micOnly.list.unsafePointer,
+                                                                    skippingChannels: 4))
+        let tapSound = Buffers([[0, 0, 0, 0], [0, 0.5]], channels: [4, 2])
+        XCTAssertTrue(ProcessMuteController.containsAudibleSamples(tapSound.list.unsafePointer,
+                                                                   skippingChannels: 4))
+    }
+
     func testStereoGainPreservesChannelsAndPolarity() {
         let input = Buffers([[1, -1, 0.4, -0.2]], channels: [2])
         let output = Buffers([[99, 99, 99, 99]], channels: [2])

@@ -214,9 +214,13 @@ final class ProcessMuteController: ObservableObject {
             meterIdentity[obj] = nil
             loudLock.lock(); loudUntil[obj] = nil; loudLock.unlock()
         }
+        // The aggregate also carries the output device's own inputs (a USB
+        // interface's mic) ahead of the tap; measure only the tap's channels.
+        let deviceInputs = Self.defaultOutputDevice()
+            .map { ProcessVolumeRenderer.inputChannelCount(device: $0.id) } ?? 0
         for (obj, bid) in wanted where meters[obj] == nil {
             let block: AudioDeviceIOBlock = { [weak self] _, inInputData, _, _, _ in
-                self?.notePeak(obj: obj, bufferList: inInputData)
+                self?.notePeak(obj: obj, bufferList: inInputData, skippingChannels: deviceInputs)
             }
             if case .success(let assembly) = buildAssembly(for: obj, muteBehavior: .unmuted,
                                                            ioBlock: block) {
@@ -239,13 +243,18 @@ final class ProcessMuteController: ObservableObject {
     /// Probe every sample: a fixed stride skips channels in interleaved audio
     /// and can alias periodic signals into apparent silence. Stop at the first
     /// audible sample, keeping the common case cheap without allocations.
-    static func containsAudibleSamples(_ bufferList: UnsafePointer<AudioBufferList>) -> Bool {
+    /// `skippingChannels` leaves out leading channels that aren't the tap's.
+    static func containsAudibleSamples(_ bufferList: UnsafePointer<AudioBufferList>,
+                                       skippingChannels: Int = 0) -> Bool {
         let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: bufferList))
+        var firstChannel = 0
         for buffer in buffers {
-            guard let data = buffer.mData else { continue }
+            let channels = max(1, Int(buffer.mNumberChannels))
+            defer { firstChannel += channels }
+            guard firstChannel + channels > skippingChannels, let data = buffer.mData else { continue }
             let count = Int(buffer.mDataByteSize) / MemoryLayout<Float>.size
             let samples = data.assumingMemoryBound(to: Float.self)
-            for index in 0..<count {
+            for index in 0..<count where firstChannel + index % channels >= skippingChannels {
                 let value = samples[index]
                 if value.isFinite && abs(value) > 0.002 { return true }
             }
@@ -253,8 +262,9 @@ final class ProcessMuteController: ObservableObject {
         return false
     }
 
-    private func notePeak(obj: AudioObjectID, bufferList: UnsafePointer<AudioBufferList>) {
-        guard Self.containsAudibleSamples(bufferList) else { return }
+    private func notePeak(obj: AudioObjectID, bufferList: UnsafePointer<AudioBufferList>,
+                          skippingChannels: Int = 0) {
+        guard Self.containsAudibleSamples(bufferList, skippingChannels: skippingChannels) else { return }
         loudLock.lock()
         loudUntil[obj] = Date().timeIntervalSinceReferenceDate + 0.45
         loudLock.unlock()
@@ -433,13 +443,16 @@ final class ProcessMuteController: ObservableObject {
                 return failure(kAudioDeviceUnsupportedFormatError, stage: "match output sample rate")
             }
             guard let configuration = ProcessVolumeRenderer.configuration(device: aggregateID,
+                    deviceInputChannels: ProcessVolumeRenderer.inputChannelCount(device: outputDevice.id),
                     diagnostic: { diagnostics.append($0) }) else {
                 AudioHardwareDestroyAggregateDevice(aggregateID)
                 AudioHardwareDestroyProcessTap(tapID)
                 return failure(kAudioDeviceUnsupportedFormatError, stage: "validate aggregate streams")
             }
             let playback = ProcessVolumeRenderer(gain: gain, sampleRate: configuration.sampleRate,
-                                                 outputChannels: configuration.outputChannels)
+                                                 outputChannels: configuration.outputChannels,
+                                                 inputChannels: configuration.inputChannels,
+                                                 tapChannelOffset: configuration.tapChannelOffset)
             renderer = playback
             var invalidated = false // IO-queue confined, just like the renderer.
             callback = { [weak self] _, input, _, output, _ in
