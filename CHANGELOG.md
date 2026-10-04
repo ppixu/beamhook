@@ -6,6 +6,8 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-10-04
+
 ### Added
 
 - ⏭ and ⏮ skip forward and back on podcasts instead of changing track: Spotify
