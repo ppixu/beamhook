@@ -6,6 +6,14 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ## [Unreleased]
 
+### Fixed
+
+- Playback subtitles use 50% black in light mode and 50% white in dark mode.
+
+- Running players such as VLC now enter the shortlist when playing, even
+  without audible samples. Playback discovery no longer depends on an app's
+  row already being visible under “Show all.”
+
 ## [1.3.2] — 2026-10-03
 
 ### Fixed

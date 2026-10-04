@@ -38,6 +38,13 @@ struct MenuContentView: View {
         .task(id: state.isMenuVisible) {
             guard state.isMenuVisible else { return }
             while !Task.isCancelled {
+                await state.refreshMenuPlayback()
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+        .task(id: state.isMenuVisible) {
+            guard state.isMenuVisible else { return }
+            while !Task.isCancelled {
                 await state.refreshSpotifyTrack()
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
             }

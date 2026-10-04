@@ -104,6 +104,8 @@ final class AppState: ObservableObject {
     /// poll, initial volume reads, browser-selection bookkeeping). Kept apart from
     /// `scripting` so slow maintenance can never sit in front of a user's key press.
     private let pollRunner = ScriptRunner()
+    // Discovery must not wait behind row polling (or delay user commands).
+    private let menuPlaybackRunner = ScriptRunner()
     private let metadataRunner = ScriptRunner()
     private let browserMediaController: BrowserMediaController
     private var menuBrowserHookRevision: UInt64 = 0
@@ -177,6 +179,27 @@ final class AppState: ObservableObject {
         let tabParents = Set(activeBrowserMediaCandidates.filter { $0.volume != nil }.map { $0.browser.bundleID })
         return Set(recentAppPlayback.keys).union(audibleApps)
             .union(recentBrowserBundleIDs(now: now)).union(tabParents)
+    }
+
+    /// Poll every running player, including those filtered out of the shortlist.
+    /// Row-owned polling alone cannot discover a silent/muted video: its row
+    /// would need to be visible before playback could make it visible.
+    /// The optional app list allows discovery to be tested without live players.
+    func refreshMenuPlayback(apps: [MediaApp]? = nil) async {
+        guard isMenuVisible, !Task.isCancelled else { return }
+        for app in apps ?? registry.allApps() {
+            guard isMenuVisible, !Task.isCancelled else { return }
+            // Browser sources have their own tab discovery and recency tracking.
+            guard BrowserKind.browser(bundleID: app.bundleID) == nil else { continue }
+            let playing = await menuPlaybackRunner.run {
+                guard app.isReady else { return nil as Bool? }
+                return app.isPlaying()
+            }
+            guard isMenuVisible, !Task.isCancelled else { return }
+            if let playing {
+                notePolledPlayback(bundleID: app.bundleID, playing: playing)
+            }
+        }
     }
 
     func recentAppRows(_ rows: [PlayingApp], now: Date = Date()) -> [PlayingApp] {

@@ -588,9 +588,9 @@ final class HookHUD {
         if panel.appearance?.name != contrastingAppearance {
             panel.appearance = NSAppearance(named: contrastingAppearance)
         }
-        // Resolve against the HUD's contrasting palette, not the system
-        // appearance active when the subtitle was created.
-        trackSubtitle?.textColor = (systemUsesDarkColors ? NSColor.black : NSColor.white)
+        // The subtitle follows the system theme: half-opacity black in light
+        // mode, white in dark mode. The glass's contrasting tint is separate.
+        trackSubtitle?.textColor = (systemUsesDarkColors ? NSColor.white : NSColor.black)
             .withAlphaComponent(0.5)
         if #available(macOS 26.0, *),
            let glass = panel.contentView as? NSGlassEffectView {
