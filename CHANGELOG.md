@@ -6,6 +6,8 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ## [Unreleased]
 
+## [1.4.3] — 2026-10-04
+
 ### Changed
 
 - Moving to the last shortlisted overlay source reveals the full app list for

@@ -15,6 +15,28 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.4.3</title>
+            <pubDate>Sun, 04 Oct 2026 14:03:37 +0300</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.4.3</link>
+            <sparkle:version>27</sparkle:version>
+            <sparkle:shortVersionString>1.4.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Changed</h3>
+<ul>
+<li>Moving to the last shortlisted overlay source reveals the full app list for that session, keeping the selected source in place.</li>
+<li>Overlay selection has a brighter fill and visible outline in light mode.</li>
+<li>Muted app and browser-tab sliders in the menu dim and show “Muted.”</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li>Opening or refreshing the volume overlay no longer crashes from overlapping reads and writes of its source list.</li>
+<li>Menu audio discovery runs in the background instead of freezing the menu every two seconds. Closing the menu discards pending scan results.</li>
+<li>Menu-row hook icons draw at display resolution instead of using fractional image scaling, matching the sharper overlay rendering.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.4.3.zip" length="2751531" type="application/octet-stream" sparkle:edSignature="SZRqElXgA6XXZLNeWUdQtOPdepjj+rUXpCu7ZNyqtbPjxIaF2XrAV1juF42CBklC5gfayZlofkTtgKTaloq+BA=="/>
+        </item>
+        <item>
             <title>1.4.2</title>
             <pubDate>Sun, 04 Oct 2026 12:17:56 +0300</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.4.2</link>
@@ -407,6 +429,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: uMZC6pnSCsQ1LLrCppRMO0NpR+Ljs2lpOtQ7u5dd3pCZs1U6jXsFctQvbn5OZqLPCiULpnP1TOX2+v4U6bnBCg==
-length: 33820
+edSignature: /WhURmc/qmnefdYbv94t0YlzpFjRr9Z5UmXYPL7YMfJRmJUpTAaolvDo9+obmWBKhVEDjPk7hUMWyuedLuf3BQ==
+length: 35284
 -->
