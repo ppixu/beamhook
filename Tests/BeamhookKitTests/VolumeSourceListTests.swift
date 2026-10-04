@@ -73,6 +73,53 @@ final class VolumeSourceListTests: XCTestCase {
         list.selectPrevious()
         XCTAssertNil(list.selected)
         XCTAssertEqual(list.selectedIndex, 0)
+        XCTAssertFalse(list.showsAllSources)
+    }
+
+    func testReachingBottomRevealsAllWithoutMovingSelection() {
+        var list = VolumeSourceList(target: target, apps: [app("a"), app("b")], tabs: [])
+        XCTAssertFalse(list.showsAllSources)
+        list.selectNext()
+        XCTAssertFalse(list.showsAllSources)
+        list.selectNext()
+        XCTAssertTrue(list.showsAllSources)
+        XCTAssertEqual(list.selected?.source, app("b").source)
+
+        list.replace(target: target, apps: [app("a"), app("b"), app("extra")], tabs: [])
+        XCTAssertEqual(list.selected?.source, app("b").source)
+        list.selectNext()
+        XCTAssertEqual(list.selected?.source, app("extra").source)
+        XCTAssertTrue(list.showsAllSources)
+    }
+
+    func testOpeningOnLastRowExpandsBeforeWrapping() {
+        let parent = app("browser")
+        let hookedTab = VolumeSourceEntry(source: .hookedTarget, name: "Video", parentSource: parent.source)
+        var list = VolumeSourceList(target: hookedTab, apps: [parent], tabs: [])
+        XCTAssertEqual(list.selectedIndex, list.entries.count - 1)
+        list.selectNext()
+        XCTAssertTrue(list.showsAllSources)
+        XCTAssertEqual(list.selected?.source, .hookedTarget)
+    }
+
+    func testSingleRowWaitsForNavigationBeforeExpanding() {
+        var list = VolumeSourceList(target: target, apps: [], tabs: [])
+        XCTAssertFalse(list.showsAllSources)
+        list.selectNext()
+        XCTAssertTrue(list.showsAllSources)
+        XCTAssertEqual(list.selected, target)
+    }
+
+    func testExpansionSurvivesRefreshButResetsForNewSession() {
+        var list = VolumeSourceList(target: target, apps: [app("a")], tabs: [])
+        list.selectPrevious() // Wrap to the last row.
+        XCTAssertTrue(list.showsAllSources)
+        list.selectPrevious()
+        list.replace(target: target, apps: [app("a"), app("b")], tabs: [])
+        XCTAssertTrue(list.showsAllSources)
+        XCTAssertEqual(list.selected, target)
+        list = VolumeSourceList(target: target, apps: [app("a")], tabs: [])
+        XCTAssertFalse(list.showsAllSources)
     }
 
     func testReplaceKeepsSelectionBySourceWhenTabsArrive() {

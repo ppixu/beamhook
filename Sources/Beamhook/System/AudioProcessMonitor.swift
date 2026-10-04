@@ -8,17 +8,30 @@ struct PlayingApp: Identifiable, Equatable, Sendable {
 }
 
 @available(macOS 14.2, *)
+@MainActor
 final class AudioProcessMonitor: ObservableObject {
     /// Apps with an active audio OUTPUT stream. Note: Core Audio reports a process as
     /// running-output while its stream is open even if it is paused/silent, so this list
     /// can include paused apps — hence "recently playing" rather than "currently audible".
     @Published private(set) var playingApps: [PlayingApp] = []
     private var timer: Timer?
+    private let scanQueue = DispatchQueue(label: "com.github.ppixu.beamhook.audio-discovery", qos: .utility)
+    private let scan: @Sendable () -> [PlayingApp]
+    private var scanning = false
+    private var running = false
+    private var generation: UInt64 = 0
+
+    init(scan: @escaping @Sendable () -> [PlayingApp] = { AudioProcessMonitor.scanPlayingApps() }) {
+        self.scan = scan
+    }
 
     func start() {
         stop()
+        running = true
         refresh()
-        let t = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in self?.refresh() }
+        let t = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
+        }
         RunLoop.main.add(t, forMode: .common)
         timer = t
     }
@@ -26,16 +39,35 @@ final class AudioProcessMonitor: ObservableObject {
     func stop() {
         timer?.invalidate()
         timer = nil
+        running = false
+        generation &+= 1
     }
 
     func refresh() {
-        let apps = Self.scanPlayingApps()
-        if apps != playingApps { playingApps = apps }
+        guard running, !scanning else { return }
+        scanning = true
+        let generation = generation
+        // Only the plain snapshot crosses queues; publication stays on main.
+        scanQueue.async { [weak self, scan] in
+            let apps = scan()
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.scanning = false
+                guard self.running else { return }
+                guard self.generation == generation else {
+                    // Closed and reopened during the scan: discard the old
+                    // result and refresh the new session without overlapping.
+                    self.refresh()
+                    return
+                }
+                if apps != self.playingApps { self.playingApps = apps }
+            }
+        }
     }
 
     /// Blocking HAL discovery, separated from publication so callers can scan
     /// off main without moving an observable monitor between threads.
-    static func scanPlayingApps() -> [PlayingApp] {
+    nonisolated static func scanPlayingApps() -> [PlayingApp] {
         var apps: [PlayingApp] = []
         for obj in Self.processObjectIDs() where Self.isRunningOutput(obj) {
             guard let identity = Self.resolve(obj) else { continue }
@@ -64,7 +96,7 @@ final class AudioProcessMonitor: ObservableObject {
     /// helpers are spawned outside LaunchServices and only the HAL knows their
     /// bundle id — those resolve through `kAudioProcessPropertyBundleID` and,
     /// via the ".helper" convention, back to the app that owns them.
-    static func resolve(_ obj: AudioObjectID) -> (displayName: String, bundleID: String)? {
+    nonisolated static func resolve(_ obj: AudioObjectID) -> (displayName: String, bundleID: String)? {
         if let pid = pid(obj),
            let running = NSRunningApplication(processIdentifier: pid),
            let raw = running.bundleIdentifier {
@@ -86,7 +118,7 @@ final class AudioProcessMonitor: ObservableObject {
     /// e.g. an app embedding a web view) plays through the shared WebKit GPU helper
     /// "com.apple.WebKit.GPU", which macOS names "<Owning app> Graphics and Media".
     /// Strip the helper suffix so we show "Safari" rather than "Safari Graphics and Media".
-    private static func displayName(for app: NSRunningApplication, bundleID: String) -> String {
+    private nonisolated static func displayName(for app: NSRunningApplication, bundleID: String) -> String {
         let raw = app.localizedName ?? bundleID
         guard bundleID.hasPrefix("com.apple.WebKit") else { return raw }
         for suffix in [" Graphics and Media", " Web Content", " Networking"] where raw.hasSuffix(suffix) {
@@ -98,7 +130,7 @@ final class AudioProcessMonitor: ObservableObject {
     /// Core Audio often attributes browser playback to a renderer/GPU helper.
     /// Resolve those helpers to the browser's built-in target so the row can be
     /// hooked instead of offering a useless custom definition for the helper.
-    private static func browserIdentity(
+    private nonisolated static func browserIdentity(
         for app: NSRunningApplication,
         rawBundleID: String
     ) -> (displayName: String, bundleID: String)? {
@@ -112,7 +144,7 @@ final class AudioProcessMonitor: ObservableObject {
     /// The Chromium browsers by bundle id alone (the app itself or any of its
     /// ".helper" processes) — the WebKit case above needs a process name and
     /// stays with the NSRunningApplication path.
-    private static func browserIdentity(bundleID: String) -> (displayName: String, bundleID: String)? {
+    private nonisolated static func browserIdentity(bundleID: String) -> (displayName: String, bundleID: String)? {
         if bundleID == "com.google.Chrome" || bundleID.hasPrefix("com.google.Chrome.helper") {
             return ("Chrome", "com.google.Chrome")
         }
@@ -130,13 +162,13 @@ final class AudioProcessMonitor: ObservableObject {
 
     /// The bundle id an app row uses for one HAL process; nil for processes
     /// that don't belong to a recognizable app. See `resolve`.
-    static func rowBundleID(for obj: AudioObjectID) -> String? {
+    nonisolated static func rowBundleID(for obj: AudioObjectID) -> String? {
         resolve(obj)?.bundleID
     }
 
     // MARK: - Core Audio helpers (shared with ProcessMuteController)
 
-    static func processObjectIDs() -> [AudioObjectID] {
+    nonisolated static func processObjectIDs() -> [AudioObjectID] {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyProcessObjectList,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -153,7 +185,7 @@ final class AudioProcessMonitor: ObservableObject {
         return Array(ids.prefix(actualCount))
     }
 
-    static func isRunningOutput(_ obj: AudioObjectID) -> Bool {
+    nonisolated static func isRunningOutput(_ obj: AudioObjectID) -> Bool {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioProcessPropertyIsRunningOutput,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -164,7 +196,7 @@ final class AudioProcessMonitor: ObservableObject {
         return status == noErr && value != 0
     }
 
-    static func pid(_ obj: AudioObjectID) -> pid_t? {
+    nonisolated static func pid(_ obj: AudioObjectID) -> pid_t? {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioProcessPropertyPID,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -177,7 +209,7 @@ final class AudioProcessMonitor: ObservableObject {
 
     /// The HAL's own record of a process's bundle id — present even for audio
     /// helpers LaunchServices has never heard of.
-    private static func bundleID(_ obj: AudioObjectID) -> String? {
+    private nonisolated static func bundleID(_ obj: AudioObjectID) -> String? {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioProcessPropertyBundleID,
             mScope: kAudioObjectPropertyScopeGlobal,

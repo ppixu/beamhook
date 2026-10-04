@@ -6,6 +6,20 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ## [Unreleased]
 
+### Changed
+
+- Moving to the last shortlisted overlay source reveals the full app list for
+  that session, keeping the selected source in place.
+- Overlay selection has a brighter fill and visible outline in light mode.
+- Muted app and browser-tab sliders in the menu dim and show “Muted.”
+
+### Fixed
+
+- Menu audio discovery runs in the background instead of freezing the menu
+  every two seconds. Closing the menu discards pending scan results.
+- Menu-row hook icons draw at display resolution instead of using fractional
+  image scaling, matching the sharper overlay rendering.
+
 ## [1.4.2] — 2026-10-04
 
 ### Fixed

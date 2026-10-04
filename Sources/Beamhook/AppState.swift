@@ -1914,6 +1914,7 @@ final class AppState: ObservableObject {
         guard hudVisible else { return }
         beginVolumeSessionIfNeeded()
         guard volumeSession != nil else { return }
+        let showedAllSources = volumeSession?.showsAllSources == true
         if !tap.volumeKeysHijacked { HookHUD.shared.holdUntilCommandRelease() }
         switch key {
         case .previous: volumeSession?.selectPrevious()
@@ -1921,6 +1922,13 @@ final class AppState: ObservableObject {
         case .volumeDown: nudgeVolume(up: false)
         case .volumeUp: nudgeVolume(up: true)
         case .hook: hookPickerSource()
+        }
+        if !showedAllSources, volumeSession?.showsAllSources == true {
+            let audible = Set(volumePickerApps.map(\.bundleID))
+            volumeSession?.replace(target: hookedVolumeEntry(),
+                                   apps: playingVolumeApps(audible: audible),
+                                   tabs: browserVolumeTabs())
+            startVolumeSessionRefresh(audible: audible)
         }
         showVolumeSessionHUD()
     }
@@ -2275,26 +2283,31 @@ final class AppState: ObservableObject {
         return Set(BrowserKind.allCases.map(\.bundleID).filter { isRunning(bundleID: $0) })
     }
 
-    /// Every other sounding app, including mute-only apps and browsers whose
-    /// tabs cannot be scanned. Browser tabs also offer individual volume control.
+    /// Start with recent sources. Once navigation reaches the end, append the
+    /// remaining running apps from the menu's full list for this session.
     private func playingVolumeApps(audible: Set<String>) -> [VolumeSourceEntry] {
         let targetBundleID = targetManager.targetBundleID
+        let showsAll = volumeSession?.showsAllSources == true
+        let candidates = showsAll
+            ? menuAppRows(volumePickerApps).filter { isRunning(bundleID: $0.bundleID) }
+            : volumePickerApps
         let parents = Set(browserVolumeTabs().compactMap { entry -> String? in
             if case .app(let id)? = entry.parentSource { return id }
             return nil
         })
         let hookedBrowser = selectedTargetIsBrowser && selectedBrowserMediaCandidate != nil
-        var ordered = volumePickerApps.map(\.bundleID)
+        var ordered = candidates.map(\.bundleID)
         let missing = audible.union(parents).union(hookedBrowser ? Set([targetBundleID].compactMap { $0 }) : [])
             .subtracting(ordered)
         ordered.append(contentsOf: missing.sorted())
         let recent = recentlyActiveAppIDs().union(parents)
-        return ordered
-            .filter { recent.contains($0) || $0 == targetBundleID }
+        let shortlist = ordered.filter { recent.contains($0) || $0 == targetBundleID }
+        let remainder = showsAll ? ordered.filter { !recent.contains($0) && $0 != targetBundleID } : []
+        return (shortlist + remainder)
             .filter { $0 != targetBundleID || hookedBrowser }
             .map { bundleID in
                 VolumeSourceEntry(source: .app(bundleID: bundleID),
-                                  name: volumePickerApps.first { $0.bundleID == bundleID }?.displayName
+                                  name: candidates.first { $0.bundleID == bundleID }?.displayName
                                       ?? availableApps.first { $0.bundleID == bundleID }?.displayName
                                       ?? runningAppName(bundleID: bundleID) ?? bundleID)
             }

@@ -1033,9 +1033,20 @@ final class HookHUD {
         line.layer?.cornerCurve = .continuous
         let dark = panel?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         if selected {
-            // Follow the overlay's appearance (which contrasts with the system),
-            // so white labels never sit on the light-mode-strength highlight.
-            line.layer?.backgroundColor = NSColor.white.withAlphaComponent(dark ? 0.18 : 0.22).cgColor
+            // Glass content follows the system theme despite the panel's
+            // contrasting appearance. Give light glass a brighter selection
+            // and a dark edge so it remains distinct on pale backgrounds.
+            let lightContent: Bool
+            if #available(macOS 26.0, *) {
+                lightContent = !Self.contrastingAppearance().systemUsesDarkColors
+            } else {
+                lightContent = !dark
+            }
+            line.layer?.backgroundColor = NSColor.white.withAlphaComponent(lightContent ? 0.65 : 0.18).cgColor
+            if lightContent {
+                line.layer?.borderColor = NSColor.black.withAlphaComponent(0.14).cgColor
+                line.layer?.borderWidth = 1
+            }
         } else if row.isMuted {
             let tint: NSColor = dark ? .white : .black
             line.layer?.backgroundColor = tint.withAlphaComponent(0.12).cgColor

@@ -40,6 +40,9 @@ public struct VolumeSourceEntry: Equatable, Sendable {
 public struct VolumeSourceList: Equatable, Sendable {
     public private(set) var entries: [VolumeSourceEntry] = []
     public private(set) var selectedIndex = 0
+    /// Reaching the shortlist's end reveals the full list for this session.
+    /// Refreshes retain this state; a newly opened picker starts compact again.
+    public private(set) var showsAllSources = false
 
     public var selected: VolumeSourceEntry? {
         entries.indices.contains(selectedIndex) ? entries[selectedIndex] : nil
@@ -56,12 +59,20 @@ public struct VolumeSourceList: Equatable, Sendable {
 
     public mutating func selectNext() {
         guard !entries.isEmpty else { return }
+        // A hooked tab may already be the last row when the picker opens.
+        // Reveal the remaining sources before wrapping away from it.
+        if !showsAllSources, selectedIndex == entries.count - 1 {
+            showsAllSources = true
+            return
+        }
         selectedIndex = (selectedIndex + 1) % entries.count
+        if selectedIndex == entries.count - 1 { showsAllSources = true }
     }
 
     public mutating func selectPrevious() {
         guard !entries.isEmpty else { return }
         selectedIndex = (selectedIndex - 1 + entries.count) % entries.count
+        if selectedIndex == entries.count - 1 { showsAllSources = true }
     }
 
     /// Swap in fresh rows, keeping the selected source if it is still listed and

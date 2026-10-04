@@ -249,19 +249,11 @@ private struct HookRowLabel: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image("HookGlyph")
-                .resizable().renderingMode(.template)
-                .interpolation(.high)
-                .scaledToFit()
-                // Render the full-resolution asset at its final size instead
-                // of magnifying an already-rasterized small image.
-                .frame(width: hooked ? 17.55 : 13, height: hooked ? 21.6 : 16)
+            HookRowGlyph(tint: colorScheme == .dark ? .white : .black)
+                .frame(width: 18, height: 18)
                 .frame(width: 13, height: 16)
-                .animation(reduceMotion ? nil : (hooked
-                    ? .spring(response: 0.35, dampingFraction: 0.45)
-                    : .easeOut(duration: 0.16)), value: hooked)
-                .foregroundStyle(hooked ? (colorScheme == .dark ? Color.white : Color.black) : Color.primary)
                 .opacity(hooked ? 1 : 0)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: hooked)
                 .accessibilityHidden(true)
             Text(name)
                 .font(.system(size: indented ? 11 : 12, weight: hooked ? .semibold : .regular))
@@ -275,6 +267,63 @@ private struct HookRowLabel: View {
         }
         .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
         .contentShape(Rectangle())
+    }
+}
+
+/// Draw the master at the backing display's resolution, like the overlay's
+/// AppKit attachment. Avoid SwiftUI's template-image resizing and fractional
+/// scale animation, which leave the small hook with jagged edges.
+private struct HookRowGlyph: NSViewRepresentable {
+    let tint: NSColor
+
+    func makeNSView(context: Context) -> GlyphView { GlyphView() }
+
+    func updateNSView(_ view: GlyphView, context: Context) {
+        view.tint = tint
+    }
+
+    final class GlyphView: NSView {
+        private let glyph = NSImage(named: "HookGlyph")
+        var tint: NSColor = .black { didSet { needsDisplay = true } }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func draw(_ dirtyRect: NSRect) {
+            guard let glyph else { return }
+            NSGraphicsContext.saveGraphicsState()
+            defer { NSGraphicsContext.restoreGraphicsState() }
+            NSGraphicsContext.current?.imageInterpolation = .high
+            let context = NSGraphicsContext.current?.cgContext
+            context?.beginTransparencyLayer(auxiliaryInfo: nil)
+            glyph.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1)
+            tint.setFill()
+            bounds.fill(using: .sourceAtop)
+            context?.endTransparencyLayer()
+        }
+    }
+}
+
+/// Keep the native slider interactive while explaining why its source is quiet.
+private struct MenuVolumeSlider: View {
+    @Binding var volume: Double
+    let isMuted: Bool
+    let onEditingChanged: (Bool) -> Void
+
+    var body: some View {
+        Slider(value: $volume, in: 0...100, onEditingChanged: onEditingChanged)
+            .controlSize(.mini).tint(.gray)
+            .opacity(isMuted ? 0.25 : 1)
+            .overlay {
+                if isMuted {
+                    Text("Muted")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(width: 64)
+            .accessibilityValue(isMuted ? "Muted" : "\(Int(volume)) percent")
     }
 }
 
@@ -336,14 +385,15 @@ private struct AppVolumeRow: View {
                     Color.clear.frame(width: 22, height: 22).accessibilityHidden(true)
                 }
                 muteButton
-                Slider(value: $volume, in: 0...100) { editing in
+                MenuVolumeSlider(volume: $volume, isMuted: isMuted) { editing in
                     isEditing = editing
                     if !editing { state.setVolume(Int(volume), for: playing.bundleID) }
                 }
-                .controlSize(.mini).tint(.gray).frame(width: 64)
                 .disabled(!canChangeVolume)
                 .accessibilityLabel("\(playing.displayName) volume\(isBrowser ? ", all tabs" : "")")
-                .help(canChangeVolume ? "\(playing.displayName) volume: \(Int(volume))%" : "Volume unavailable")
+                .help(canChangeVolume
+                      ? (isMuted ? "Muted · adjust volume to unmute" : "\(playing.displayName) volume: \(Int(volume))%")
+                      : "Volume unavailable")
             }
             .padding(.horizontal, 7).padding(.vertical, 3)
             .background(Color.primary.opacity(isHooked ? 0.08 : 0), in: RoundedRectangle(cornerRadius: 9))
@@ -598,14 +648,13 @@ private struct BrowserVolumeRow: View {
             .disabled(candidate.volume == nil)
             .accessibilityLabel("\(isMuted ? "Unmute" : "Mute") \(candidate.label)")
             .help("\(isMuted ? "Unmute" : "Mute") \(candidate.label)")
-            Slider(value: $volume, in: 0...100) { editing in
+            MenuVolumeSlider(volume: $volume, isMuted: isMuted) { editing in
                 isEditing = editing
                 if !editing { state.setBrowserVolume(Int(volume), for: candidate) }
             }
-            .controlSize(.mini).tint(.gray).frame(width: 64)
             .disabled(candidate.volume == nil)
             .accessibilityLabel("\(candidate.label) volume")
-            .help("\(candidate.label) volume: \(Int(volume))%")
+            .help(isMuted ? "Muted · adjust volume to unmute" : "\(candidate.label) volume: \(Int(volume))%")
         }
         .padding(.leading, 23).padding(.trailing, 7).padding(.vertical, 1)
         .background(Color.primary.opacity(isHooked ? 0.08 : 0), in: RoundedRectangle(cornerRadius: 9))
