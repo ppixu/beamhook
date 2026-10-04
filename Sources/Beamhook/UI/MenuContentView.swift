@@ -237,7 +237,8 @@ private struct PlayingAppsListAvailable: View {
     }
 }
 
-/// The same template asset used by the overlay, with an always-visible dim state.
+/// The same template asset used by the overlay. Only the hooked row shows it;
+/// other rows keep its slot empty so names stay aligned when the hook moves.
 private struct HookRowLabel: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -260,7 +261,7 @@ private struct HookRowLabel: View {
                     ? .spring(response: 0.35, dampingFraction: 0.45)
                     : .easeOut(duration: 0.16)), value: hooked)
                 .foregroundStyle(hooked ? (colorScheme == .dark ? Color.white : Color.black) : Color.primary)
-                .opacity(hooked ? 1 : 0.28)
+                .opacity(hooked ? 1 : 0)
                 .accessibilityHidden(true)
             Text(name)
                 .font(.system(size: indented ? 11 : 12, weight: hooked ? .semibold : .regular))
