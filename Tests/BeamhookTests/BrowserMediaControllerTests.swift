@@ -345,6 +345,7 @@ final class BrowserMediaControllerTests: XCTestCase {
         XCTAssertTrue(script.contains("550e8400-e29b-41d4-a716-446655440000"))
         XCTAssertTrue(script.contains("hasListParam"))
         XCTAssertTrue(script.contains("ytmusic-player-bar .next-button"))
+        XCTAssertTrue(script.contains(".inline_player .nextbutton"))
     }
 
     func testTransportFactsAreNilWhenTheSourceIsGoneOrScriptFails() {
@@ -371,10 +372,16 @@ final class BrowserMediaControllerTests: XCTestCase {
         let controller = BrowserMediaController(executor: executor)
         _ = controller.transportFacts(makeCandidate())
         _ = controller.seek(by: 15, on: makeCandidate())
+        let prefix = "set javascriptSource to \""
         for script in executor.scripts {
-            let js = script.components(separatedBy: "set javascriptSource to \"").dropFirst().first?
-                .components(separatedBy: "\"\n").first ?? ""
+            // Take the whole line after the prefix and drop only the final
+            // closing quote, so a mid-line quote can't hide.
+            let line = script.components(separatedBy: prefix).dropFirst().first?
+                .components(separatedBy: "\n").first ?? ""
+            XCTAssertTrue(line.hasSuffix("\""))
+            let js = String(line.dropLast())
             XCTAssertFalse(js.isEmpty)
+            XCTAssertFalse(js.contains("\""))
             XCTAssertFalse(js.contains("\\"))
         }
     }
@@ -384,8 +391,12 @@ final class BrowserMediaControllerTests: XCTestCase {
         let controller = BrowserMediaController(executor: executor)
         _ = controller.perform(.next, on: makeCandidate())
         _ = controller.perform(.previous, on: makeCandidate())
-        XCTAssertTrue(executor.scripts[0].contains(".nextbutton"))
-        XCTAssertTrue(executor.scripts[1].contains(".prevbutton"))
+        XCTAssertTrue(executor.scripts[0].contains(".inline_player .nextbutton"))
+        XCTAssertTrue(executor.scripts[1].contains(".inline_player .prevbutton"))
+        XCTAssertFalse(executor.scripts[0].contains("'.nextbutton"))
+        XCTAssertFalse(executor.scripts[1].contains("'.prevbutton"))
+        XCTAssertTrue(executor.scripts[0].contains("document.querySelector('ytmusic-player-bar .next-button') || document.querySelector('.ytp-next-button')"))
+        XCTAssertTrue(executor.scripts[1].contains("document.querySelector('ytmusic-player-bar .previous-button') || document.querySelector('.ytp-prev-button')"))
         XCTAssertTrue(executor.scripts[0].contains("ytmusic-player-bar .next-button"))
         XCTAssertTrue(executor.scripts[1].contains("ytmusic-player-bar .previous-button"))
     }

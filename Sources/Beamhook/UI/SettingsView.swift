@@ -56,7 +56,7 @@ private struct GeneralSettingsTab: View {
                               set: { state.setShowPlayPauseHUD($0) }))
 
             settingRow(
-                title: "⏭ skips 15 s on podcasts instead of next track",
+                title: "⏭ skips ahead on podcasts instead of next track",
                 caption: "Spotify episodes, Apple Podcasts, long videos and pages without a next button. Playlists and albums keep next/previous.",
                 isOn: Binding(get: { state.skipOnPodcasts },
                               set: { state.setSkipOnPodcasts($0) }))

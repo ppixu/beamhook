@@ -7,7 +7,7 @@ public enum PlaybackKind: Equatable, Sendable {
     /// An explicit list the user is moving through (playlist, album page).
     case tracklist
     case music
-    /// The source couldn't say. Treated as music: never guess a seek.
+    /// The source couldn't say. Never seeks, even with always-skip: don't guess.
     case unknown
 }
 

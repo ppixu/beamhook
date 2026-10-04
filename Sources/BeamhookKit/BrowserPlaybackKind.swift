@@ -14,6 +14,8 @@ public struct BrowserPlaybackFacts: Equatable, Sendable, Decodable {
     public let hasListParam: Bool
     /// YouTube's or Bandcamp's own next button.
     public let nextButton: NextButton
+    /// A call or conference MediaStream (non-seekable) — not a YouTube/Twitch
+    /// live video, which is excluded by its non-finite `duration` instead.
     public let live: Bool
 
     public init(host: String, duration: Double?, hasListParam: Bool,

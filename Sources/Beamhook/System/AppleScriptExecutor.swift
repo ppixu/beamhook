@@ -209,7 +209,7 @@ final class BrowserMediaController: @unchecked Sendable {
     /// keeps the plain track command.
     func transportFacts(_ candidate: BrowserMediaCandidate) -> BrowserPlaybackFacts? {
         let js = """
-        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; \(BrowserJS.pick) const p = bhPick(); if (!p) return 'NO'; const d = p.el.duration; const nb = document.querySelector('.ytp-next-button, .nextbutton, ytmusic-player-bar .next-button'); const disabled = nb && (nb.getAttribute('aria-disabled') === 'true' || nb.classList.contains('hiddenelem') || nb.style.display === 'none'); return JSON.stringify({host: location.hostname.replace(/^www[.]/, ''), duration: isFinite(d) && d > 0 ? d : null, hasListParam: new URLSearchParams(location.search).has('list'), nextButton: !nb ? 'absent' : (disabled ? 'disabled' : 'enabled'), live: p.live}); })()
+        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; \(BrowserJS.pick) const p = bhPick(); if (!p) return 'NO'; const d = p.el.duration; const nb = document.querySelector('ytmusic-player-bar .next-button') || document.querySelector('.ytp-next-button') || document.querySelector('.inline_player .nextbutton'); const disabled = nb && (nb.getAttribute('aria-disabled') === 'true' || nb.classList.contains('hiddenelem') || nb.style.display === 'none'); return JSON.stringify({host: location.hostname.replace(/^www[.]/, ''), duration: isFinite(d) && d > 0 ? d : null, hasListParam: new URLSearchParams(location.search).has('list'), nextButton: !nb ? 'absent' : (disabled ? 'disabled' : 'enabled'), live: p.live}); })()
         """
         let result = executor.run(targetedQueryScript(js, candidate: candidate))
         guard result.succeeded,
@@ -322,14 +322,14 @@ final class BrowserMediaController: @unchecked Sendable {
 
     private func nextScript(_ candidate: BrowserMediaCandidate) -> String {
         let js = """
-        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; const b = document.querySelector('.ytp-next-button, .nextbutton, ytmusic-player-bar .next-button'); if (!b) return 'NO'; b.click(); return 'MATCH'; })()
+        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; const b = document.querySelector('ytmusic-player-bar .next-button') || document.querySelector('.ytp-next-button') || document.querySelector('.inline_player .nextbutton'); if (!b) return 'NO'; b.click(); return 'MATCH'; })()
         """
         return targetedActionScript(js, candidate: candidate)
     }
 
     private func previousScript(_ candidate: BrowserMediaCandidate) -> String {
         let js = """
-        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; const b = document.querySelector('.ytp-prev-button, .prevbutton, ytmusic-player-bar .previous-button'); if (!b) return 'NO'; b.click(); return 'MATCH'; })()
+        (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; const b = document.querySelector('ytmusic-player-bar .previous-button') || document.querySelector('.ytp-prev-button') || document.querySelector('.inline_player .prevbutton'); if (!b) return 'NO'; b.click(); return 'MATCH'; })()
         """
         return targetedActionScript(js, candidate: candidate)
     }
