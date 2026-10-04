@@ -57,12 +57,32 @@ public final class TargetManager {
     /// non-command keys, no selected target, or a target that isn't running.
     @discardableResult
     public func route(_ key: MediaKey) async -> Bool {
-        guard let command = key.command, let app = currentTargetApp() else { return false }
+        await routeKey(key) != .notDelivered
+    }
+
+    /// Like `route(_:)`, but says what happened: a track key on a podcast may
+    /// have become a short skip. The kind is read fresh in the same off-main job
+    /// as the command, so a song that just followed an episode is judged as a
+    /// song. A refused seek falls back to the track command.
+    public func routeKey(_ key: MediaKey) async -> RouteOutcome {
+        guard let command = key.command, let app = currentTargetApp() else { return .notDelivered }
+        let skipOnPodcasts = TrackKeyPreference.skipOnPodcasts(defaults)
+        let alwaysSkip = TrackKeyPreference.alwaysSkip(defaults)
         return await runner.run {
             // Check at execution time so a command queued while the app is finishing
             // launch is not silently discarded before it reaches the scripting lane.
-            guard app.isReady else { return false }
-            return app.perform(command)
+            guard app.isReady else { return .notDelivered }
+            if command != .playPause, skipOnPodcasts,
+               let seeker = app as? SeekingMediaApp, seeker.canSeek {
+                let action = TransportDecision.decide(
+                    command: command, kind: seeker.playbackKind(), canSeek: true,
+                    skip: seeker.skipSeconds, skipOnPodcasts: skipOnPodcasts,
+                    alwaysSkip: alwaysSkip)
+                if case .seek(let seconds) = action, seeker.seek(by: seconds) {
+                    return .skipped(seconds: seconds, byMenu: seeker.seeksByMenu)
+                }
+            }
+            return app.perform(command) ? .performed(command) : .notDelivered
         }
     }
 

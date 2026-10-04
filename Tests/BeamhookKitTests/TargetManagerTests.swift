@@ -349,6 +349,74 @@ final class TargetManagerTests: XCTestCase {
         let tm = makeManager(resolver: MockResolver(), volumeStep: 9)
         XCTAssertEqual(tm.volumeStep, 9)
     }
+
+    // MARK: - Short skip
+
+    private final class SeekResolver: MediaAppResolver {
+        let app: MockSeekingApp
+        init(_ app: MockSeekingApp) { self.app = app }
+        func app(withID id: String) -> MediaApp? { id == app.id ? app : nil }
+        func allApps() -> [MediaApp] { [app] }
+    }
+
+    private func seekingManager(_ app: MockSeekingApp, defaults: UserDefaults? = nil) -> TargetManager {
+        let manager = makeManager(resolver: SeekResolver(app), defaults: defaults)
+        manager.selectedTargetID = app.id
+        return manager
+    }
+
+    func testPodcastNextSkipsForwardAndPreviousSkipsBack() async {
+        let app = MockSeekingApp(id: "pod")
+        let manager = seekingManager(app)
+        let forward = await manager.routeKey(.next)
+        let back = await manager.routeKey(.previous)
+        XCTAssertEqual(forward, .skipped(seconds: 15, byMenu: false))
+        XCTAssertEqual(back, .skipped(seconds: -15, byMenu: false))
+        XCTAssertEqual(app.seeks, [15, -15])
+        XCTAssertTrue(app.performedCommands.isEmpty)
+    }
+
+    func testFailedSeekFallsBackToTheTrackCommand() async {
+        let app = MockSeekingApp(id: "pod")
+        app.seekSucceeds = false
+        let outcome = await seekingManager(app).routeKey(.next)
+        XCTAssertEqual(outcome, .performed(.next))
+        XCTAssertEqual(app.performedCommands, [.next])
+    }
+
+    func testMusicKeepsTrackKeysUnlessAlwaysSkipIsOn() async {
+        let app = MockSeekingApp(id: "spot")
+        app.kind = .music
+        let defaults = makeDefaults()
+        let manager = seekingManager(app, defaults: defaults)
+        let normal = await manager.routeKey(.next)
+        XCTAssertEqual(normal, .performed(.next))
+        TrackKeyPreference.setAlwaysSkip(true, in: defaults)
+        let always = await manager.routeKey(.next)
+        XCTAssertEqual(always, .skipped(seconds: 15, byMenu: false))
+    }
+
+    func testTurningTheSettingOffRestoresTrackKeys() async {
+        let app = MockSeekingApp(id: "pod")
+        let defaults = makeDefaults()
+        TrackKeyPreference.setSkipOnPodcasts(false, in: defaults)
+        let outcome = await seekingManager(app, defaults: defaults).routeKey(.next)
+        XCTAssertEqual(outcome, .performed(.next))
+        XCTAssertTrue(app.seeks.isEmpty)
+    }
+
+    func testPlayPauseNeverAsksForTheKind() async {
+        let app = MockSeekingApp(id: "pod")
+        let outcome = await seekingManager(app).routeKey(.playPause)
+        XCTAssertEqual(outcome, .performed(.playPause))
+        XCTAssertTrue(app.seeks.isEmpty)
+    }
+
+    func testRouteStillReportsDeliveryAsABool() async {
+        let app = MockSeekingApp(id: "pod")
+        let delivered = await seekingManager(app).route(.next)
+        XCTAssertTrue(delivered)
+    }
 }
 
 private final class BeforeRunScriptRunner: ScriptRunning {

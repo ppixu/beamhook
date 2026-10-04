@@ -105,3 +105,38 @@ final class CountingSleeper: Sleeping {
         onSleep?(sleepCount)
     }
 }
+
+final class MockSeekingApp: SeekingMediaApp {
+    let id: String
+    let displayName: String
+    let bundleID: String
+    var isRunning = true
+    var performedCommands: [MediaCommand] = []
+    var seeks: [Int] = []
+    var kind: PlaybackKind = .podcast
+    var canSeek = true
+    var seekSucceeds = true
+    var seeksByMenu = false
+    var skipSeconds = SkipSeconds(forward: 15, back: 15)
+    var supportsVolume = false
+
+    init(id: String) {
+        self.id = id
+        self.displayName = id
+        self.bundleID = "com.example.\(id)"
+    }
+
+    @discardableResult
+    func perform(_ command: MediaCommand) -> Bool {
+        performedCommands.append(command)
+        return true
+    }
+    func currentVolume() -> Int? { nil }
+    func setVolume(_ percent: Int) {}
+    func isPlaying() -> Bool? { nil }
+    func playbackKind() -> PlaybackKind { kind }
+    func seek(by seconds: Int) -> Bool {
+        seeks.append(seconds)
+        return seekSucceeds
+    }
+}
