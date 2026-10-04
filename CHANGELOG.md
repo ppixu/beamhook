@@ -6,6 +6,8 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ## [Unreleased]
 
+## [1.3.3] — 2026-10-04
+
 ### Added
 
 - QuickTime movie picker: select an open movie by title and keep media keys
@@ -18,7 +20,6 @@ one-time, includes all 1.x updates); building from source is always free.
   shows a Settings link, and failed commands no longer report success.
 - Both next/previous key-code pairs route to the hooked app. Unsupported
   commands do not reach an unrelated player, and repeats do not skip extra tracks.
-
 - Playback subtitles use 50% black in light mode and 50% white in dark mode.
 - Running players such as VLC now enter the shortlist when playing, even
   without audible samples. Playback discovery no longer depends on an app's
