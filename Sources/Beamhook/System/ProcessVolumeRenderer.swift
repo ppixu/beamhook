@@ -6,6 +6,11 @@ import CoreAudio
 final class ProcessVolumeRenderer {
     var targetGain: Float
     private(set) var currentGain: Float
+    /// Frames since the tap last handed over any data, digital silence included.
+    /// HAL leaves the tap out while a process idles; a tap that stays empty while
+    /// the process keeps outputting means the app is suppressed with nothing
+    /// replayed, and the controller rebuilds it.
+    private(set) var framesWithoutTapData = 0
     private let rampStep: Float
     private let outputChannels: Int
     /// All input channels the aggregate delivers, and where the tap's stereo
@@ -84,9 +89,14 @@ final class ProcessVolumeRenderer {
               destinations.contains(where: { $0.mData != nil && $0.mDataByteSize > 0 })
         else { return false }
         // An entirely omitted capture list is a normal idle quantum.
-        if sources.isEmpty { return true }
-        guard Self.validInput(sources, channels: inputChannels,
-                             tapOffset: tapChannelOffset, frames: outputFrames) else { return false }
+        if sources.isEmpty {
+            framesWithoutTapData += outputFrames
+            return true
+        }
+        guard let hasTapData = Self.tapData(sources, channels: inputChannels,
+                                            tapOffset: tapChannelOffset, frames: outputFrames)
+        else { return false }
+        framesWithoutTapData = hasTapData ? 0 : framesWithoutTapData + outputFrames
         let target = targetGain.isFinite ? min(1, max(0, targetGain)) : 0
         for frame in 0..<outputFrames {
             currentGain += min(rampStep, max(-rampStep, target - currentGain))
@@ -118,21 +128,25 @@ final class ProcessVolumeRenderer {
         return total == channels ? frames : nil
     }
 
-    private static func validInput(_ buffers: UnsafeMutableAudioBufferListPointer,
-                                   channels: Int, tapOffset: Int, frames: Int) -> Bool {
+    /// nil for a layout we can't render; otherwise whether any tap channel
+    /// carried data.
+    private static func tapData(_ buffers: UnsafeMutableAudioBufferListPointer,
+                                channels: Int, tapOffset: Int, frames: Int) -> Bool? {
         var firstChannel = 0
+        var hasData = false
         for buffer in buffers {
             let count = Int(buffer.mNumberChannels)
-            guard count > 0 else { return false }
+            guard count > 0 else { return nil }
             defer { firstChannel += count }
             // Hardware inputs ahead of the tap aren't rendered and may run
             // with different buffer sizes or no data at all.
             guard firstChannel + count > tapOffset, firstChannel < tapOffset + 2,
                   buffer.mData != nil, buffer.mDataByteSize > 0 else { continue }
             guard Int(buffer.mDataByteSize) == frames * count * MemoryLayout<Float>.size
-            else { return false }
+            else { return nil }
+            hasData = true
         }
-        return firstChannel == channels
+        return firstChannel == channels ? hasData : nil
     }
 
     private static func sample(_ buffers: UnsafeMutableAudioBufferListPointer, channel: Int, frame: Int) -> Float {

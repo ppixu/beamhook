@@ -6,6 +6,18 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ## [Unreleased]
 
+### Fixed
+
+- Per-app volume no longer silences an app whose audio plays from one channel
+  only, such as a right-speaker-only test in Safari.
+- If per-app volume can't replay an app's audio, Beamhook releases it and the
+  app plays normally again instead of staying silent until Beamhook quits.
+- Without System Audio Recording permission, per-app volume and playback
+  detection now stay off and Settings shows the permission hint, instead of
+  silencing the app while reporting the permission as granted.
+- An app whose captured audio stops arriving while it is still playing gets a
+  fresh audio tap automatically instead of staying silent.
+
 ## [1.4.3] — 2026-10-04
 
 ### Changed

@@ -64,6 +64,9 @@ final class ProcessMuteController: ObservableObject {
     private var timer: Timer?
     private var controlledIdentity: [AudioObjectID: String] = [:]
     private var renderFailures = RenderFailures()
+    private var starvation = TapStarvation()                    // engine-queue only
+    private let capturePermission: () -> AudioCapturePermission
+    private var permissionCheck: (status: AudioCapturePermission, at: TimeInterval)? // engine-queue only
     private var observedOutput: AudioObjectID?
     private var outputListener: AudioObjectPropertyListenerBlock?
 
@@ -79,8 +82,10 @@ final class ProcessMuteController: ObservableObject {
 
     private static let log = Logger(subsystem: "com.github.ppixu.beamhook", category: "Mute")
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard,
+         capturePermission: @escaping () -> AudioCapturePermission = AudioCapturePermission.current) {
         self.defaults = defaults
+        self.capturePermission = capturePermission
         self.mutedBundleIDs = PerAppMutePreference.mutedBundleIDs(defaults)
         self.volumes = PerAppMutePreference.volumes(defaults)
         observeDefaultOutputChanges()
@@ -158,6 +163,14 @@ final class ProcessMuteController: ObservableObject {
                 }
                 break
             }
+            // A denied tap still starts and reads zeros, so a successful probe
+            // proves nothing by itself. Trust TCC whenever it answers.
+            self.permissionCheck = nil
+            switch self.currentPermission() {
+            case .granted: granted = true
+            case .denied: granted = false
+            case .unknown: break
+            }
             if let granted, granted { Self.log.notice("Permission probe succeeded") }
             guard let granted else { return }
             DispatchQueue.main.async { [weak self] in
@@ -204,7 +217,9 @@ final class ProcessMuteController: ObservableObject {
     /// watched apps were audible within the last beat.
     private func meterTick(watch: Set<String>) {
         var wanted: [AudioObjectID: String] = [:]
-        if !watch.isEmpty {
+        // A denied meter only ever sees zeros; build none rather than report
+        // every watched app as silent forever.
+        if !watch.isEmpty, currentPermission() != .denied {
             for obj in AudioProcessMonitor.processObjectIDs()
             where AudioProcessMonitor.isRunningOutput(obj) && mutes[obj] == nil {
                 guard let bid = AudioProcessMonitor.rowBundleID(for: obj),
@@ -291,6 +306,14 @@ final class ProcessMuteController: ObservableObject {
     /// Engine-queue only. Existing renderers receive gain updates on their IO
     /// queue; changing the slider does not rebuild devices or interrupt audio.
     private func reconcile(muted: Set<String>, levels: [String: Int]) {
+        let permission = currentPermission()
+        if permission != .unknown {
+            let granted = permission == .granted
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.permissionGranted != granted else { return }
+                self.permissionGranted = granted
+            }
+        }
         let bundles = muted.union(levels.keys)
         var wanted: [AudioObjectID: String] = [:]
         if !bundles.isEmpty {
@@ -307,11 +330,23 @@ final class ProcessMuteController: ObservableObject {
             loudLock.lock(); loudUntil[obj] = nil; loudLock.unlock()
         }
         renderFailures.reconcile(wanted: wanted, muted: muted, levels: levels)
+        starvation.reconcile(wanted: wanted)
         var errors = renderFailures.errors
         for (obj, bid) in wanted {
             guard !renderFailures.contains(obj) else { continue }
             let needsRenderer = levels[bid] != nil && !muted.contains(bid)
             let gain: Float = muted.contains(bid) ? 0 : Float(levels[bid] ?? 100) / 100
+            // Denied capture still runs, replaying zeros while the tap
+            // suppresses the app. Only a mute, silent anyway, may tap then;
+            // the published permission disables the volume controls.
+            if needsRenderer && permission == .denied {
+                if let assembly = mutes.removeValue(forKey: obj) {
+                    tearDown(assembly)
+                    controlledIdentity[obj] = nil
+                    loudLock.lock(); loudUntil[obj] = nil; loudLock.unlock()
+                }
+                continue
+            }
             if let assembly = mutes[obj] {
                 if let renderer = assembly.renderer {
                     ioQueue.async { renderer.targetGain = gain }
@@ -330,7 +365,10 @@ final class ProcessMuteController: ObservableObject {
             case .success(let assembly):
                 mutes[obj] = assembly
                 controlledIdentity[obj] = bid
-                DispatchQueue.main.async { [weak self] in self?.permissionGranted = true }
+                // Without TCC's answer, a working build is the best evidence.
+                if permission == .unknown {
+                    DispatchQueue.main.async { [weak self] in self?.permissionGranted = true }
+                }
             case .processGone:
                 break
             case .failure(let err):
@@ -399,6 +437,50 @@ final class ProcessMuteController: ObservableObject {
         renderFailures.record(obj, bundleID: bundleID, gain: gain)
         Self.log.error("Released failed volume renderer: app=\(bundleID, privacy: .public), process=\(obj)")
         DispatchQueue.main.async { [weak self] in self?.applyAndReschedule() }
+    }
+
+    /// Backoff for rebuilding a renderer whose tap delivers no data while its
+    /// process is outputting: 2s, doubling to a minute. A paused player can hold
+    /// its stream open, so this never gives up on the app's volume; data on a
+    /// rebuilt tap resets it.
+    struct TapStarvation {
+        private var rebuilds: [AudioObjectID: Int] = [:]
+
+        func threshold(for obj: AudioObjectID) -> Double {
+            min(60, 2 * pow(2, Double(rebuilds[obj] ?? 0)))
+        }
+
+        func isRetrying(_ obj: AudioObjectID) -> Bool { rebuilds[obj] != nil }
+        mutating func rebuilt(_ obj: AudioObjectID) { rebuilds[obj] = min(16, (rebuilds[obj] ?? 0) + 1) }
+        mutating func recovered(_ obj: AudioObjectID) { rebuilds[obj] = nil }
+        mutating func reconcile(wanted: [AudioObjectID: String]) {
+            rebuilds = rebuilds.filter { wanted[$0.key] != nil }
+        }
+        mutating func clear() { rebuilds = [:] }
+    }
+
+    /// Engine-queue only. Idle processes legitimately starve their tap; one that
+    /// is still outputting is suppressed with nothing replayed, so start over
+    /// with a fresh tap instead of leaving the app silent.
+    private func recoverStarvedRenderer(obj: AudioObjectID, aggregateID: AudioObjectID) {
+        guard let assembly = mutes[obj], assembly.aggregateID == aggregateID,
+              AudioProcessMonitor.isRunningOutput(obj) else { return }
+        tearDown(assembly)
+        mutes[obj] = nil
+        controlledIdentity[obj] = nil
+        loudLock.lock(); loudUntil[obj] = nil; loudLock.unlock()
+        starvation.rebuilt(obj)
+        Self.log.notice("Rebuilding volume renderer with no tap data: process=\(obj), next wait=\(self.starvation.threshold(for: obj))s")
+        DispatchQueue.main.async { [weak self] in self?.applyAndReschedule() }
+    }
+
+    /// Engine-queue only. TCC is an XPC round-trip and the meter polls 4×/s.
+    private func currentPermission() -> AudioCapturePermission {
+        let now = Date().timeIntervalSinceReferenceDate
+        if let check = permissionCheck, now - check.at < 1 { return check.status }
+        let status = capturePermission()
+        permissionCheck = (status, now)
+        return status
     }
 
     private enum BuildResult {
@@ -501,7 +583,11 @@ final class ProcessMuteController: ObservableObject {
                                                      inputChannels: configuration.inputChannels,
                                                      tapChannelOffset: configuration.tapChannelOffset)
                 renderer = playback
-                var invalidated = false // IO-queue confined, just like the renderer.
+                let starvedFrames = max(1, Int(configuration.sampleRate * starvation.threshold(for: obj)))
+                // IO-queue confined, just like the renderer.
+                var invalidated = false
+                var nextStarvationReport = starvedFrames
+                var recoveryReported = !starvation.isRetrying(obj)
                 callback = { [weak self] _, input, _, output, _ in
                     guard playback.render(input: input, output: output) else {
                         if !invalidated {
@@ -512,6 +598,20 @@ final class ProcessMuteController: ObservableObject {
                             }
                         }
                         return
+                    }
+                    if playback.framesWithoutTapData >= nextStarvationReport {
+                        // Keep reporting: an idle process the engine ignores
+                        // now may start outputting while the tap stays empty.
+                        nextStarvationReport += starvedFrames
+                        self?.engine.async { [weak self] in
+                            self?.recoverStarvedRenderer(obj: obj, aggregateID: aggregateID)
+                        }
+                    } else if playback.framesWithoutTapData == 0 {
+                        nextStarvationReport = starvedFrames
+                        if !recoveryReported {
+                            recoveryReported = true
+                            self?.engine.async { [weak self] in self?.starvation.recovered(obj) }
+                        }
                     }
                     if playback.currentGain > 0 {
                         self?.notePeak(obj: obj, bufferList: UnsafePointer(output))
@@ -601,6 +701,7 @@ final class ProcessMuteController: ObservableObject {
 
     private func rebuildAssemblies() {
         renderFailures.clear()
+        starvation.clear()
         for assembly in mutes.values { tearDown(assembly) }
         mutes = [:]
         controlledIdentity = [:]

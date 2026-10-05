@@ -23,6 +23,57 @@ final class ProcessVolumeErrorTests: XCTestCase {
         XCTAssertNil(defaults.object(forKey: "perAppVolumes"))
     }
 
+    func testPreflightResultMapsToPermission() {
+        XCTAssertEqual(AudioCapturePermission(preflightResult: 0), .granted)
+        XCTAssertEqual(AudioCapturePermission(preflightResult: 1), .denied)
+        XCTAssertEqual(AudioCapturePermission(preflightResult: 2), .unknown)
+        XCTAssertEqual(AudioCapturePermission(preflightResult: -1), .unknown)
+    }
+
+    /// A denied tap still starts and reads zeros, so the controller must report
+    /// TCC's answer rather than infer permission from a successful build.
+    @MainActor
+    func testControllerPublishesPreflightedPermission() throws {
+        guard #available(macOS 14.2, *) else { throw XCTSkip("Process taps require macOS 14.2") }
+        for (status, expected) in [(AudioCapturePermission.denied, false), (.granted, true)] {
+            let suite = "ProcessVolumeErrorTests.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let controller = ProcessMuteController(defaults: defaults, capturePermission: { status })
+            let published = expectation(description: "permission \(status)")
+            let subscription = controller.$permissionGranted.compactMap { $0 }.first().sink {
+                XCTAssertEqual($0, expected)
+                published.fulfill()
+            }
+            controller.setVolume(30, bundleID: "com.example.beamhook-not-running")
+            wait(for: [published], timeout: 5)
+            subscription.cancel()
+            controller.stopAndClear()
+        }
+    }
+
+    func testStarvedTapRebuildsBackOffAndResetOnData() throws {
+        guard #available(macOS 14.2, *) else { throw XCTSkip("Process taps require macOS 14.2") }
+        var starvation = ProcessMuteController.TapStarvation()
+        XCTAssertFalse(starvation.isRetrying(42))
+        var thresholds: [Double] = []
+        for _ in 0..<8 {
+            thresholds.append(starvation.threshold(for: 42))
+            starvation.rebuilt(42)
+        }
+        XCTAssertEqual(thresholds, [2, 4, 8, 16, 32, 60, 60, 60])
+        XCTAssertTrue(starvation.isRetrying(42))
+        XCTAssertEqual(starvation.threshold(for: 43), 2, "Other processes keep their own backoff")
+        starvation.recovered(42)
+        XCTAssertEqual(starvation.threshold(for: 42), 2)
+        starvation.rebuilt(42)
+        starvation.reconcile(wanted: [43: "other"])
+        XCTAssertFalse(starvation.isRetrying(42), "Backoff must not outlive its process")
+        starvation.rebuilt(43)
+        starvation.clear()
+        XCTAssertFalse(starvation.isRetrying(43))
+    }
+
     func testRenderFailureStaysBypassedAcrossPollsUntilConfigurationChanges() throws {
         guard #available(macOS 14.2, *) else { throw XCTSkip("Process taps require macOS 14.2") }
         var failures = ProcessMuteController.RenderFailures()

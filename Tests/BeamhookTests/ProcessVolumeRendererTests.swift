@@ -192,6 +192,36 @@ final class ProcessVolumeRendererTests: XCTestCase {
         XCTAssertEqual(output.samples(0), [0, 0])
     }
 
+    func testMissingTapDataAccumulatesUntilAnyTapDataArrives() {
+        let renderer = ProcessVolumeRenderer(gain: 0.5, sampleRate: 48000, outputChannels: 2,
+                                             inputChannels: 3, tapChannelOffset: 1)
+        let output = Buffers([[99, 99, 99, 99]], channels: [2])
+        // Only the hardware mic ahead of the tap delivers; both tap channels are out.
+        let micOnly = Buffers([[0.9, 0.9], [0], [0]], channels: [1, 1, 1])
+        micOnly.disable(1)
+        micOnly.disable(2)
+        XCTAssertTrue(renderer.render(input: micOnly.list.unsafePointer, output: output.list.unsafeMutablePointer))
+        XCTAssertTrue(renderer.render(input: micOnly.list.unsafePointer, output: output.list.unsafeMutablePointer))
+        XCTAssertEqual(renderer.framesWithoutTapData, 4)
+        // Digital silence is still tap data: a paused player, not a starved tap.
+        let silence = Buffers([[0.9, 0.9], [0, 0], [0, 0]], channels: [1, 1, 1])
+        XCTAssertTrue(renderer.render(input: silence.list.unsafePointer, output: output.list.unsafeMutablePointer))
+        XCTAssertEqual(renderer.framesWithoutTapData, 0)
+    }
+
+    func testEntirelyOmittedCaptureCountsAsMissingTapData() {
+        let renderer = ProcessVolumeRenderer(gain: 0.5, sampleRate: 48000, outputChannels: 2)
+        let empty = Buffers([[]], channels: [2])
+        empty.list.unsafeMutablePointer.pointee.mNumberBuffers = 0
+        let output = Buffers([[99, 99, 99, 99]], channels: [2])
+        XCTAssertTrue(renderer.render(input: empty.list.unsafePointer, output: output.list.unsafeMutablePointer))
+        XCTAssertEqual(renderer.framesWithoutTapData, 2)
+        let rightOnly = Buffers([[0], [0.8, -0.4]], channels: [1, 1])
+        rightOnly.disable(0)
+        XCTAssertTrue(renderer.render(input: rightOnly.list.unsafePointer, output: output.list.unsafeMutablePointer))
+        XCTAssertEqual(renderer.framesWithoutTapData, 0, "One live tap channel is real playback")
+    }
+
     func testNonfiniteInputDoesNotPoisonOutput() {
         let input = Buffers([[.nan, .infinity, -.infinity, 1]], channels: [2])
         let output = Buffers([[99, 99, 99, 99]], channels: [2])
