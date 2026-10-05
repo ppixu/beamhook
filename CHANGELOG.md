@@ -6,6 +6,12 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ## [Unreleased]
 
+### Added
+
+- **Spotifast is a built-in target.** The Spotify client has no AppleScript, so
+  Beamhook presses its Playback menu items, and its volume and mute go through
+  the per-app audio tap.
+
 ### Fixed
 
 - Per-app volume no longer silences an app whose audio plays from one channel

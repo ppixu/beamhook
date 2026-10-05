@@ -142,7 +142,7 @@ final class MenuDrivenMediaAppTests: XCTestCase {
 
     func testShippedMenuDrivenTargets() {
         let menuDriven = BuiltInApps.all.filter { $0.menuControl != nil }.map(\.id)
-        XCTAssertEqual(menuDriven, ["iina", "amazon-music", "plexamp", "deezer", "podcasts"])
+        XCTAssertEqual(menuDriven, ["iina", "amazon-music", "plexamp", "deezer", "podcasts", "spotifast"])
     }
 
     func testRegistryResolvesMenuDrivenDefinitionsToMenuDrivenApps() {
@@ -201,5 +201,50 @@ final class MenuDrivenMediaAppTests: XCTestCase {
 
     func testPodcastsIsABuiltInTarget() {
         XCTAssertTrue(BuiltInApps.all.contains { $0.id == "podcasts" })
+    }
+
+    // MARK: - Spotifast
+
+    private let spotifastBundleID = "rocks.spotifast.Spotifast"
+
+    private func spotifastApp(presser: MockMenuPresser) -> MenuDrivenMediaApp {
+        let presence = MockPresence()
+        presence.runningBundleIDs = [spotifastBundleID]
+        return MenuDrivenMediaApp(definition: BuiltInApps.spotifast, presser: presser, presence: presence)!
+    }
+
+    func testSpotifastPressesItsPlaybackMenuItems() {
+        let presser = MockMenuPresser()
+        let app = spotifastApp(presser: presser)
+
+        app.perform(.playPause)
+        app.perform(.next)
+        app.perform(.previous)
+
+        XCTAssertEqual(presser.pressed.map(\.bundleID), Array(repeating: spotifastBundleID, count: 3))
+        XCTAssertEqual(presser.pressed.map(\.path.menuIndex), [4, 4, 4])
+        XCTAssertEqual(presser.pressed.map(\.path.menuTitles), Array(repeating: ["Playback"], count: 3))
+        XCTAssertEqual(presser.pressed.map(\.path.itemIndex), [0, 1, 2])
+        XCTAssertEqual(presser.pressed.map(\.path.itemTitles),
+                       [["Play / Pause"], ["Next Track"], ["Previous Track"]])
+    }
+
+    func testSpotifastPlayStateIsUnknownBecauseItsTitleNeverChanges() {
+        // The item reads "Play / Pause" whether or not music plays, so neither
+        // reading may be taken as a state.
+        let presser = MockMenuPresser()
+        let app = spotifastApp(presser: presser)
+
+        presser.cannedTitle = "Play / Pause"
+        XCTAssertNil(app.isPlaying())
+    }
+
+    func testSpotifastKeepsTrackKeysForMusic() {
+        // Its seek items are deliberately not mapped: skip items would make every
+        // song report as a podcast and turn next/previous into seeks.
+        let app = spotifastApp(presser: MockMenuPresser())
+        XCTAssertFalse(app.canSeek)
+        XCTAssertEqual(app.playbackKind(), .music)
+        XCTAssertFalse(app.supportsVolume)
     }
 }

@@ -4,7 +4,7 @@ public enum BuiltInApps {
     public static let all: [AppDefinition] = [
         spotify, music, appleTV, safariYouTube, chromeYouTube, braveYouTube,
         arcYouTube, vivaldiYouTube, vlc, vox, quickTime, downcast,
-        iina, amazonMusic, plexamp, deezer, podcasts,
+        iina, amazonMusic, plexamp, deezer, podcasts, spotifast,
     ]
 
     // MARK: - Menu-driven targets
@@ -104,6 +104,30 @@ public enum BuiltInApps {
             skipBack: MenuItemPath(menuIndex: 5, menuTitles: ["Controls"], itemIndex: 4,
                                    itemTitles: ["Rewind 10 sec", "Rewind 15 sec", "Rewind 30 sec",
                                                 "Rewind 45 sec", "Rewind 60 sec"])))
+
+    /// Spotifast, a third-party Spotify client (egui, menus built with muda). It
+    /// plays through librespot inside its own process, so per-app volume and mute
+    /// work through the process tap like any other unscriptable app — but it has
+    /// no scripting dictionary, so unlike Spotify it is driven by menu.
+    ///
+    /// Menu read over Accessibility from Spotifast 0.12.0 on macOS 26, English:
+    /// Playback is menu 4, with Play / Pause 0, Next Track 1, Previous Track 2.
+    /// The play/pause title never changes and carries no checkmark, so play state
+    /// is always unknown here and the rows fall back to whether it is audible.
+    ///
+    /// Seek Forward (10s) and Seek Backward (10s) sit at 4 and 5, but are left
+    /// out on purpose: a menu target with skip items always reports itself as a
+    /// podcast, which would turn next/previous into seeks on ordinary music.
+    public static let spotifast = AppDefinition.menuDriven(
+        id: "spotifast", displayName: "Spotifast", bundleID: "rocks.spotifast.Spotifast",
+        control: MenuControl(
+            playPause: MenuItemPath(menuIndex: 4, menuTitles: ["Playback"], itemIndex: 0,
+                                    itemTitles: ["Play / Pause"]),
+            next: MenuItemPath(menuIndex: 4, menuTitles: ["Playback"], itemIndex: 1,
+                               itemTitles: ["Next Track"]),
+            previous: MenuItemPath(menuIndex: 4, menuTitles: ["Playback"], itemIndex: 2,
+                                   itemTitles: ["Previous Track"]),
+            playingTitles: [], pausedTitles: []))
 
     public static let spotify = AppDefinition(
         id: "spotify", displayName: "Spotify", bundleID: "com.spotify.client", isBuiltIn: true,

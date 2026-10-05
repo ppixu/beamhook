@@ -12,6 +12,9 @@ final class ProcessVolumeRoutingTests: XCTestCase {
         XCTAssertTrue(state.canControlVolume(bundleID: "com.example.unscriptable"))
         XCTAssertFalse(state.usesProcessVolume(bundleID: "com.spotify.client"))
         XCTAssertTrue(state.canControlVolume(bundleID: "com.spotify.client"))
+        // Spotifast streams Spotify too, but has no volume script: it plays in its
+        // own process, so the tap is its only volume control.
+        XCTAssertTrue(state.usesProcessVolume(bundleID: BuiltInApps.spotifast.bundleID))
         XCTAssertTrue(state.usesProcessVolume(bundleID: "com.apple.Safari"))
         XCTAssertTrue(state.usesProcessVolume(bundleID: "com.google.Chrome"))
         state.perAppMuteEnabled = false

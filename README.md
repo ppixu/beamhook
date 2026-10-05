@@ -97,7 +97,8 @@ let go of ⌘.
 - Browsers: Safari, Chrome, Brave, Arc and Vivaldi. You pick the tab. Turn on
   **Allow JavaScript from Apple Events** first
   ([guide with pictures](https://beamhook.app/help/)).
-- Through their menus: IINA, Amazon Music, Plexamp, Deezer and Podcasts.
+- Through their menus: IINA, Amazon Music, Plexamp, Deezer, Podcasts and
+  Spotifast.
   Only IINA is tested so far. If one doesn't respond,
   [open an issue](https://github.com/ppixu/beamhook/issues).
 - Any other app, with your own AppleScript commands. Some apps don't offer the
