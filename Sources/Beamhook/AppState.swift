@@ -229,6 +229,19 @@ final class AppState: ObservableObject {
         let tabParents = Set(activeBrowserMediaCandidates.filter { $0.volume != nil }.map { $0.browser.bundleID })
         return Set(recentAppPlayback.keys).union(audibleApps)
             .union(recentBrowserBundleIDs(now: now)).union(tabParents)
+            .union(quietAppIDs())
+    }
+
+    /// Below this level a source counts as turned down and stays in the shortlist.
+    static let quietVolumeThreshold = 25
+
+    /// Muted or nearly silent apps. They stop registering as recently playing,
+    /// yet their row is where the user turns them back up, so the shortlist
+    /// keeps them regardless of playback history.
+    func quietAppIDs() -> Set<String> {
+        let quiet = processVolumeLevels.merging(volumeByBundle) { _, cached in cached }
+            .filter { $0.value < Self.quietVolumeThreshold }.keys
+        return mutedApps.union(quiet)
     }
 
     /// Poll every running player, including those filtered out of the shortlist.
@@ -1251,12 +1264,17 @@ final class AppState: ObservableObject {
 
         let ranked = candidates
             .filter {
-                $0.volume != nil
-                    && ($0.isPlaying || $0.isSelected || browserSourceRecency[$0.id] != nil)
+                guard let volume = $0.volume else { return false }
+                // A muted or turned-down tab stays listed so it can be turned back up.
+                return $0.isPlaying || $0.isSelected || volume < Self.quietVolumeThreshold
+                    || browserSourceRecency[$0.id] != nil
             }
             .sorted { lhs, rhs in
                 if lhs.isPlaying != rhs.isPlaying { return lhs.isPlaying }
                 if lhs.isSelected != rhs.isSelected { return lhs.isSelected }
+                let lhsQuiet = (lhs.volume ?? 100) < Self.quietVolumeThreshold
+                let rhsQuiet = (rhs.volume ?? 100) < Self.quietVolumeThreshold
+                if lhsQuiet != rhsQuiet { return lhsQuiet }
                 let lhsRecency = browserSourceRecency[lhs.id] ?? .distantPast
                 let rhsRecency = browserSourceRecency[rhs.id] ?? .distantPast
                 if lhsRecency != rhsRecency { return lhsRecency > rhsRecency }

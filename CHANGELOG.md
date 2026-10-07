@@ -12,6 +12,12 @@ one-time, includes all 1.x updates); building from source is always free.
   Beamhook presses its Playback menu items, and its volume and mute go through
   the per-app audio tap.
 
+### Changed
+
+- Muted apps and tabs, and any set below 25% volume, now stay in the menu's
+  and the volume overlay's short list even after they stop playing, so they
+  are easy to turn back up.
+
 ### Fixed
 
 - Per-app volume no longer silences an app whose audio plays from one channel

@@ -145,6 +145,17 @@ final class MenuSourceSelectionTests: XCTestCase {
         XCTAssertTrue(state.recentAppRows([recent, idle], now: now.addingTimeInterval(7200)).isEmpty)
     }
 
+    func testTurnedDownAppStaysInShortlistWithoutPlaybackHistory() {
+        let state = AppState()
+        let quiet = PlayingApp(id: "quiet", displayName: "Quiet", bundleID: "com.example.quiet")
+        let loud = PlayingApp(id: "loud", displayName: "Loud", bundleID: "com.example.loud")
+        state.volumeByBundle[quiet.bundleID] = AppState.quietVolumeThreshold - 1
+        state.volumeByBundle[loud.bundleID] = AppState.quietVolumeThreshold
+        XCTAssertEqual(state.recentAppRows([quiet, loud]), [quiet])
+        state.volumeByBundle[quiet.bundleID] = 0
+        XCTAssertEqual(state.recentAppRows([quiet, loud]), [quiet])
+    }
+
     func testDisplayedPausedTabKeepsBrowserInCompactMenu() {
         let state = AppState()
         let safari = PlayingApp(id: "com.apple.Safari", displayName: "Safari", bundleID: "com.apple.Safari")

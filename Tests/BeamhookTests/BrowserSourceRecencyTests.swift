@@ -5,11 +5,31 @@ import XCTest
 final class BrowserSourceRecencyTests: XCTestCase {
     private let start = Date(timeIntervalSince1970: 1_000_000)
 
-    private func tab(_ id: String, playing: Bool = false, selected: Bool = false) -> BrowserMediaCandidate {
+    private func tab(_ id: String, playing: Bool = false, selected: Bool = false,
+                     volume: Int = 50) -> BrowserMediaCandidate {
         BrowserMediaCandidate(browser: .safari, sourceID: id, windowIndex: 1,
                               tabIndex: 1, title: id, artist: "", host: "example.com",
                               isPlaying: playing, isSelected: selected,
-                              supportsTransport: true, volume: 50)
+                              supportsTransport: true, volume: volume)
+    }
+
+    func testMutedOrTurnedDownTabStaysWithoutPlaybackHistory() {
+        let state = AppState()
+        let muted = tab("muted", volume: 0)
+        let quiet = tab("quiet", volume: AppState.quietVolumeThreshold - 1)
+        let normal = tab("normal", volume: AppState.quietVolumeThreshold)
+        XCTAssertEqual(state.recentBrowserSources(from: [muted, quiet, normal], browser: .safari,
+            now: start.addingTimeInterval(10_000)), [muted, quiet])
+    }
+
+    func testTurnedDownTabOutranksPausedRecentTabsForTheThreeRows() {
+        let state = AppState()
+        let recent = ["A", "B", "C"].map { tab($0, playing: true) }
+        _ = state.recentBrowserSources(from: recent, browser: .safari, now: start)
+        let paused = ["A", "B", "C"].map { tab($0) }
+        let muted = tab("Z", volume: 0)
+        XCTAssertTrue(state.recentBrowserSources(from: paused + [muted], browser: .safari,
+            now: start.addingTimeInterval(10)).contains(muted))
     }
 
     func testPausedTabSurvivesUntilTwoHoursWithoutRefreshingItsExpiry() {
