@@ -1401,14 +1401,18 @@ final class AppState: ObservableObject {
         controller.$audibleApps
             .receive(on: RunLoop.main)
             .sink { [weak self] audible in
-                if let self { self.recordAppPlayback(self.audibleApps.union(audible)) }
-                self?.audibleApps = audible
-                self?.refreshRecentOverlaySources()
-                self?.refreshVolumeSourceActivity()
+                self?.updateAudibleApps(audible)
             }
             .store(in: &cancellables)
         muteControllerStorage = controller
         return controller
+    }
+
+    func updateAudibleApps(_ audible: Set<String>) {
+        recordAppPlayback(audibleApps.union(audible))
+        audibleApps = audible
+        refreshRecentOverlaySources()
+        refreshVolumeSourceActivity()
     }
 
     /// The popover's list of apps that need live audibility (no play state to
@@ -2257,9 +2261,17 @@ final class AppState: ObservableObject {
     /// The compact menu has no separate target picker/play button. Keep its
     /// target visible even when quit (Play can launch it), and retain running
     /// transport-only players after pausing so their resume button stays put.
-    func menuAppRows(_ playingApps: [PlayingApp]) -> [PlayingApp] {
+    func menuAppRows(_ playingApps: [PlayingApp], runningBundleIDs: Set<String>? = nil) -> [PlayingApp] {
         var rows = playingAppRows(playingApps)
         var seen = Set(rows.map(\.bundleID))
+        // Audio-only apps are not transport definitions. Include them before
+        // filtering the shortlist, so the menu meters them while still hidden.
+        let running = runningBundleIDs
+            ?? Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+        for app in ScreenSharingAudio.runningApps(in: running)
+            where seen.insert(app.bundleID).inserted {
+            rows.append(app)
+        }
         for definition in availableApps where isRunning(bundleID: definition.bundleID)
             && canPlayPauseVolumeSource(.app(bundleID: definition.bundleID))
             && seen.insert(definition.bundleID).inserted {

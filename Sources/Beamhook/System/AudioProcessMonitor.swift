@@ -97,18 +97,24 @@ final class AudioProcessMonitor: ObservableObject {
     /// bundle id — those resolve through `kAudioProcessPropertyBundleID` and,
     /// via the ".helper" convention, back to the app that owns them.
     nonisolated static func resolve(_ obj: AudioObjectID) -> (displayName: String, bundleID: String)? {
-        if let pid = pid(obj),
-           let running = NSRunningApplication(processIdentifier: pid),
-           let raw = running.bundleIdentifier {
+        let running = pid(obj).flatMap { NSRunningApplication(processIdentifier: $0) }
+        guard let raw = running?.bundleIdentifier ?? bundleID(obj), !raw.isEmpty else { return nil }
+        if raw == "com.apple.avconferenced" {
+            let identity = ScreenSharingAudio.identity(
+                for: raw,
+                runningBundleIDs: Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
+            )
+            return identity.map { ($0.displayName, $0.bundleID) }
+        }
+        if let running, running.bundleIdentifier != nil {
             if let identity = browserIdentity(for: running, rawBundleID: raw) { return identity }
             return (displayName(for: running, bundleID: raw), raw)
         }
-        guard let hal = bundleID(obj), !hal.isEmpty else { return nil }
-        if let identity = browserIdentity(bundleID: hal) { return identity }
+        if let identity = browserIdentity(bundleID: raw) { return identity }
         // "<parent>.helper[…]" → the app it belongs to — but only when that
         // app is really running, so a system daemon never becomes a row.
-        guard let helperRange = hal.range(of: ".helper") else { return nil }
-        let parentID = String(hal[..<helperRange.lowerBound])
+        guard let helperRange = raw.range(of: ".helper") else { return nil }
+        let parentID = String(raw[..<helperRange.lowerBound])
         guard let parent = NSRunningApplication
             .runningApplications(withBundleIdentifier: parentID).first else { return nil }
         return (parent.localizedName ?? parentID, parentID)
