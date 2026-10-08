@@ -4,7 +4,7 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
-## [Unreleased]
+## [1.4.4] — 2026-10-08
 
 ### Added
 
@@ -20,6 +20,9 @@ one-time, includes all 1.x updates); building from source is always free.
 
 ### Fixed
 
+- Screen Sharing now appears in the full app list while running and joins the
+  shortlist when audio is detected, including audio from its conferencing service.
+  When FaceTime is also open, shared conferencing audio gets a separate row.
 - Per-app volume no longer silences an app whose audio plays from one channel
   only, such as a right-speaker-only test in Safari.
 - If per-app volume can't replay an app's audio, Beamhook releases it and the
