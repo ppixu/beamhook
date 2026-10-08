@@ -4,6 +4,13 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.4.5] — 2026-10-08
+
+### Fixed
+
+- Menu-bar app and browser-tab volume sliders now adjust sound while dragging,
+  without waiting for the mouse to be released.
+
 ## [1.4.4] — 2026-10-08
 
 ### Added
