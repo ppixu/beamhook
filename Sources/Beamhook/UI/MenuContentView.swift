@@ -307,10 +307,17 @@ private struct HookRowGlyph: NSViewRepresentable {
 private struct MenuVolumeSlider: View {
     @Binding var volume: Double
     let isMuted: Bool
+    let onVolumeChanged: (Int) -> Void
     let onEditingChanged: (Bool) -> Void
 
     var body: some View {
-        Slider(value: $volume, in: 0...100, onEditingChanged: onEditingChanged)
+        // Only user writes enter this binding's setter. Polls and cache updates
+        // can refresh the displayed value without echoing another audio command.
+        Slider(value: Binding(get: { volume }, set: { value in
+            let previous = Int(volume)
+            volume = value
+            if Int(value) != previous { onVolumeChanged(Int(value)) }
+        }), in: 0...100, onEditingChanged: onEditingChanged)
             .controlSize(.mini).tint(.gray)
             .opacity(isMuted ? 0.25 : 1)
             .overlay {
@@ -385,9 +392,10 @@ private struct AppVolumeRow: View {
                     Color.clear.frame(width: 22, height: 22).accessibilityHidden(true)
                 }
                 muteButton
-                MenuVolumeSlider(volume: $volume, isMuted: isMuted) { editing in
+                MenuVolumeSlider(volume: $volume, isMuted: isMuted, onVolumeChanged: {
+                    state.setVolume($0, for: playing.bundleID)
+                }) { editing in
                     isEditing = editing
-                    if !editing { state.setVolume(Int(volume), for: playing.bundleID) }
                 }
                 .disabled(!canChangeVolume)
                 .accessibilityLabel("\(playing.displayName) volume\(isBrowser ? ", all tabs" : "")")
@@ -648,9 +656,10 @@ private struct BrowserVolumeRow: View {
             .disabled(candidate.volume == nil)
             .accessibilityLabel("\(isMuted ? "Unmute" : "Mute") \(candidate.label)")
             .help("\(isMuted ? "Unmute" : "Mute") \(candidate.label)")
-            MenuVolumeSlider(volume: $volume, isMuted: isMuted) { editing in
+            MenuVolumeSlider(volume: $volume, isMuted: isMuted, onVolumeChanged: {
+                state.setBrowserVolume($0, for: candidate)
+            }) { editing in
                 isEditing = editing
-                if !editing { state.setBrowserVolume(Int(volume), for: candidate) }
             }
             .disabled(candidate.volume == nil)
             .accessibilityLabel("\(candidate.label) volume")

@@ -1301,13 +1301,15 @@ final class AppState: ObservableObject {
         }.map(\.bundleID))
     }
 
+    private let sliderWrites = VolumeWriteCoalescer()
+
     func setBrowserVolume(_ percent: Int, for candidate: BrowserMediaCandidate) {
         let clamped = min(max(percent, 0), 100)
         // A slider move during a picker session is the newest level: record it
         // so a key-written level from earlier in the session can't override it.
         if volumeSession != nil { sessionTabVolumes[candidate.id] = clamped }
         updateBrowserVolumeCaches(clamped, forTabID: candidate.id)
-        Task {
+        sliderWrites.submit(source: "tab:\(candidate.id)") { [self] in
             let sent = await scripting.run { [browserMediaController] in
                 browserMediaController.setVolume(clamped, for: candidate)
             }
@@ -1623,7 +1625,7 @@ final class AppState: ObservableObject {
         }
         guard BrowserKind.browser(bundleID: bundleID) == nil,
               let app = registry.allApps().first(where: { $0.bundleID == bundleID }) else { return }
-        Task {
+        sliderWrites.submit(source: "app:\(bundleID)") { [self] in
             await scripting.run { app.setVolume(percent) }
             unmuteForVolumeChange(percent, bundleID: bundleID)
         }
