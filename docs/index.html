@@ -297,49 +297,62 @@
   /* Hang left from the tray so controls stay inside the viewport. */
   .popup{position:fixed;left:auto;right:8px;top:34px;
     width:min(228px,calc(100vw - 16px));margin:0;padding:0;pointer-events:auto;z-index:50;text-align:left;
-    visibility:hidden;transition:top .4s cubic-bezier(.34,1.45,.64,1),visibility 0s linear .28s}
-  .popup-panel{position:relative;border-radius:22px;overflow:hidden;
+    visibility:hidden;transform:scale(.9);transform-origin:calc(100% - var(--tray-center-from-right) + 8px) -10px;
+    transition:top .4s cubic-bezier(.34,1.45,.64,1),transform .45s cubic-bezier(.34,1.45,.64,1),visibility 0s linear .28s}
+  /* Tint, bevel and rim do the work Liquid Glass gets from the wallpaper: on a white
+     page there is nothing behind the panel to colour it. */
+  .popup-panel{position:relative;z-index:1;border-radius:24px;overflow:hidden;
     opacity:0;transition:opacity .28s cubic-bezier(.2,.7,.2,1);
-    background:rgba(255,255,255,.42);
-    -webkit-backdrop-filter:blur(40px) saturate(200%) brightness(1.1);
-    backdrop-filter:blur(40px) saturate(200%) brightness(1.1);
-    border:1px solid rgba(255,255,255,.55);
+    background:linear-gradient(180deg,rgba(232,243,255,.58),rgba(246,249,255,.42) 55%,rgba(228,238,255,.52));
+    -webkit-backdrop-filter:blur(14px) saturate(190%) brightness(1.06);
+    backdrop-filter:blur(14px) saturate(190%) brightness(1.06);
     box-shadow:
-      0 22px 48px rgba(0,0,0,.16),
-      0 6px 16px rgba(0,0,0,.08),
-      inset 1px 1px 0 rgba(255,255,255,.85),
-      inset -1px -1px 0 rgba(255,255,255,.2);
+      0 0 0 .5px rgba(20,40,80,.14),
+      0 22px 44px -10px rgba(20,40,80,.26),
+      0 5px 14px rgba(20,40,80,.08),
+      inset 0 12px 20px -14px rgba(255,255,255,.95),
+      inset 0 -12px 22px -16px rgba(50,90,160,.28);
     color:#1c1c1e;font-size:12px;line-height:1.25;
     font-family:var(--sans);-webkit-font-smoothing:antialiased}
-  .popup-panel::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:0;
-    background:
-      linear-gradient(155deg,rgba(255,255,255,.62) 0%,rgba(255,255,255,.14) 38%,rgba(255,255,255,0) 62%),
-      linear-gradient(335deg,rgba(255,255,255,.22),transparent 40%);
-    box-shadow:inset 0 0 0 1px rgba(255,255,255,.4)}
+  /* Chromium only: bend whatever is behind the panel at its edges (map built in JS). */
+  .popup.has-lens .popup-panel{
+    -webkit-backdrop-filter:url(#beamhook-lens) blur(8px) saturate(190%) brightness(1.06);
+    backdrop-filter:url(#beamhook-lens) blur(8px) saturate(190%) brightness(1.06)}
+  /* Specular rim: light from the top left catches the near edge and the far corner. */
+  .popup-panel::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1.2px;
+    pointer-events:none;z-index:2;
+    background:linear-gradient(135deg,#fff 0%,rgba(255,255,255,.55) 18%,rgba(255,255,255,.08) 42%,
+      rgba(255,255,255,.08) 62%,rgba(255,255,255,.6) 86%,#fff 100%);
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;mask-composite:exclude}
   .popup-panel::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:0;
-    box-shadow:inset 6px 8px 18px -10px rgba(255,255,255,.75),inset -4px -6px 14px -8px rgba(0,0,0,.06)}
+    background:
+      radial-gradient(90% 45% at 12% -8%,rgba(255,255,255,.75),transparent 70%),
+      radial-gradient(70% 50% at 105% 108%,rgba(150,190,255,.32),transparent 70%)}
   .popup-panel > *{position:relative;z-index:1}
-  /* Caret tip = tray center: (tray-center-from-right) - (popup right 8px) - half caret */
-  .popup-caret{position:absolute;left:auto;top:-6px;width:14px;height:14px;
-    right:calc(var(--tray-center-from-right) - 8px - 7px);
-    transform:rotate(45deg);border-radius:3px 0 0 0;z-index:0;opacity:0;
+  /* Liquid caret: a soft bump that flows into the panel, laid over its top edge.
+     Tip = tray center: (tray-center-from-right) - (popup right 8px) - half width. */
+  .popup-caret{position:absolute;left:auto;top:-10px;width:30px;height:12px;z-index:2;
+    right:calc(var(--tray-center-from-right) - 8px - 15px);opacity:0;
     transition:opacity .28s cubic-bezier(.2,.7,.2,1);
-    background:rgba(255,255,255,.5);
-    -webkit-backdrop-filter:blur(40px) saturate(200%) brightness(1.1);
-    backdrop-filter:blur(40px) saturate(200%) brightness(1.1);
-    border-left:1px solid rgba(255,255,255,.7);
-    border-top:1px solid rgba(255,255,255,.7);
-    box-shadow:inset 1px 1px 0 rgba(255,255,255,.85),0 0 12px rgba(0,0,0,.04)}
+    clip-path:path("M0 12C8 12 10.5 1 15 1S22 12 30 12Z");
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 12'%3E%3Cpath d='M0 11.6C8 11.6 10.5 .9 15 .9S22 11.6 30 11.6' fill='none' stroke='%2314285024' stroke-width='1'/%3E%3Cpath d='M1 12C8.5 12 10.8 2 15 2S21.5 12 29 12' fill='none' stroke='white' stroke-width='1.2'/%3E%3C/svg%3E") 0 0/100% 100%,
+      rgba(234,244,255,.62);
+    -webkit-backdrop-filter:blur(14px) saturate(190%) brightness(1.06);
+    backdrop-filter:blur(14px) saturate(190%) brightness(1.06)}
   .menubar:has(.tray:focus-visible) ~ .popup:not(.is-dismissed),
   .popup:focus-within,.popup.is-open{
-    visibility:visible;top:42px;transition:top .4s cubic-bezier(.34,1.45,.64,1),visibility 0s}
+    visibility:visible;top:42px;transform:none;
+      transition:top .4s cubic-bezier(.34,1.45,.64,1),transform .45s cubic-bezier(.34,1.45,.64,1),visibility 0s}
   .menubar:has(.tray:focus-visible) ~ .popup:not(.is-dismissed) .popup-panel,
   .menubar:has(.tray:focus-visible) ~ .popup:not(.is-dismissed) .popup-caret,
   .popup:focus-within .popup-panel,.popup.is-open .popup-panel,
   .popup:focus-within .popup-caret,.popup.is-open .popup-caret{opacity:1}
   @media (hover:hover) and (pointer:fine){
     .menubar:has(.tray:hover) ~ .popup:not(.is-dismissed),.popup:hover{
-      visibility:visible;top:42px;transition:top .4s cubic-bezier(.34,1.45,.64,1),visibility 0s}
+      visibility:visible;top:42px;transform:none;
+      transition:top .4s cubic-bezier(.34,1.45,.64,1),transform .45s cubic-bezier(.34,1.45,.64,1),visibility 0s}
     .menubar:has(.tray:hover) ~ .popup:not(.is-dismissed) .popup-panel,
     .menubar:has(.tray:hover) ~ .popup:not(.is-dismissed) .popup-caret,
     .popup:hover .popup-panel,.popup:hover .popup-caret{opacity:1}
@@ -446,19 +459,22 @@
     outline:2px solid #007aff;outline-offset:2px}
 
   @media (prefers-color-scheme:dark){
-    .popup-panel{background:rgba(40,40,42,.48);color:#f5f5f7;border-color:rgba(255,255,255,.18);
+    .popup-panel{color:#f5f5f7;
+      background:linear-gradient(180deg,rgba(52,58,70,.5),rgba(34,36,42,.44) 55%,rgba(40,46,60,.5));
       box-shadow:
-        0 22px 48px rgba(0,0,0,.45),
+        0 0 0 .5px rgba(0,0,0,.5),
+        0 22px 48px -8px rgba(0,0,0,.55),
         0 6px 16px rgba(0,0,0,.25),
-        inset 1px 1px 0 rgba(255,255,255,.28),
-        inset -1px -1px 0 rgba(255,255,255,.06)}
-    .popup-panel::before{background:
-      linear-gradient(155deg,rgba(255,255,255,.22) 0%,rgba(255,255,255,.06) 38%,rgba(255,255,255,0) 62%),
-      linear-gradient(335deg,rgba(255,255,255,.08),transparent 40%);
-      box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
-    .popup-panel::after{box-shadow:inset 6px 8px 18px -10px rgba(255,255,255,.2),inset -4px -6px 14px -8px rgba(0,0,0,.35)}
-    .popup-caret{background:rgba(40,40,42,.55);border-left-color:rgba(255,255,255,.22);border-top-color:rgba(255,255,255,.22);
-      box-shadow:inset 1px 1px 0 rgba(255,255,255,.2)}
+        inset 0 12px 20px -14px rgba(255,255,255,.22),
+        inset 0 -12px 22px -16px rgba(0,0,0,.4)}
+    .popup-panel::before{background:linear-gradient(135deg,rgba(255,255,255,.6) 0%,rgba(255,255,255,.2) 18%,
+      rgba(255,255,255,.04) 42%,rgba(255,255,255,.04) 62%,rgba(255,255,255,.22) 86%,rgba(255,255,255,.5) 100%)}
+    .popup-panel::after{background:
+      radial-gradient(90% 45% at 12% -8%,rgba(255,255,255,.12),transparent 70%),
+      radial-gradient(70% 50% at 105% 108%,rgba(110,150,255,.16),transparent 70%)}
+    .popup-caret{background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 12'%3E%3Cpath d='M0 11.6C8 11.6 10.5 .9 15 .9S22 11.6 30 11.6' fill='none' stroke='%23000' stroke-opacity='.5' stroke-width='1'/%3E%3Cpath d='M1 12C8.5 12 10.8 2 15 2S21.5 12 29 12' fill='none' stroke='white' stroke-opacity='.45' stroke-width='1.2'/%3E%3C/svg%3E") 0 0/100% 100%,
+      rgba(52,58,70,.55)}
     .glass-label{color:rgba(235,235,245,.55)}
     .glass-play,.glass-pill,.glass-add,.glass-quit{background:rgba(120,120,128,.32);color:#f5f5f7}
     .glass-select{color:#f5f5f7}
@@ -600,6 +616,23 @@
   @keyframes preview-ticker{0%,12%{transform:translateX(0)}100%{transform:translateX(-50%)}}
   @media(prefers-reduced-motion:reduce){.preview-wave.sounding,.preview-track > span{animation:none}.preview-wave.sounding{opacity:1!important}}
   .preview-row button:focus-visible,.preview-show-all:focus-visible{outline:2px solid #007aff;outline-offset:2px}
+  /* Liquid Glass details: the hooked row is a lit capsule, the switch knob a glass pill. */
+  .preview-row{border-radius:14px}
+  .preview-row.hooked,.preview-row.muted{background:rgba(110,130,160,.13);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.7),inset 0 -1px 0 rgba(20,40,80,.04)}
+  .glass-toggle{width:40px;height:23px;background:linear-gradient(180deg,#2f8cff,#0a6cf0);
+    box-shadow:inset 0 1px 1px rgba(0,0,0,.12);transition:background .25s}
+  .glass-toggle::after{top:2.5px;right:2.5px;width:25px;height:18px;
+    background:linear-gradient(180deg,#fff,#f3f6fb);
+    box-shadow:0 1px 3px rgba(0,0,0,.22),inset 0 0 0 .5px rgba(0,0,0,.06);
+    transition:right .35s cubic-bezier(.34,1.45,.64,1)}
+  .glass-toggle[aria-checked="false"]{background:rgba(120,120,128,.24)}
+  .glass-toggle[aria-checked="false"]::after{right:12.5px}
+  @media (prefers-color-scheme:dark){
+    .preview-row.hooked,.preview-row.muted{background:rgba(160,180,220,.13);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.14)}
+    .glass-toggle[aria-checked="false"]{background:rgba(120,120,128,.4)}
+  }
 </style>
 
 <canvas id="bg-fx" aria-hidden="true"></canvas>
@@ -624,6 +657,12 @@
   <button class="whoops" type="button" hidden onclick="relaunchBeamhook()" title="Restart Beamhook">Whoops — bring it back</button>
 </header>
 
+<svg class="lens-defs" width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+  <filter id="beamhook-lens" x="0" y="0" width="1" height="1" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+    <feImage result="map" x="0" y="0" width="1" height="1" preserveAspectRatio="none"/>
+    <feDisplacementMap in="SourceGraphic" in2="map" scale="40" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
 <div class="popup" id="beamhook-popup" role="dialog" aria-label="Beamhook controls" aria-hidden="true">
   <div class="popup-caret"></div>
   <div class="popup-panel">
@@ -760,6 +799,52 @@
     setPopupOpen(false);
     tray.focus();
   });
+
+  /* Liquid Glass lens. Only Chromium renders an SVG filter in backdrop-filter, so other
+     browsers keep the plain frosted panel. The map is a per-pixel displacement field:
+     inside a bezel along the rounded edge, red/green push sampling inward along the
+     edge normal, which bends whatever is behind the panel like a thick glass rim. */
+  (function liquidLens() {
+    const chromium = navigator.userAgentData?.brands?.some(b => /Chromium/.test(b.brand));
+    if (!chromium) return;
+    const panel = popup.querySelector('.popup-panel');
+    const filter = document.getElementById('beamhook-lens');
+    const image = filter.querySelector('feImage');
+    const RADIUS = 24, BEZEL = 22;
+    let size = '';
+    function build() {
+      const w = Math.ceil(panel.offsetWidth), h = Math.ceil(panel.offsetHeight);
+      if (!w || !h || size === w + 'x' + h) return;
+      size = w + 'x' + h;
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      const data = ctx.createImageData(w, h), px = data.data;
+      const hx = w / 2 - RADIUS, hy = h / 2 - RADIUS;
+      // Signed distance to the rounded rect, negative inside.
+      const sd = (x, y) => {
+        const qx = Math.abs(x - w / 2) - hx, qy = Math.abs(y - h / 2) - hy;
+        return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - RADIUS;
+      };
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4, cx = x + .5, cy = y + .5, d = -sd(cx, cy);
+        let dx = 0, dy = 0;
+        if (d < BEZEL) {
+          const nx = sd(cx + 1, cy) - sd(cx - 1, cy), ny = sd(cx, cy + 1) - sd(cx, cy - 1);
+          const len = Math.hypot(nx, ny) || 1, t = 1 - Math.max(d, 0) / BEZEL;
+          const m = t * t * (3 - 2 * t);
+          dx = -nx / len * m; dy = -ny / len * m;
+        }
+        px[i] = 128 + dx * 127; px[i + 1] = 128 + dy * 127; px[i + 2] = 128; px[i + 3] = 255;
+      }
+      ctx.putImageData(data, 0, 0);
+      for (const el of [filter, image]) { el.setAttribute('width', w); el.setAttribute('height', h); }
+      image.setAttribute('href', canvas.toDataURL());
+    }
+    new ResizeObserver(build).observe(panel);
+    build();
+    popup.classList.add('has-lens');
+  })();
 
   const previewRows = [
     {id:'spotify', name:'Spotify', track:'Porcini — This afternoon', volume:62, playing:true, transport:true, recent:true},

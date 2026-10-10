@@ -20,7 +20,7 @@
 ---
 
 <p align="center">
-  <img src="docs/demo.gif" width="720" alt="Demo: hooking the media keys to Spotify, then to Safari's YouTube tab, and back">
+  <img src="docs/beamhook-menu.png" width="623" alt="The Beamhook menu: Spotify hooked to the media keys, with per-app volume sliders for Spotify, Safari and Podcasts">
 </p>
 
 Beamhook is a menu-bar app that does two things:
