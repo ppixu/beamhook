@@ -106,6 +106,10 @@ final class AppState: ObservableObject {
 
     private let tap: MediaKeyTap
     private let watchdog: TapWatchdog
+    /// Holds Now Playing so headphone buttons reach the hooked app. Inert until
+    /// `activateInput`, so a test host never claims it.
+    private let nowPlayingClaim: NowPlayingClaim
+    private var nowPlayingClaimActive = false
     private var permissionTimer: Timer?
 
     /// Serial off-main queue for user-initiated commands (media keys → target, volume
@@ -310,6 +314,8 @@ final class AppState: ObservableObject {
     @Published var launchTargetOnPlay: Bool = LaunchOnPlayPreference.isEnabled(.standard)
     /// Whether a hooked play/pause press flashes the overlay.
     @Published var showPlayPauseHUD: Bool = PlayPauseHUDPreference.isEnabled(.standard)
+    /// Whether headphone buttons are routed to the hooked app (via Now Playing).
+    @Published var routeHeadphoneControls: Bool = HeadphoneControlPreference.isEnabled(.standard)
     @Published var skipOnPodcasts: Bool = TrackKeyPreference.skipOnPodcasts(.standard)
     @Published var alwaysSkip: Bool = TrackKeyPreference.alwaysSkip(.standard)
     /// Whether ⌘ + a volume key reaches the hooked app when the plain keys don't.
@@ -433,6 +439,9 @@ final class AppState: ObservableObject {
             })
         self.tap = tap
         self.watchdog = TapWatchdog(tap: tap)
+        self.nowPlayingClaim = NowPlayingClaim { command in
+            handlerBox.state?.handleHeadphoneCommand(command)
+        }
 
         loadVolumeOverrides()
         if !AppEnvironment.isRunningTests, PerAppMutePreference.isEnabled(.standard), #available(macOS 14.2, *) {
@@ -474,6 +483,9 @@ final class AppState: ObservableObject {
         case .mute:       handleMuteKey()
         default:
             guard let command = key.command else { return }
+            // Another app may have taken Now Playing since; a press aimed at
+            // the hooked app takes it back so the headphones follow too.
+            refreshNowPlayingClaim(force: true)
             if selectedTargetIsQuickTime {
                 if command == .playPause {
                     let context = playbackTargetContext
@@ -642,6 +654,8 @@ final class AppState: ObservableObject {
         tap.start()
         watchdog.start()
         outputMonitor.start()
+        nowPlayingClaimActive = true
+        refreshNowPlayingClaim(force: true)
         updateVolumeRouting()
         requestMutePermissionOnce()
         HookHUD.shared.onVolumeVisibilityChange = { [weak self] visible in
@@ -773,7 +787,9 @@ final class AppState: ObservableObject {
         let at: Date
     }
     @Published private(set) var automationDeniedBundleIDs: Set<String> = []
-    @Published private(set) var playbackHints: [String: PlaybackHint] = [:]
+    @Published private(set) var playbackHints: [String: PlaybackHint] = [:] {
+        didSet { refreshNowPlayingClaim() }
+    }
     /// Apps with a toggle in flight. A poll that lands mid-toggle would read
     /// the state we just left (Spotify keeps reporting "paused" for a beat
     /// after play while it buffers) and stomp the optimistic hint, so polled
@@ -1044,6 +1060,7 @@ final class AppState: ObservableObject {
         targetManager.selectedTargetID = id
         configureBrowserTransportForPendingScan()
         updateVolumeRouting()
+        refreshNowPlayingClaim(force: true)
         // Scan the hooked browser now instead of leaving it to the menu's
         // visible-poll loop: the popover can close before that loop fires,
         // which would strand a JS-enabled browser in macOS passthrough until
@@ -1100,7 +1117,7 @@ final class AppState: ObservableObject {
             browserTargetRunning = nil
             browserMediaCandidates = []
             selectedBrowserMediaID = nil
-            tap.transportKeysHijacked = selectedTargetID != nil
+            setTransportKeysHijacked(selectedTargetID != nil)
             return
         }
 
@@ -1109,7 +1126,7 @@ final class AppState: ObservableObject {
             browserMediaInjectionAvailable = false
             browserMediaCandidates = []
             selectedBrowserMediaID = nil
-            tap.transportKeysHijacked = false
+            setTransportKeysHijacked(false)
             return
         }
         browserTargetRunning = true
@@ -1127,7 +1144,7 @@ final class AppState: ObservableObject {
             _ = recentBrowserSources(from: scan.candidates, browser: browser)
         }
         browserMediaCandidates = Self.applyingSessionTabVolumes(sessionTabVolumes, to: scan.candidates)
-        tap.transportKeysHijacked = scan.injectionAvailable
+        setTransportKeysHijacked(scan.injectionAvailable)
 
         guard scan.injectionAvailable, !scan.candidates.isEmpty else {
             selectedBrowserMediaID = nil
@@ -1197,7 +1214,7 @@ final class AppState: ObservableObject {
         browserMediaInjectionAvailable = true
         browserTargetRunning = true
         selectedBrowserMediaID = candidate.id
-        tap.transportKeysHijacked = true
+        setTransportKeysHijacked(true)
         updateVolumeRouting()
         if showConfirmation {
             HookHUD.shared.show(appName: candidate.label, commandHint: commandVolumeHint)
@@ -1317,21 +1334,73 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// The one place the tap's transport routing changes, so the Now Playing
+    /// claim (headphone routing) always follows the keyboard's.
+    private func setTransportKeysHijacked(_ hijacked: Bool) {
+        tap.transportKeysHijacked = hijacked
+        refreshNowPlayingClaim()
+    }
+
+    // MARK: - Headphone buttons (Now Playing)
+
+    /// Claim or release Now Playing to match the hook. `force` re-publishes an
+    /// unchanged state, which is what takes the role back from another app.
+    private func refreshNowPlayingClaim(force: Bool = false) {
+        guard nowPlayingClaimActive else { return }
+        let def = currentTargetDefinition()
+        guard NowPlayingClaimDecision.shouldClaim(enabled: routeHeadphoneControls,
+                                                  hasTarget: def != nil,
+                                                  transportHijacked: tap.transportKeysHijacked),
+              let def
+        else {
+            nowPlayingClaim.release()
+            return
+        }
+        nowPlayingClaim.claim(title: def.displayName, playing: knownTargetPlaying(def), force: force)
+    }
+
+    /// Cached state only — no Apple events, so it is cheap enough to run on
+    /// every hint change.
+    private func knownTargetPlaying(_ def: AppDefinition) -> Bool? {
+        if selectedTargetIsBrowser { return selectedBrowserMediaCandidate?.isPlaying }
+        if selectedTargetIsQuickTime {
+            return quickTimeMovies.first { $0.id == selectedQuickTimeMovieID }?.isPlaying
+        }
+        return playbackHint(for: def.bundleID)
+    }
+
+    /// A headphone button, delivered by macOS to Beamhook as the Now Playing app.
+    func handleHeadphoneCommand(_ command: HeadphoneCommand) {
+        guard command.needsPlayState else {
+            if let key = command.key(targetPlaying: nil) { handleKey(key) }
+            return
+        }
+        // Explicit play/pause (AirPods in/out of an ear) must not toggle the
+        // wrong way, so ask the target first and fall back to what's cached.
+        let context = playbackTargetContext
+        Task {
+            let read = await isTargetPlaying(in: context)
+            guard context == playbackTargetContext else { return }
+            let playing = read ?? currentTargetDefinition().flatMap(knownTargetPlaying)
+            if let key = command.key(targetPlaying: playing) { handleKey(key) }
+        }
+    }
+
     private func configureBrowserTransportForPendingScan() {
         if selectedTargetID == nil {
             browserMediaInjectionAvailable = nil
             browserTargetRunning = nil
             browserMediaCandidates = []
             selectedBrowserMediaID = nil
-            tap.transportKeysHijacked = false
+            setTransportKeysHijacked(false)
         } else if selectedTargetIsBrowser {
             browserMediaInjectionAvailable = nil
             browserTargetRunning = nil
             browserMediaCandidates = []
             selectedBrowserMediaID = nil
-            tap.transportKeysHijacked = false
+            setTransportKeysHijacked(false)
         } else {
-            tap.transportKeysHijacked = true
+            setTransportKeysHijacked(true)
         }
     }
 
@@ -1348,6 +1417,12 @@ final class AppState: ObservableObject {
     func setLaunchTargetOnPlay(_ on: Bool) {
         launchTargetOnPlay = on
         LaunchOnPlayPreference.setEnabled(on, in: .standard)
+    }
+
+    func setRouteHeadphoneControls(_ on: Bool) {
+        routeHeadphoneControls = on
+        HeadphoneControlPreference.setEnabled(on, in: .standard)
+        refreshNowPlayingClaim(force: true)
     }
 
     func setShowPlayPauseHUD(_ on: Bool) {

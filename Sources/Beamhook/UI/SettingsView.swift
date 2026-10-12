@@ -22,8 +22,8 @@ struct SettingsView: View {
         // includes `.resizable`, and a hard-fixed frame here would leave it
         // draggable but visually inert. The Apps tab's list is the one that
         // actually benefits — it only fits ~5 rows at the original 300pt.
-        // 440pt fits the General tab's seven rows with captions.
-        .frame(minWidth: 440, idealWidth: 440, minHeight: 440, idealHeight: 440)
+        // 500pt fits the General tab's eight rows with captions.
+        .frame(minWidth: 440, idealWidth: 440, minHeight: 500, idealHeight: 500)
     }
 }
 
@@ -42,6 +42,12 @@ private struct GeneralSettingsTab: View {
                 caption: "Starts the app if it isn't running.",
                 isOn: Binding(get: { state.launchTargetOnPlay },
                               set: { state.setLaunchTargetOnPlay($0) }))
+
+            settingRow(
+                title: "Headphone buttons control the hooked app",
+                caption: "AirPods and Bluetooth headset play/pause and track buttons. Beamhook shows as Now Playing to receive them.",
+                isOn: Binding(get: { state.routeHeadphoneControls },
+                              set: { state.setRouteHeadphoneControls($0) }))
 
             settingRow(
                 title: "⌘ + volume keys control the hooked app",
