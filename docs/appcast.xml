@@ -15,6 +15,20 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.5.0</title>
+            <pubDate>Mon, 12 Oct 2026 14:29:39 +0300</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.5.0</link>
+            <sparkle:version>30</sparkle:version>
+            <sparkle:shortVersionString>1.5.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Added</h3>
+<ul>
+<li>**Headphone buttons control the hooked app.** Play/pause and next/previous on AirPods and Bluetooth headsets now reach the app Beamhook is hooked to, just like the keyboard's media keys. Taking an AirPod out pauses the hooked app and never starts playback. On by default; turn it off in Settings → General. Beamhook appears as Now Playing in Control Center to receive these buttons.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.5.0.zip" length="2786698" type="application/octet-stream" sparkle:edSignature="KXIuBFgoXjtg/apulAXtEjf7Q6qmG6BjEA7GMpy6bNpPHnF9GmJy9nxbGG41db8nysTjmg2rcdPl6PbUAqFfCg=="/>
+        </item>
+        <item>
             <title>1.4.5</title>
             <pubDate>Thu, 08 Oct 2026 15:10:24 +0300</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.4.5</link>
@@ -469,6 +483,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: WIb9J71IHtzXqp+TwpJAKb6uWhn3f8Thk0F98spwmXFdlv00nk5ALNFSR96lDdGWhlUDDrQiPMoFdVcO/KcVBg==
-length: 38184
+edSignature: 23fXUEkuy9FfhYbqEWhgfsCttlsZTXL4mFhCvoQaniZ7Q36tSsRj4d9UDjY/P9xFm5vX2KxSmG++igSgrTSYAg==
+length: 39304
 -->

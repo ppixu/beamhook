@@ -4,6 +4,17 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.5.0] — 2026-10-12
+
+### Added
+
+- **Headphone buttons control the hooked app.** Play/pause and next/previous
+  on AirPods and Bluetooth headsets now reach the app Beamhook is hooked to,
+  just like the keyboard's media keys. Taking an AirPod out pauses the hooked
+  app and never starts playback. On by default; turn it off in Settings →
+  General. Beamhook appears as Now Playing in Control Center to receive these
+  buttons.
+
 ## [1.4.5] — 2026-10-08
 
 ### Fixed
