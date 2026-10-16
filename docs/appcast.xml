@@ -15,6 +15,20 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.5.1</title>
+            <pubDate>Fri, 16 Oct 2026 19:28:44 +0300</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.5.1</link>
+            <sparkle:version>31</sparkle:version>
+            <sparkle:shortVersionString>1.5.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Fixed</h3>
+<ul>
+<li>A playing browser tab now appears in the menu right after it opens, instead of a few seconds later.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.5.1.zip" length="2793731" type="application/octet-stream" sparkle:edSignature="esUH9UhbheeOoavJbrcv5vTK4nrvRsySjdVAtTKU4S5nlhGbjb1Bn8sb6o08UuiG1fVZxwLcdbRX4gO9SczyDA=="/>
+        </item>
+        <item>
             <title>1.5.0</title>
             <pubDate>Mon, 12 Oct 2026 14:29:39 +0300</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.5.0</link>
@@ -483,6 +497,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: 23fXUEkuy9FfhYbqEWhgfsCttlsZTXL4mFhCvoQaniZ7Q36tSsRj4d9UDjY/P9xFm5vX2KxSmG++igSgrTSYAg==
-length: 39304
+edSignature: WQWHbK3x1Hiq7+aAjjdr15lE+sMHh9sJJUTEkf3vHZTuejf6nNOstxSdd0rDoTH+nCj9PZ0Ew0h5k6jg5Y7MCQ==
+length: 40139
 -->

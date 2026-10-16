@@ -4,6 +4,13 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.5.1] — 2026-10-16
+
+### Fixed
+
+- A playing browser tab now appears in the menu right after it opens, instead
+  of a few seconds later.
+
 ## [1.5.0] — 2026-10-12
 
 ### Added
