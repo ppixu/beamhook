@@ -116,9 +116,14 @@ final class AppState: ObservableObject {
     /// steps, slider writes), driven via the target manager.
     private let scripting: ScriptRunner
     /// A SEPARATE serial queue for background/best-effort work (the 1.5s play-state
-    /// poll, initial volume reads, browser-selection bookkeeping). Kept apart from
-    /// `scripting` so slow maintenance can never sit in front of a user's key press.
+    /// poll, initial volume reads). Kept apart from `scripting` so slow
+    /// maintenance can never sit in front of a user's key press.
     private let pollRunner = ScriptRunner()
+    /// Browser tab scans and the selection bookkeeping that follows them. Opening
+    /// the menu starts a volume read and a playback poll for every row at once;
+    /// on `pollRunner` the tab scan queued behind all of them, so a playing tab's
+    /// row appeared seconds after the menu did.
+    private let browserScanRunner = ScriptRunner()
     // Discovery must not wait behind row polling (or delay user commands).
     private let menuPlaybackRunner = ScriptRunner()
     private let metadataRunner = ScriptRunner()
@@ -1132,7 +1137,7 @@ final class AppState: ObservableObject {
         browserTargetRunning = true
 
         let context = playbackTargetContext
-        let scan = await pollRunner.run { [browserMediaController] in
+        let scan = await browserScanRunner.run { [browserMediaController] in
             browserMediaController.scan(browser)
         }
         // A tab hook can complete while this scan is in flight. Its older
@@ -1168,7 +1173,7 @@ final class AppState: ObservableObject {
             // This is background bookkeeping, not a user command. Keep its required
             // all-tab marker cleanup off the command lane so it cannot delay a play
             // click for this browser or another app such as Spotify.
-            _ = await pollRunner.run { [browserMediaController] in
+            _ = await browserScanRunner.run { [browserMediaController] in
                 browserMediaController.select(chosen)
             }
         }
@@ -1224,37 +1229,57 @@ final class AppState: ObservableObject {
 
     /// Include recently playing browsers even after their output stream stops.
     /// Only live scans supply rows, so remembered IDs cannot resurrect closed tabs.
-    func refreshActiveBrowserMedia(bundleIDs: Set<String>) async {
+    ///
+    /// `sweepScriptable` (the menu's first pass after it opens) also scans every
+    /// other running browser Beamhook is already allowed to script, so a tab that
+    /// just started playing is listed without first waiting for Core Audio
+    /// discovery to report its browser as audible. A browser without that
+    /// Automation grant is skipped, never prompted for. A swept browser only
+    /// contributes once it has a playing tab — which also makes it "remembered",
+    /// so the passes that follow keep scanning it and its rows stay put.
+    func refreshActiveBrowserMedia(bundleIDs: Set<String>, sweepScriptable: Bool = false) async {
         let remembered = recentBrowserBundleIDs()
-        let browsers = BrowserKind.allCases.filter {
-            (bundleIDs.contains($0.bundleID) || remembered.contains($0.bundleID))
-                && isRunning(bundleID: $0.bundleID)
+        let running = BrowserKind.allCases.filter { isRunning(bundleID: $0.bundleID) }
+        let browsers = running.filter {
+            bundleIDs.contains($0.bundleID) || remembered.contains($0.bundleID)
         }
+        let swept = sweepScriptable ? running.filter { !browsers.contains($0) } : []
         let runningPrefixes = browsers.map { "\($0.rawValue):" }
         browserSourceRecency = browserSourceRecency.filter { entry in
             runningPrefixes.contains { entry.key.hasPrefix($0) }
         }
 
         var candidates: [BrowserMediaCandidate] = []
-        for browser in browsers {
+        for browser in browsers + swept {
             guard !Task.isCancelled else { return }
+            let isSwept = swept.contains(browser)
             let scanCandidates: [BrowserMediaCandidate]
             if BrowserKind.target(id: selectedTargetID) == browser,
                browserMediaInjectionAvailable == true {
                 scanCandidates = browserMediaCandidates
             } else {
-                let scan = await pollRunner.run { [browserMediaController] in
-                    browserMediaController.scan(browser)
+                let scan = await browserScanRunner.run { [browserMediaController] in
+                    guard !isSwept || AutomationPermission.isAllowed(bundleID: browser.bundleID) == true else {
+                        return BrowserMediaScan(injectionAvailable: false, candidates: [])
+                    }
+                    return browserMediaController.scan(browser)
                 }
-                guard !Task.isCancelled else { return }
                 scanCandidates = scan.injectionAvailable ? scan.candidates : []
             }
-            candidates.append(contentsOf: recentBrowserSources(
-                from: scanCandidates,
-                browser: browser
-            ))
+            let sources = Self.applyingSessionTabVolumes(
+                sessionTabVolumes,
+                to: recentBrowserSources(from: scanCandidates, browser: browser))
+            if isSwept && !sources.contains(where: \.isPlaying) { continue }
+            candidates.append(contentsOf: sources)
+            // Publish each browser as its own scan lands, even if this pass was
+            // cancelled meanwhile (the scan is live either way): a browser with
+            // many tabs no longer holds back another browser's rows, and the
+            // restart that follows Core Audio reporting a browser cannot
+            // discard a scan that already finished.
+            activeBrowserMediaCandidates = activeBrowserMediaCandidates.filter { $0.browser != browser } + sources
         }
-        activeBrowserMediaCandidates = Self.applyingSessionTabVolumes(sessionTabVolumes, to: candidates)
+        guard !Task.isCancelled else { return }
+        activeBrowserMediaCandidates = candidates
     }
 
     /// Rank a browser's sources with currently playing tabs first, then the selected
@@ -2094,7 +2119,7 @@ final class AppState: ObservableObject {
     }
 
     private func discoverAndPlay(_ browser: BrowserKind, source: VolumeSource, session: UInt64) async {
-        let scan = await pollRunner.run { [browserMediaController] in browserMediaController.scan(browser) }
+        let scan = await browserScanRunner.run { [browserMediaController] in browserMediaController.scan(browser) }
         guard activeVolumeSession == session, volumeSession?.selected?.source == source,
               scan.injectionAvailable, let candidate = Self.discoveredPlaybackCandidate(scan.candidates) else { return }
         activeBrowserMediaCandidates.removeAll { $0.browser == browser }

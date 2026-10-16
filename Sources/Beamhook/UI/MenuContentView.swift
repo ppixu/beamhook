@@ -199,6 +199,7 @@ private struct MenuAppRows: View {
 private struct PlayingAppsListAvailable: View {
     @EnvironmentObject var state: AppState
     @StateObject private var monitor = AudioProcessMonitor()
+    @State private var sweptSinceOpen = false
 
     private var rows: [PlayingApp] { state.menuAppRows(monitor.playingApps) }
     private var activeBrowserBundleIDs: Set<String> {
@@ -224,9 +225,18 @@ private struct PlayingAppsListAvailable: View {
                 state.setMeterWatchlist(state.isMenuVisible ? meterWatchlist : [])
             }
             .task(id: browserRefreshID) {
-                guard state.isMenuVisible else { return }
+                guard state.isMenuVisible else {
+                    sweptSinceOpen = false
+                    return
+                }
                 while !Task.isCancelled {
-                    await state.refreshActiveBrowserMedia(bundleIDs: activeBrowserBundleIDs)
+                    // Check every scriptable browser's tabs once per opening. Later
+                    // passes, and the restarts as Core Audio reports browsers, only
+                    // scan the audible and recently playing ones.
+                    let sweep = !sweptSinceOpen
+                    sweptSinceOpen = true
+                    await state.refreshActiveBrowserMedia(bundleIDs: activeBrowserBundleIDs,
+                                                          sweepScriptable: sweep)
                     try? await Task.sleep(nanoseconds: 3_000_000_000)
                 }
             }
