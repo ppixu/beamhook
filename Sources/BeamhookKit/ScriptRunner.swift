@@ -1,7 +1,7 @@
 import Foundation
 
 /// Runs blocking scripting work on a single dedicated serial queue, off the main
-/// thread. `NSAppleScript.executeAndReturnError` blocks its thread until the target
+/// thread. Executing an AppleScript blocks its thread until the target
 /// app replies (or the Apple-event send times out — up to ~1 minute for an app that
 /// is launching or wedged). Doing that on the main thread froze the whole Mac: the
 /// UI couldn't draw and the session-level media-key event tap's handler couldn't

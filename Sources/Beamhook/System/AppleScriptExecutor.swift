@@ -1,11 +1,30 @@
 import Foundation
+import OSAKit
 import BeamhookKit
 
-/// Runs AppleScript via NSAppleScript. Blocks the calling thread until the target
+/// Runs AppleScript via OSAKit. Blocks the calling thread until the target
 /// replies, so it must be driven from a `ScriptRunning` serial queue — never the
-/// main thread. A fresh NSAppleScript is created per call and used entirely on the
-/// caller's thread, so instances are never shared across threads.
+/// main thread.
+///
+/// Not `NSAppleScript`: every `NSAppleScript` in a process shares one AppleScript
+/// component instance, so two scripts running at once on different threads
+/// break each other — the loser fails immediately with -1751. Beamhook runs
+/// scripts on several queues at once (commands, polls, browser scans, which ask
+/// many tabs in parallel), so a scan made play/pause presses fail. Each thread
+/// here gets its own `OSALanguageInstance`, which is what makes concurrent
+/// execution safe; reusing it per thread keeps a call as cheap as before.
 final class AppleScriptExecutor: ScriptExecuting {
+    private static let language = OSALanguage(forName: "AppleScript")!
+    private static let instanceKey = "com.github.ppixu.beamhook.osaLanguageInstance"
+
+    private static func threadLanguageInstance() -> OSALanguageInstance {
+        let storage = Thread.current.threadDictionary
+        if let instance = storage[instanceKey] as? OSALanguageInstance { return instance }
+        let instance = OSALanguageInstance(language: language)
+        storage[instanceKey] = instance
+        return instance
+    }
+
     /// Cap on how long a single send waits for the target's Apple-event reply.
     /// NSAppleScript otherwise uses the ~60s default, so one beachballing/network-
     /// stalled (but already-launched) app could occupy the scripting queue for a
@@ -15,16 +34,15 @@ final class AppleScriptExecutor: ScriptExecuting {
 
     func run(_ source: String) -> ScriptResult {
         let bounded = "with timeout of \(Self.timeoutSeconds) seconds\n\(source)\nend timeout"
-        guard let script = NSAppleScript(source: bounded) else {
-            return ScriptResult(output: nil, succeeded: false)
-        }
+        let script = OSAScript(source: bounded, from: nil,
+                               languageInstance: Self.threadLanguageInstance(), using: [])
         var errorInfo: NSDictionary?
         let descriptor = script.executeAndReturnError(&errorInfo)
         if let errorInfo {
             NSLog("AppleScript error: \(errorInfo)")
             return ScriptResult(output: nil, succeeded: false)
         }
-        return ScriptResult(output: descriptor.stringValue, succeeded: true)
+        return ScriptResult(output: descriptor?.stringValue, succeeded: true)
     }
 }
 

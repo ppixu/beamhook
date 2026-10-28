@@ -11,7 +11,7 @@ public struct ScriptResult: Sendable {
 
 public protocol ScriptExecuting {
     /// Runs a script and returns its result. The real implementation runs
-    /// NSAppleScript synchronously and blocks the calling thread until the target
+    /// AppleScript synchronously and blocks the calling thread until the target
     /// answers (or the Apple-event send times out), so it MUST NOT be called on the
     /// main thread — route it through a `ScriptRunning` off-main serial queue.
     func run(_ source: String) -> ScriptResult
