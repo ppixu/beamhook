@@ -15,6 +15,20 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.5.3</title>
+            <pubDate>Wed, 28 Oct 2026 16:56:56 +0200</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.5.3</link>
+            <sparkle:version>33</sparkle:version>
+            <sparkle:shortVersionString>1.5.3</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Fixed</h3>
+<ul>
+<li>Play/pause on Chrome, Brave, Arc and Vivaldi tabs works again, and every playing tab is listed in the menu. In 1.5.2, tabs went missing at random and presses on a browser tab could do nothing.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.5.3.zip" length="2812317" type="application/octet-stream" sparkle:edSignature="79Xi7qXnp9td+ie7pjPejPCoX2n7LvOjzNTPrILqQyZXUGayzpaiwz5+MXrIQc7JECV1oEMCn9mj/4eDQXjwBQ=="/>
+        </item>
+        <item>
             <title>1.5.2</title>
             <pubDate>Wed, 28 Oct 2026 15:29:37 +0200</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.5.2</link>
@@ -511,6 +525,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: rz3m/v43+7XO7ncsSsAOZFWEMm5M08wcwajzlSL/2zhshw2hFxeTQZkWhNjSNURt4o9PK77Unon6fi03zii8BA==
-length: 41078
+edSignature: lwAeBhnkng/ZxdLwl6HJF5fSdcQwLpbb/uwfvR00gQ1DdWWyV7WfsgGIxRAO16g2HNHO/8RImeCYiZBG2TkiBw==
+length: 42006
 -->

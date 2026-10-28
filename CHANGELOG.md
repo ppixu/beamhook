@@ -4,6 +4,14 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.5.3] — 2026-10-28
+
+### Fixed
+
+- Play/pause on Chrome, Brave, Arc and Vivaldi tabs works again, and every
+  playing tab is listed in the menu. In 1.5.2, tabs went missing at random and
+  presses on a browser tab could do nothing.
+
 ## [1.5.2] — 2026-10-28
 
 ### Fixed
