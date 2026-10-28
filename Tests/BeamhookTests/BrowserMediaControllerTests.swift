@@ -210,6 +210,92 @@ final class BrowserMediaControllerTests: XCTestCase {
         XCTAssertTrue(script.compileAndReturnError(&error), "\(error ?? [:])")
     }
 
+    // MARK: - Frozen Chromium tabs
+
+    func testChromiumScanAsksEveryTabAtOnce() {
+        let executor = ChromiumTabsExecutor(tabs: [(1, 1, "101"), (1, 2, "102"), (2, 1, "103")])
+        executor.delay = 0.2
+        let controller = BrowserMediaController(executor: executor)
+
+        let scan = controller.scan(.chrome)
+
+        // Chrome answers a frozen tab never, so each one waits out its timeout.
+        // Asked one after another, a window of frozen tabs took minutes.
+        XCTAssertEqual(executor.maxInFlight, 3)
+        XCTAssertTrue(scan.injectionAvailable)
+        XCTAssertEqual(Set(scan.candidates.map(\.tabIndex)), [1, 2])
+        XCTAssertEqual(scan.candidates.count, 3)
+    }
+
+    func testSilentChromiumTabIsLeftOutAndSkippedByTheWalks() throws {
+        let executor = ChromiumTabsExecutor(tabs: [(1, 1, "101"), (1, 2, "102"), (1, 3, "103")])
+        executor.silentTabIDs = ["102"]
+        let controller = BrowserMediaController(executor: executor)
+
+        let scan = controller.scan(.chrome)
+
+        XCTAssertTrue(scan.injectionAvailable)
+        XCTAssertEqual(scan.candidates.map(\.tabIndex).sorted(), [1, 3])
+        let candidate = try XCTUnwrap(scan.candidates.first)
+        _ = controller.select(candidate)
+        XCTAssertTrue(executor.scripts.last?.contains(#"set silentTabIDs to {"102"}"#) == true)
+        _ = controller.focus(candidate)
+        XCTAssertTrue(executor.scripts.last?.contains(#"set silentTabIDs to {"102"}"#) == true)
+        _ = controller.togglePlayPause(candidate)
+        XCTAssertTrue(executor.scripts.last?.contains(#"set silentTabIDs to {"102"}"#) == true)
+    }
+
+    func testChromiumTabThatAnswersAgainIsNoLongerSkipped() {
+        let executor = ChromiumTabsExecutor(tabs: [(1, 1, "101"), (1, 2, "102")])
+        executor.silentTabIDs = ["102"]
+        let controller = BrowserMediaController(executor: executor)
+        _ = controller.scan(.chrome)
+
+        // A frozen tab revives when the user switches to it, and may start playing.
+        executor.silentTabIDs = []
+        let scan = controller.scan(.chrome)
+
+        XCTAssertEqual(scan.candidates.count, 2)
+        _ = controller.select(scan.candidates[0])
+        XCTAssertTrue(executor.scripts.last?.contains("set silentTabIDs to {}") == true)
+    }
+
+    func testChromiumScanWhereNoTabAnswersIsUnavailable() {
+        let executor = ChromiumTabsExecutor(tabs: [(1, 1, "101"), (1, 2, "102")])
+        executor.silentTabIDs = ["101", "102"]
+        let controller = BrowserMediaController(executor: executor)
+
+        XCTAssertFalse(controller.scan(.chrome).injectionAvailable)
+    }
+
+    func testChromiumScanWithoutWindowsIsAvailableAndEmpty() {
+        let executor = ChromiumTabsExecutor(tabs: [])
+        let controller = BrowserMediaController(executor: executor)
+
+        let scan = controller.scan(.chrome)
+
+        XCTAssertTrue(scan.injectionAvailable)
+        XCTAssertTrue(scan.candidates.isEmpty)
+    }
+
+    func testChromiumScanAndWalkAppleScriptsCompile() throws {
+        let executor = ChromiumTabsExecutor(tabs: [(1, 1, "101"), (1, 2, "102")])
+        executor.silentTabIDs = ["102"]
+        let controller = BrowserMediaController(executor: executor)
+        let candidate = try XCTUnwrap(controller.scan(.brave).candidates.first)
+        _ = controller.select(candidate)
+        _ = controller.togglePlayPause(candidate)
+        _ = controller.isPlaying(candidate)
+        _ = controller.transportFacts(candidate)
+        _ = controller.focus(candidate)
+
+        for source in Set(executor.scripts) {
+            let script = try XCTUnwrap(NSAppleScript(source: source))
+            var error: NSDictionary?
+            XCTAssertTrue(script.compileAndReturnError(&error), "\(error ?? [:])\n\(source)")
+        }
+    }
+
     func testCallTabIsListedButCannotBeDrivenByTransport() {
         let executor = RecordingScriptExecutor()
         let controller = BrowserMediaController(executor: executor)
@@ -589,6 +675,53 @@ final class PlaybackStatusTests: XCTestCase {
             browserMediaID: source,
             revision: revision
         )
+    }
+}
+
+/// Plays a Chromium browser for the two-step scan: the tab listing, then one
+/// script per tab, run concurrently. A tab in `silentTabIDs` fails the way a
+/// frozen tab does — the send times out — and every other tab answers with media.
+private final class ChromiumTabsExecutor: ScriptExecuting {
+    let tabs: [(window: Int, tab: Int, id: String)]
+    var silentTabIDs: Set<String> = []
+    var delay: TimeInterval = 0
+    private let lock = NSLock()
+    private var inFlight = 0
+    private(set) var maxInFlight = 0
+    private var recorded: [String] = []
+    var scripts: [String] { lock.withLock { recorded } }
+
+    init(tabs: [(window: Int, tab: Int, id: String)]) {
+        self.tabs = tabs
+    }
+
+    func run(_ source: String) -> ScriptResult {
+        lock.withLock {
+            recorded.append(source)
+            inFlight += 1
+            maxInFlight = max(maxInFlight, inFlight)
+        }
+        defer { lock.withLock { inFlight -= 1 } }
+
+        guard let match = source.firstMatch(of: #/set candidateTab to tab (\d+) of window (\d+)/#),
+              source.contains("set mediaInfo to missing value") else {
+            if source.contains("id of tab") {
+                let rows = tabs.map { "\($0.window)\t\($0.tab)\t\($0.id)" }
+                return ScriptResult(output: (["OK"] + rows).joined(separator: "\n"), succeeded: true)
+            }
+            return ScriptResult(output: "true", succeeded: true)
+        }
+        Thread.sleep(forTimeInterval: delay)
+        let window = Int(match.2)!, tab = Int(match.1)!
+        guard let entry = tabs.first(where: { $0.window == window && $0.tab == tab }),
+              !silentTabIDs.contains(entry.id) else {
+            return ScriptResult(output: nil, succeeded: false)
+        }
+        let sourceID = "550e8400-e29b-41d4-a716-44665544\(entry.id.suffix(4).padding(toLength: 4, withPad: "0", startingAt: 0))"
+        return ScriptResult(output: """
+            OK
+            \(window)\t\(tab)\t{"sourceID":"\(sourceID)","title":"Test","artist":"","host":"www.youtube.com","playing":true,"selected":false,"live":false,"volume":50}
+            """, succeeded: true)
     }
 }
 

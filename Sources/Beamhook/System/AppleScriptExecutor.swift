@@ -102,8 +102,26 @@ struct BrowserMediaScan: Sendable {
 
 /// Discovers media-bearing tabs and marks one tab for the static browser command
 /// scripts in BeamhookKit. Runs only on a ScriptRunner queue.
+///
+/// Chromium browsers freeze and discard background tabs (Memory Saver), and a
+/// frozen tab never answers `execute javascript`: every call to one waits out
+/// its whole AppleEvent timeout. Walking a few dozen tabs one after another at
+/// 5 s apiece took minutes, so playing tabs never reached the menu. Chromium
+/// scans therefore ask every tab at once, each call bounded by
+/// `tabTimeoutSeconds`, and remember which tabs stayed silent so the all-tab
+/// walks (selection, focus, the identity fallbacks) step over them. A frozen
+/// tab cannot be playing — Chrome never freezes an audible one — and the next
+/// scan asks it again, so a tab the user revives is found.
 final class BrowserMediaController: @unchecked Sendable {
     private let executor: ScriptExecuting
+    private static let tabTimeoutSeconds = 2
+    /// How many tabs a Chromium scan asks at once. Chrome answers concurrent
+    /// sends independently, so a silent tab only holds up its own thread.
+    private static let scanWidth = 24
+    private let silentTabsLock = NSLock()
+    /// Per browser, the tabs that did not answer the latest scan, by the
+    /// browser's own tab `id`.
+    private var silentTabIDs: [BrowserKind: [String]] = [:]
 
     private struct Payload: Decodable {
         let sourceID: String
@@ -123,13 +141,56 @@ final class BrowserMediaController: @unchecked Sendable {
     }
 
     func scan(_ browser: BrowserKind) -> BrowserMediaScan {
-        let result = executor.run(scanScript(browser))
-        guard result.succeeded, let output = result.output, output.hasPrefix("OK") else {
-            return BrowserMediaScan(injectionAvailable: false, candidates: [])
+        guard browser != .safari else {
+            let result = executor.run(scanScript(browser))
+            guard result.succeeded, let output = result.output, output.hasPrefix("OK") else {
+                return BrowserMediaScan(injectionAvailable: false, candidates: [])
+            }
+            return BrowserMediaScan(injectionAvailable: true,
+                                    candidates: candidates(from: output, browser: browser))
         }
 
+        let listing = executor.run(tabListScript(browser))
+        guard listing.succeeded, let output = listing.output, output.hasPrefix("OK") else {
+            return BrowserMediaScan(injectionAvailable: false, candidates: [])
+        }
+        let tabs = output.split(separator: "\n", omittingEmptySubsequences: true).dropFirst()
+            .compactMap { row -> (window: Int, tab: Int, id: String)? in
+                let fields = row.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
+                guard fields.count == 3, let window = Int(fields[0]), let tab = Int(fields[1]) else {
+                    return nil
+                }
+                return (window, tab, String(fields[2]))
+            }
+        guard !tabs.isEmpty else {
+            setSilentTabIDs([], for: browser)
+            return BrowserMediaScan(injectionAvailable: true, candidates: [])
+        }
+
+        let answers = Self.concurrentMap(tabs.count, width: Self.scanWidth) { [self] index in
+            executor.run(tabScanScript(browser, window: tabs[index].window, tab: tabs[index].tab))
+        }
+        var silent: [String] = []
+        var answered = false
+        var candidates: [BrowserMediaCandidate] = []
+        for (tab, answer) in zip(tabs, answers) {
+            guard answer.succeeded, let output = answer.output, output.hasPrefix("OK") else {
+                if Self.isValidTabID(tab.id) { silent.append(tab.id) }
+                continue
+            }
+            answered = true
+            candidates += self.candidates(from: output, browser: browser)
+        }
+        setSilentTabIDs(silent, for: browser)
+        // As before, a browser counts as scriptable once any one tab answered.
+        // Every tab failing is what a disabled "Allow JavaScript from Apple
+        // Events" looks like.
+        return BrowserMediaScan(injectionAvailable: answered, candidates: candidates)
+    }
+
+    private func candidates(from output: String, browser: BrowserKind) -> [BrowserMediaCandidate] {
         let rows = output.split(separator: "\n", omittingEmptySubsequences: true).dropFirst()
-        let candidates = rows.compactMap { row -> BrowserMediaCandidate? in
+        return rows.compactMap { row -> BrowserMediaCandidate? in
             let fields = row.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
             guard fields.count == 3,
                   let window = Int(fields[0]), let tab = Int(fields[1]),
@@ -148,7 +209,39 @@ final class BrowserMediaController: @unchecked Sendable {
                 supportsTransport: !payload.live,
                 volume: payload.volume.map { min(max($0, 0), 100) })
         }
-        return BrowserMediaScan(injectionAvailable: true, candidates: candidates)
+    }
+
+    private func setSilentTabIDs(_ ids: [String], for browser: BrowserKind) {
+        silentTabsLock.withLock { silentTabIDs[browser] = ids }
+    }
+
+    /// The walk scripts' list of tabs to step over, as an AppleScript literal.
+    /// Every id passed `isValidTabID`, so none can break out of its quotes.
+    private func silentTabsLiteral(_ browser: BrowserKind) -> String {
+        let ids = silentTabsLock.withLock { silentTabIDs[browser] ?? [] }
+        return "{" + ids.map { "\"\($0)\"" }.joined(separator: ", ") + "}"
+    }
+
+    /// Runs `work` for each index on up to `width` threads at once, returning
+    /// the results in index order. Blocks until every one has finished.
+    private static func concurrentMap<T>(_ count: Int, width: Int,
+                                         _ work: @escaping (Int) -> T) -> [T] {
+        var results = [T?](repeating: nil, count: count)
+        var next = 0
+        let lock = NSLock()
+        let group = DispatchGroup()
+        for _ in 0..<min(width, count) {
+            DispatchQueue.global(qos: .userInitiated).async(group: group) {
+                while true {
+                    let index: Int = lock.withLock { defer { next += 1 }; return next }
+                    guard index < count else { return }
+                    let result = work(index)
+                    lock.withLock { results[index] = result }
+                }
+            }
+        }
+        group.wait()
+        return results.map { $0! }
     }
 
     func select(_ candidate: BrowserMediaCandidate) -> Bool {
@@ -226,17 +319,81 @@ final class BrowserMediaController: @unchecked Sendable {
         return executor.run(targetedActionScript(js, candidate: candidate)).succeeded
     }
 
-    private func scanScript(_ browser: BrowserKind) -> String {
-        let js = """
+    private static let scanJavaScript = """
         (() => { \(BrowserJS.pick) const p = bhPick(); const md = navigator.mediaSession && navigator.mediaSession.metadata; if (!p && !md) return null; const key = '__beamhookSourceID_v1'; const makeID = () => globalThis.crypto && globalThis.crypto.randomUUID ? globalThis.crypto.randomUUID() : [Date.now().toString(36), Math.random().toString(36).slice(2)].join('-'); const sourceID = globalThis[key] || (globalThis[key] = makeID()); return JSON.stringify({sourceID,title:(md && md.title) || document.title || location.hostname,artist:(md && md.artist) || '',host:location.hostname || '',playing:p ? (!p.el.paused && !p.el.ended) : navigator.mediaSession.playbackState === 'playing',live:p ? p.live : false,selected:sessionStorage.getItem('beamhook-selected') === '1',volume:p ? Math.round(p.el.volume * 100) : null}); })()
         """
-        let evaluate = browser == .safari
-            ? "do JavaScript javascriptSource in candidateTab"
-            : "execute candidateTab javascript javascriptSource"
+
+    /// Every tab's position and id, one `window<TAB>tab<TAB>id` row each. No
+    /// page is asked anything, so a frozen tab answers this like any other.
+    private func tabListScript(_ browser: BrowserKind) -> String {
+        """
+        set tabRows to {}
+        tell application "\(browser.applicationName)"
+            repeat with windowIndex from 1 to count of windows
+                set windowTabIDs to id of tabs of window windowIndex
+                repeat with tabIndex from 1 to count of windowTabIDs
+                    set end of tabRows to (windowIndex as text) & (ASCII character 9) & (tabIndex as text) & (ASCII character 9) & (item tabIndex of windowTabIDs as text)
+                end repeat
+            end repeat
+        end tell
+        set oldDelimiters to AppleScript's text item delimiters
+        set AppleScript's text item delimiters to linefeed
+        set joinedRows to tabRows as text
+        set AppleScript's text item delimiters to oldDelimiters
+        if joinedRows is "" then return "OK"
+        return "OK" & linefeed & joinedRows
+        """
+    }
+
+    /// One Chromium tab's share of a scan, in the same format as `scanScript`.
+    private func tabScanScript(_ browser: BrowserKind, window: Int, tab: Int) -> String {
+        """
+        set javascriptSource to "\(Self.scanJavaScript)"
+        set mediaInfo to missing value
+        tell application "\(browser.applicationName)"
+            set candidateTab to tab \(tab) of window \(window)
+            with timeout of \(Self.tabTimeoutSeconds) seconds
+                set mediaInfo to execute candidateTab javascript javascriptSource
+            end timeout
+        end tell
+        if mediaInfo is missing value or mediaInfo is "null" then return "OK"
+        return "OK" & linefeed & "\(window)" & (ASCII character 9) & "\(tab)" & (ASCII character 9) & mediaInfo
+        """
+    }
+
+    /// The opening line of a script that walks every tab: the tabs it skips.
+    private func walkPreamble(_ browser: BrowserKind) -> String {
+        browser == .safari ? "" : "set silentTabIDs to \(silentTabsLiteral(browser))"
+    }
+
+    /// The statement a walk uses to ask `candidateTab` the page for `variable`.
+    /// In a Chromium browser it raises — which the walk's `try` treats as "not
+    /// this tab" — for a tab the latest scan found silent, and bounds the send
+    /// so a tab that froze since then costs seconds rather than the full timeout.
+    private func walkEvaluate(_ browser: BrowserKind, into variable: String) -> String {
+        guard browser != .safari else {
+            return "set \(variable) to do JavaScript javascriptSource in candidateTab"
+        }
+        return """
+        set tabID to ""
+        try
+            set tabID to (id of candidateTab) as text
+        end try
+        if silentTabIDs contains tabID then error "This tab did not answer the last scan"
+        with timeout of \(Self.tabTimeoutSeconds) seconds
+            set \(variable) to execute candidateTab javascript javascriptSource
+        end timeout
+        """
+    }
+
+    /// Safari's scan: one script walks every tab. Safari does not leave tabs
+    /// unable to answer, so it keeps the single round trip.
+    private func scanScript(_ browser: BrowserKind) -> String {
+        let evaluate = "do JavaScript javascriptSource in candidateTab"
         return """
         set outputRows to {}
         set injectionWorked to false
-        set javascriptSource to "\(js)"
+        set javascriptSource to "\(Self.scanJavaScript)"
         tell application "\(browser.applicationName)"
             if not (exists front window) then return "OK"
             repeat with windowIndex from 1 to count of windows
@@ -286,6 +443,7 @@ final class BrowserMediaController: @unchecked Sendable {
             : "execute candidateTab javascript javascriptSource"
         return """
         set javascriptSource to "\(js)"
+        \(walkPreamble(candidate.browser))
         set targetFound to false
         set playbackState to "NO"
         tell application "\(candidate.browser.applicationName)"
@@ -301,7 +459,7 @@ final class BrowserMediaController: @unchecked Sendable {
                 repeat with browserWindow in windows
                     repeat with candidateTab in tabs of browserWindow
                         try
-                            set queryResult to \(evaluate)
+                            \(walkEvaluate(candidate.browser, into: "queryResult"))
                             if queryResult is not "NO" then
                                 set targetFound to true
                                 set playbackState to queryResult
@@ -346,6 +504,7 @@ final class BrowserMediaController: @unchecked Sendable {
             : "execute candidateTab javascript javascriptSource"
         return """
         set javascriptSource to "\(javascript)"
+        \(walkPreamble(candidate.browser))
         set targetFound to false
         tell application "\(candidate.browser.applicationName)"
             try
@@ -357,7 +516,7 @@ final class BrowserMediaController: @unchecked Sendable {
                 repeat with browserWindow in windows
                     repeat with candidateTab in tabs of browserWindow
                         try
-                            set actionResult to \(evaluate)
+                            \(walkEvaluate(candidate.browser, into: "actionResult"))
                             if actionResult is "MATCH" then
                                 set targetFound to true
                                 exit repeat
@@ -386,6 +545,7 @@ final class BrowserMediaController: @unchecked Sendable {
             : "execute candidateTab javascript javascriptSource"
         return """
         set javascriptSource to "\(javascript)"
+        \(walkPreamble(candidate.browser))
         set pageAnswer to "NO"
         tell application "\(candidate.browser.applicationName)"
             try
@@ -396,7 +556,7 @@ final class BrowserMediaController: @unchecked Sendable {
                 repeat with browserWindow in windows
                     repeat with candidateTab in tabs of browserWindow
                         try
-                            set pageAnswer to \(evaluate)
+                            \(walkEvaluate(candidate.browser, into: "pageAnswer"))
                             if pageAnswer is not "NO" and pageAnswer is not missing value then exit repeat
                         end try
                     end repeat
@@ -420,12 +580,13 @@ final class BrowserMediaController: @unchecked Sendable {
         """
         return """
         set javascriptSource to "\(js)"
+        \(walkPreamble(candidate.browser))
         set targetFound to false
         tell application "\(candidate.browser.applicationName)"
             repeat with browserWindow in windows
                 repeat with candidateTab in tabs of browserWindow
                     try
-                        set actionResult to \(evaluate)
+                        \(walkEvaluate(candidate.browser, into: "actionResult"))
                         if actionResult is "MATCH" then set targetFound to true
                     end try
                 end repeat
@@ -457,13 +618,14 @@ final class BrowserMediaController: @unchecked Sendable {
         """
         return """
         set javascriptSource to "\(js)"
+        \(walkPreamble(candidate.browser))
         set targetFound to false
         tell application "\(candidate.browser.applicationName)"
             repeat with browserWindow in windows
                 repeat with tabIndex from 1 to (count of tabs of browserWindow)
                     try
                         set candidateTab to tab tabIndex of browserWindow
-                        set actionResult to \(evaluate)
+                        \(walkEvaluate(candidate.browser, into: "actionResult"))
                         if actionResult is "MATCH" then set targetFound to true
                     end try
                     if targetFound then
@@ -482,6 +644,15 @@ final class BrowserMediaController: @unchecked Sendable {
         if targetFound is false then error "Selected browser media source is no longer available"
         return true
         """
+    }
+
+    /// Chromium tab ids are numbers (Arc's may be UUIDs); anything else is not
+    /// interpolated into a script.
+    private static func isValidTabID(_ value: String) -> Bool {
+        (1...64).contains(value.utf8.count) && value.utf8.allSatisfy {
+            ($0 >= 48 && $0 <= 57) || ($0 >= 65 && $0 <= 90)
+                || ($0 >= 97 && $0 <= 122) || $0 == 45
+        }
     }
 
     private static func isValidSourceID(_ value: String) -> Bool {
