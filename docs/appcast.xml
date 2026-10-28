@@ -15,6 +15,20 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.5.2</title>
+            <pubDate>Wed, 28 Oct 2026 15:29:37 +0200</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.5.2</link>
+            <sparkle:version>32</sparkle:version>
+            <sparkle:shortVersionString>1.5.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Fixed</h3>
+<ul>
+<li>Playing tabs in Chrome, Brave, Arc and Vivaldi show up in the menu again when the browser has put other background tabs to sleep. With many sleeping tabs, they could take minutes to appear, or never did.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.5.2.zip" length="2809788" type="application/octet-stream" sparkle:edSignature="jH5+NE/mpzYeFdOxk4bfas9/4+CpXk77ANeQHD1ltOynDdWnLtAZQckgUBW47eTfrWmMEsMee6Tt4cEQdWYvAA=="/>
+        </item>
+        <item>
             <title>1.5.1</title>
             <pubDate>Fri, 16 Oct 2026 19:28:44 +0300</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.5.1</link>
@@ -497,6 +511,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: WQWHbK3x1Hiq7+aAjjdr15lE+sMHh9sJJUTEkf3vHZTuejf6nNOstxSdd0rDoTH+nCj9PZ0Ew0h5k6jg5Y7MCQ==
-length: 40139
+edSignature: rz3m/v43+7XO7ncsSsAOZFWEMm5M08wcwajzlSL/2zhshw2hFxeTQZkWhNjSNURt4o9PK77Unon6fi03zii8BA==
+length: 41078
 -->
