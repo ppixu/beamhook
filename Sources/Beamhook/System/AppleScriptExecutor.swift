@@ -1,29 +1,22 @@
 import Foundation
-import OSAKit
+import CoreServices
 import BeamhookKit
 
-/// Runs AppleScript via OSAKit. Blocks the calling thread until the target
+/// Runs AppleScript via NSAppleScript. Blocks the calling thread until the target
 /// replies, so it must be driven from a `ScriptRunning` serial queue — never the
 /// main thread.
 ///
-/// Not `NSAppleScript`: every `NSAppleScript` in a process shares one AppleScript
-/// component instance, so two scripts running at once on different threads
-/// break each other — the loser fails immediately with -1751. Beamhook runs
-/// scripts on several queues at once (commands, polls, browser scans, which ask
-/// many tabs in parallel), so a scan made play/pause presses fail. Each thread
-/// here gets its own `OSALanguageInstance`, which is what makes concurrent
-/// execution safe; reusing it per thread keeps a call as cheap as before.
+/// One script at a time, process-wide. Beamhook runs scripts on several queues
+/// at once (commands, polls, browser walks), and every `NSAppleScript` in a
+/// process shares one AppleScript component instance: two running at once break
+/// each other — the loser fails immediately with -1751. 1.5.3 gave each thread
+/// its own OSAKit instance so they could truly run concurrently, and crashed on
+/// a corrupted heap during exactly that. So scripts take turns here, and the one
+/// job that needs real parallelism — asking every Chromium tab during a scan —
+/// bypasses the interpreter with `AppleEventTabEvaluator`. Each send is bounded
+/// by `timeoutSeconds`, so a wedged target delays the next script at most that.
 final class AppleScriptExecutor: ScriptExecuting {
-    private static let language = OSALanguage(forName: "AppleScript")!
-    private static let instanceKey = "com.github.ppixu.beamhook.osaLanguageInstance"
-
-    private static func threadLanguageInstance() -> OSALanguageInstance {
-        let storage = Thread.current.threadDictionary
-        if let instance = storage[instanceKey] as? OSALanguageInstance { return instance }
-        let instance = OSALanguageInstance(language: language)
-        storage[instanceKey] = instance
-        return instance
-    }
+    private static let lock = NSLock()
 
     /// Cap on how long a single send waits for the target's Apple-event reply.
     /// NSAppleScript otherwise uses the ~60s default, so one beachballing/network-
@@ -34,15 +27,88 @@ final class AppleScriptExecutor: ScriptExecuting {
 
     func run(_ source: String) -> ScriptResult {
         let bounded = "with timeout of \(Self.timeoutSeconds) seconds\n\(source)\nend timeout"
-        let script = OSAScript(source: bounded, from: nil,
-                               languageInstance: Self.threadLanguageInstance(), using: [])
-        var errorInfo: NSDictionary?
-        let descriptor = script.executeAndReturnError(&errorInfo)
-        if let errorInfo {
-            NSLog("AppleScript error: \(errorInfo)")
+        return Self.lock.withLock {
+            guard let script = NSAppleScript(source: bounded) else {
+                return ScriptResult(output: nil, succeeded: false)
+            }
+            var errorInfo: NSDictionary?
+            let descriptor = script.executeAndReturnError(&errorInfo)
+            if let errorInfo {
+                NSLog("AppleScript error: \(errorInfo)")
+                return ScriptResult(output: nil, succeeded: false)
+            }
+            return ScriptResult(output: descriptor.stringValue, succeeded: true)
+        }
+    }
+}
+
+/// Asks one Chromium tab to evaluate JavaScript. Called from many threads at once.
+protocol ChromiumTabEvaluating: Sendable {
+    /// The page's result as text — `nil` output for a `null`/`undefined` result —
+    /// or `succeeded == false` when the tab did not answer within `timeout`.
+    func evaluate(_ javascript: String, in browser: BrowserKind,
+                  window: Int, tab: Int, timeout: TimeInterval) -> ScriptResult
+}
+
+/// Sends Chromium's `execute javascript` Apple Event (`CrSu`/`ExJa`) straight
+/// to the browser, without the AppleScript interpreter. The Apple Event Manager
+/// is thread-safe, so a scan can ask every tab at once while scripts keep taking
+/// turns in `AppleScriptExecutor`. The tab is addressed as
+/// `tab <tab> of window <window>`, built from the browser's own class codes.
+struct AppleEventTabEvaluator: ChromiumTabEvaluating {
+    func evaluate(_ javascript: String, in browser: BrowserKind,
+                  window: Int, tab: Int, timeout: TimeInterval) -> ScriptResult {
+        let event = Self.executeEvent(javascript, in: browser, window: window, tab: tab)
+        do {
+            // Never interact: a frozen tab must cost its timeout, nothing more.
+            let reply = try event.sendEvent(options: [.waitForReply, .neverInteract],
+                                            timeout: timeout)
+            if let error = reply.paramDescriptor(forKeyword: AEKeyword(keyErrorNumber)),
+               error.int32Value != noErr {
+                return ScriptResult(output: nil, succeeded: false)
+            }
+            // A page answering `null` comes back as `missing value`, which has no
+            // string value — the same nil the scan script used to return as "OK".
+            let result = reply.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))
+            return ScriptResult(output: result?.stringValue, succeeded: true)
+        } catch {
             return ScriptResult(output: nil, succeeded: false)
         }
-        return ScriptResult(output: descriptor?.stringValue, succeeded: true)
+    }
+
+    static func executeEvent(_ javascript: String, in browser: BrowserKind,
+                             window: Int, tab: Int) -> NSAppleEventDescriptor {
+        // Arc's dictionary has its own window and tab classes; the command and
+        // its parameter are Chromium's in every browser.
+        let (windowClass, tabClass) = browser == .arc ? ("WiND", "tAbB") : ("cwin", "CrTb")
+        let event = NSAppleEventDescriptor.appleEvent(
+            withEventClass: code("CrSu"), eventID: code("ExJa"),
+            targetDescriptor: NSAppleEventDescriptor(bundleIdentifier: browser.bundleID),
+            returnID: AEReturnID(kAutoGenerateReturnID),
+            transactionID: AETransactionID(kAnyTransactionID))
+        let windowSpecifier = indexSpecifier(windowClass, window, in: .null())
+        event.setParam(indexSpecifier(tabClass, tab, in: windowSpecifier),
+                       forKeyword: AEKeyword(keyDirectObject))
+        event.setParam(NSAppleEventDescriptor(string: javascript), forKeyword: code("JvSc"))
+        return event
+    }
+
+    /// `<class> <index> of <container>`.
+    private static func indexSpecifier(_ desiredClass: String, _ index: Int,
+                                       in container: NSAppleEventDescriptor) -> NSAppleEventDescriptor {
+        let record = NSAppleEventDescriptor.record()
+        record.setDescriptor(NSAppleEventDescriptor(typeCode: code(desiredClass)),
+                             forKeyword: AEKeyword(keyAEDesiredClass))
+        record.setDescriptor(NSAppleEventDescriptor(enumCode: OSType(formAbsolutePosition)),
+                             forKeyword: AEKeyword(keyAEKeyForm))
+        record.setDescriptor(NSAppleEventDescriptor(int32: Int32(index)),
+                             forKeyword: AEKeyword(keyAEKeyData))
+        record.setDescriptor(container, forKeyword: AEKeyword(keyAEContainer))
+        return record.coerce(toDescriptorType: DescType(typeObjectSpecifier))!
+    }
+
+    private static func code(_ fourCharacters: String) -> FourCharCode {
+        fourCharacters.utf8.reduce(0) { $0 << 8 | FourCharCode($1) }
     }
 }
 
@@ -125,13 +191,15 @@ struct BrowserMediaScan: Sendable {
 /// frozen tab never answers `execute javascript`: every call to one waits out
 /// its whole AppleEvent timeout. Walking a few dozen tabs one after another at
 /// 5 s apiece took minutes, so playing tabs never reached the menu. Chromium
-/// scans therefore ask every tab at once, each call bounded by
+/// scans therefore ask every tab at once — as direct Apple Events through
+/// `tabEvaluator`, never as scripts — each call bounded by
 /// `tabTimeoutSeconds`, and remember which tabs stayed silent so the all-tab
 /// walks (selection, focus, the identity fallbacks) step over them. A frozen
 /// tab cannot be playing — Chrome never freezes an audible one — and the next
 /// scan asks it again, so a tab the user revives is found.
 final class BrowserMediaController: @unchecked Sendable {
     private let executor: ScriptExecuting
+    private let tabEvaluator: ChromiumTabEvaluating
     private static let tabTimeoutSeconds = 2
     /// How many tabs a Chromium scan asks at once. Chrome answers concurrent
     /// sends independently, so a silent tab only holds up its own thread.
@@ -154,8 +222,10 @@ final class BrowserMediaController: @unchecked Sendable {
         let volume: Int?
     }
 
-    init(executor: ScriptExecuting = AppleScriptExecutor()) {
+    init(executor: ScriptExecuting = AppleScriptExecutor(),
+         tabEvaluator: ChromiumTabEvaluating = AppleEventTabEvaluator()) {
         self.executor = executor
+        self.tabEvaluator = tabEvaluator
     }
 
     func scan(_ browser: BrowserKind) -> BrowserMediaScan {
@@ -185,19 +255,26 @@ final class BrowserMediaController: @unchecked Sendable {
             return BrowserMediaScan(injectionAvailable: true, candidates: [])
         }
 
-        let answers = Self.concurrentMap(tabs.count, width: Self.scanWidth) { [self] index in
-            executor.run(tabScanScript(browser, window: tabs[index].window, tab: tabs[index].tab))
+        let answers = Self.concurrentMap(tabs.count, width: Self.scanWidth) { [tabEvaluator] index in
+            tabEvaluator.evaluate(Self.scanJavaScript, in: browser,
+                                  window: tabs[index].window, tab: tabs[index].tab,
+                                  timeout: TimeInterval(Self.tabTimeoutSeconds))
         }
         var silent: [String] = []
         var answered = false
         var candidates: [BrowserMediaCandidate] = []
         for (tab, answer) in zip(tabs, answers) {
-            guard answer.succeeded, let output = answer.output, output.hasPrefix("OK") else {
+            guard answer.succeeded else {
                 if Self.isValidTabID(tab.id) { silent.append(tab.id) }
                 continue
             }
             answered = true
-            candidates += self.candidates(from: output, browser: browser)
+            // A page without media answers `null`.
+            guard let json = answer.output, json != "null",
+                  let candidate = candidate(fromJSON: json, browser: browser,
+                                            window: tab.window, tab: tab.tab)
+            else { continue }
+            candidates.append(candidate)
         }
         setSilentTabIDs(silent, for: browser)
         // As before, a browser counts as scriptable once any one tab answered.
@@ -210,23 +287,29 @@ final class BrowserMediaController: @unchecked Sendable {
         let rows = output.split(separator: "\n", omittingEmptySubsequences: true).dropFirst()
         return rows.compactMap { row -> BrowserMediaCandidate? in
             let fields = row.split(separator: "\t", maxSplits: 2, omittingEmptySubsequences: false)
-            guard fields.count == 3,
-                  let window = Int(fields[0]), let tab = Int(fields[1]),
-                  let data = String(fields[2]).data(using: .utf8),
-                  let payload = try? JSONDecoder().decode(Payload.self, from: data),
-                  Self.isValidSourceID(payload.sourceID)
-            else { return nil }
-            // Positions are retained only as a fast-path cache. Every later action
-            // validates the page-owned source id before using them.
-            return BrowserMediaCandidate(
-                browser: browser, sourceID: payload.sourceID,
-                windowIndex: window, tabIndex: tab,
-                title: payload.title, artist: payload.artist,
-                host: payload.host ?? "",
-                isPlaying: payload.playing, isSelected: payload.selected,
-                supportsTransport: !payload.live,
-                volume: payload.volume.map { min(max($0, 0), 100) })
+            guard fields.count == 3, let window = Int(fields[0]), let tab = Int(fields[1]) else {
+                return nil
+            }
+            return candidate(fromJSON: String(fields[2]), browser: browser, window: window, tab: tab)
         }
+    }
+
+    /// One page's scan answer, as produced by `scanJavaScript`.
+    private func candidate(fromJSON json: String, browser: BrowserKind,
+                           window: Int, tab: Int) -> BrowserMediaCandidate? {
+        guard let payload = try? JSONDecoder().decode(Payload.self, from: Data(json.utf8)),
+              Self.isValidSourceID(payload.sourceID)
+        else { return nil }
+        // Positions are retained only as a fast-path cache. Every later action
+        // validates the page-owned source id before using them.
+        return BrowserMediaCandidate(
+            browser: browser, sourceID: payload.sourceID,
+            windowIndex: window, tabIndex: tab,
+            title: payload.title, artist: payload.artist,
+            host: payload.host ?? "",
+            isPlaying: payload.playing, isSelected: payload.selected,
+            supportsTransport: !payload.live,
+            volume: payload.volume.map { min(max($0, 0), 100) })
     }
 
     private func setSilentTabIDs(_ ids: [String], for browser: BrowserKind) {
@@ -360,22 +443,6 @@ final class BrowserMediaController: @unchecked Sendable {
         set AppleScript's text item delimiters to oldDelimiters
         if joinedRows is "" then return "OK"
         return "OK" & linefeed & joinedRows
-        """
-    }
-
-    /// One Chromium tab's share of a scan, in the same format as `scanScript`.
-    private func tabScanScript(_ browser: BrowserKind, window: Int, tab: Int) -> String {
-        """
-        set javascriptSource to "\(Self.scanJavaScript)"
-        set mediaInfo to missing value
-        tell application "\(browser.applicationName)"
-            set candidateTab to tab \(tab) of window \(window)
-            with timeout of \(Self.tabTimeoutSeconds) seconds
-                set mediaInfo to execute candidateTab javascript javascriptSource
-            end timeout
-        end tell
-        if mediaInfo is missing value or mediaInfo is "null" then return "OK"
-        return "OK" & linefeed & "\(window)" & (ASCII character 9) & "\(tab)" & (ASCII character 9) & mediaInfo
         """
     }
 
