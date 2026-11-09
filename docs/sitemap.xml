@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://beamhook.app/</loc>
-    <lastmod>2026-10-30</lastmod>
+    <lastmod>2026-11-09</lastmod>
     <changefreq>monthly</changefreq>
     <priority>1.0</priority>
   </url>
@@ -20,6 +20,10 @@
   </url>
   <url>
     <loc>https://beamhook.app/per-app-volume-mac/</loc>
-    <lastmod>2026-10-04</lastmod>
+    <lastmod>2026-11-09</lastmod>
+  </url>
+  <url>
+    <loc>https://beamhook.app/mute-ai-agent-browser/</loc>
+    <lastmod>2026-11-09</lastmod>
   </url>
 </urlset>

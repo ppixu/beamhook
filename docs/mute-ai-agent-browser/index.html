@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mute the browser your AI coding agent tests in — Beamhook</title>
+<meta name="description" content="Claude, Codex or Gemini keeps reloading a page or video with sound? Mute that browser or tab on your Mac with Beamhook and keep your own music playing.">
+<link rel="canonical" href="https://beamhook.app/mute-ai-agent-browser/">
+<link rel="icon" type="image/png" href="/icon.png">
+<meta property="og:type" content="article"><meta property="og:site_name" content="Beamhook">
+<meta property="og:title" content="Mute the browser your AI coding agent tests in — Beamhook">
+<meta property="og:description" content="Your agent tests the page. You keep the music. Mute the browser Claude, Codex or Gemini drives, and leave everything else alone.">
+<meta property="og:url" content="https://beamhook.app/mute-ai-agent-browser/"><meta property="og:image" content="https://beamhook.app/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "How do I mute the browser Claude, Codex or Gemini is testing in?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Open Beamhook in the menu bar and click the speaker next to that browser. Everything the browser plays goes silent, even after reloads, and your music in other apps keeps playing. To mute only the agent’s tab, use the tab row under the browser instead."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I mute just the tab an AI agent opened, not my whole browser?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, in Safari, Chrome, Brave, Arc and Vivaldi, after you turn on Allow JavaScript from Apple Events. A tab row sets the volume of the page’s audio and video elements. Reloading the page or opening a new one plays at full volume again, and Web Audio sounds aren’t covered, so for an agent that reloads often, mute the whole browser."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "How do I mute the Claude desktop app’s built-in browser?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Its sound plays through the Claude app, so mute the Claude row in Beamhook. That also silences the app’s own sounds while it’s muted."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Why do my media keys pause the test page instead of my music?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "macOS sends play/pause to whatever played last, and a test page that plays video becomes that app. Hook the media keys to your music player in Beamhook, and play/pause, next, previous and headphone buttons keep going to it."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does Beamhook work with Firefox?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Browser and tab controls work with Safari, Chrome, Brave, Arc and Vivaldi."
+      }
+    }
+  ]
+}
+</script>
+<style>
+  :root{
+    color-scheme:light dark;
+    --paper:#ffffff; --ink:#0b0b0b; --soft:#5f5f5f; --faint:#9a9a9a; --line:#e7e7e7;
+    --sel:#007aff;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --paper:#0a0a0a; --ink:#f1f1f1; --soft:#9a9a9a; --faint:#5f5f5f; --line:#232323; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;line-height:1.6}
+  @media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} }
+
+  .wrap{max-width:640px;margin:0 auto;padding:38px 22px 72px}
+  .back{display:inline-block;font-size:.92rem;color:var(--soft);text-decoration:none;margin-bottom:34px}
+  .back:hover{color:var(--ink)}
+
+  h1{font-size:2rem;font-weight:800;letter-spacing:-.03em;line-height:1.15;margin:0 0 10px;text-wrap:balance}
+  .tag{font-size:1.08rem;color:var(--soft);margin:0 0 30px}
+  h2{font-size:1.28rem;font-weight:700;letter-spacing:-.02em;margin:44px 0 6px;
+    padding-top:26px;border-top:1px solid var(--line)}
+  h2:first-of-type{border-top:none;padding-top:0}
+  h3{font-size:1rem;font-weight:700;margin:26px 0 8px}
+  p{margin:0 0 16px}
+  a{color:var(--ink);text-decoration:none;border-bottom:1px solid var(--line);transition:border-color .15s}
+  a:hover{border-color:var(--ink)}
+  kbd{font-family:var(--mono);font-size:.86em;background:var(--line);border-radius:4px;padding:1px 5px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--line);border-radius:4px;padding:1px 5px;
+    overflow-wrap:anywhere}
+  .path{font-weight:600}
+  ul{margin:0 0 16px;padding-left:20px}
+  li{margin:0 0 10px}
+  .note{font-size:.92rem;color:var(--soft);border-left:2px solid var(--line);padding-left:14px;margin:0 0 16px}
+  .answer{font-size:1.05rem;background:var(--line);border-radius:10px;padding:16px 18px;margin:0 0 28px}
+  .answer p:last-child{margin-bottom:0}
+  .cta{margin:30px 0 0;padding-top:26px;border-top:1px solid var(--line)}
+  .cta a.primary{display:inline-block;background:var(--ink);color:var(--paper);border:none;
+    border-radius:9px;padding:11px 18px;font-weight:600;font-size:.98rem;margin:0 8px 10px 0}
+  .cta a.primary:hover{opacity:.85}
+  .foot{margin-top:52px;padding-top:22px;border-top:1px solid var(--line);
+    font-size:.9rem;color:var(--soft)}
+  .foot a{margin-right:16px}
+
+ol{padding-left:22px}.author{margin-top:32px;font-size:.92rem;color:var(--soft)}</style><script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Beamhook",
+      "item": "https://beamhook.app/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Mute an AI agent’s browser",
+      "item": "https://beamhook.app/mute-ai-agent-browser/"
+    }
+  ]
+}
+</script>
+</head><body><main class="wrap">
+<nav class="back" aria-label="Breadcrumb"><a href="/">Beamhook</a> / <span aria-current="page">Mute an AI agent’s browser</span></nav>
+<h1>Mute the browser your AI coding agent tests in</h1>
+<p class="tag">Your agent tests the page. You keep the music.</p>
+<div class="answer"><p>When Claude, Codex or Gemini works on a site, a game or a video with sound, every reload plays it again. Beamhook gives each app and browser tab its own mute button in the menu bar. Mute the browser the agent drives, and Spotify, Music or a call keeps playing at its normal level.</p></div>
+
+<h2>Mute the agent’s browser</h2>
+<ol><li>Open Beamhook on macOS 14.2 or later. Allow System Audio Recording when asked.</li><li>Let the agent load the page once, so its browser shows up in the Beamhook menu.</li><li>Click the speaker next to that browser. It stays muted through reloads and new pages, and Beamhook remembers the setting.</li></ol>
+<p>This works best when the agent has a browser to itself. For example, let Claude in Chrome, Codex or Gemini CLI with Chrome DevTools MCP use Chrome, and listen to your own audio in Safari or the Spotify app. Muting Chrome then leaves your audio alone.</p>
+
+<h2>Or mute just one tab</h2>
+<p>If you and the agent share a browser, the rows under the browser control single tabs in Safari, Chrome, Brave, Arc and Vivaldi. Turn on <a href="/help/">Allow JavaScript from Apple Events</a> first.</p>
+<p class="note">A tab row sets the volume of the page’s audio and video elements. Reloading the page or opening a new one plays at full volume again, and Web Audio sounds aren’t covered. If the agent reloads often, mute the whole browser instead.</p>
+
+<h2>Agents with a built-in browser</h2>
+<p>A browser pane inside an agent’s desktop app, like the one in the Claude desktop app, plays through that app. Mute the app’s row in Beamhook. That also silences the app’s own sounds while it’s muted.</p>
+
+<h2>Keep play/pause on your music</h2>
+<p>macOS sends the media keys to whatever played last. Once a test page plays a video, play/pause can pause that page instead of your music. <a href="/media-keys-wrong-app/">Hook your media keys</a> to Spotify, Music or a browser tab, and play/pause, next, previous and headphone buttons keep going there.</p>
+
+<h2>From the keyboard</h2>
+<p>Press <kbd>⌘</kbd> + a volume key to open the source list, pick the agent’s browser or tab with <kbd>⌘↑</kbd> / <kbd>⌘↓</kbd>, and press <kbd>⌘</kbd> + Mute to mute it or bring it back. All shortcuts are listed under <a href="/help/#volume-controls">volume and mute shortcuts</a>.</p>
+
+<h2>FAQ</h2>
+<h3>How do I mute the browser Claude, Codex or Gemini is testing in?</h3><p>Open Beamhook in the menu bar and click the speaker next to that browser. Everything the browser plays goes silent, even after reloads, and your music in other apps keeps playing. To mute only the agent’s tab, use the tab row under the browser instead.</p>
+<h3>Can I mute just the tab an AI agent opened, not my whole browser?</h3><p>Yes, in Safari, Chrome, Brave, Arc and Vivaldi, after you turn on Allow JavaScript from Apple Events. A tab row sets the volume of the page’s audio and video elements. Reloading the page or opening a new one plays at full volume again, and Web Audio sounds aren’t covered, so for an agent that reloads often, mute the whole browser.</p>
+<h3>How do I mute the Claude desktop app’s built-in browser?</h3><p>Its sound plays through the Claude app, so mute the Claude row in Beamhook. That also silences the app’s own sounds while it’s muted.</p>
+<h3>Why do my media keys pause the test page instead of my music?</h3><p>macOS sends play/pause to whatever played last, and a test page that plays video becomes that app. Hook the media keys to your music player in Beamhook, and play/pause, next, previous and headphone buttons keep going to it.</p>
+<h3>Does Beamhook work with Firefox?</h3><p>No. Browser and tab controls work with Safari, Chrome, Brave, Arc and Vivaldi.</p>
+
+<div class="cta"><a class="primary" href="https://ppixu.gumroad.com/l/beamhook">Get the signed build — €5</a><a class="primary" href="https://github.com/ppixu/beamhook">Build it free</a><p>One purchase includes all 1.x updates. More on <a href="/per-app-volume-mac/">per-app volume on Mac</a>.</p></div>
+<p class="author">Made by <a href="https://github.com/ppixu" rel="author">Olli Pikkarainen (ppixu)</a>. Claude, Codex and Gemini are trademarks of their owners. Beamhook isn’t affiliated with them. <a href="https://github.com/ppixu/beamhook">The source is on GitHub</a>.</p><footer class="foot"><a href="/">Beamhook</a><a href="/help/">Setup and help</a><a href="/per-app-volume-mac/">Per-app volume</a><a href="/media-keys-wrong-app/">Media keys guide</a></footer>
+</main></body></html>
