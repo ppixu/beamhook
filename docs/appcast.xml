@@ -15,6 +15,20 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.5.5</title>
+            <pubDate>Fri, 13 Nov 2026 11:26:31 +0200</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.5.5</link>
+            <sparkle:version>35</sparkle:version>
+            <sparkle:shortVersionString>1.5.5</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Changed</h3>
+<ul>
+<li>The play/pause, volume and source-picker overlays use the same clear Liquid Glass as the macOS volume overlay, instead of a flat grey panel, with smoother rounded corners.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.5.5.zip" length="2818321" type="application/octet-stream" sparkle:edSignature="+BZNfN90Zf70CTEPUrX9o9dReB4hbntkGS6z+V+uHR13htHl245S7Ql6ZsyT/UHjnigSZ08bihYL8TahPKPLDA=="/>
+        </item>
+        <item>
             <title>1.5.4</title>
             <pubDate>Fri, 30 Oct 2026 12:31:40 +0200</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.5.4</link>
@@ -539,6 +553,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: Ajdj9EoOovGKVk+MpiyX9fyb7GzUWb7ro01bSb3cGVDnp3HvmkOsUnqzpB8+Yu6YTea18gpPx689iFQh2uRmDg==
-length: 42888
+edSignature: uLNupuJtA8WDPjUry2yQmdvi8sVPTygr/pk5NSd0yjuwpBAECgT5qQHmC8q7dLsPtFo5d6hT6A+SszJ18NuoAw==
+length: 43797
 -->

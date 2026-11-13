@@ -4,6 +4,14 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.5.5] — 2026-11-13
+
+### Changed
+
+- The play/pause, volume and source-picker overlays use the same clear Liquid
+  Glass as the macOS volume overlay, instead of a flat grey panel, with
+  smoother rounded corners.
+
 ## [1.5.4] — 2026-10-30
 
 ### Fixed
