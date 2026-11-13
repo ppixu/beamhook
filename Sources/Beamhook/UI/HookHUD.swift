@@ -650,17 +650,25 @@ final class HookHUD {
         // mode, white in dark mode. The glass's contrasting tint is separate.
         trackSubtitle?.textColor = (systemUsesDarkColors ? NSColor.white : NSColor.black)
             .withAlphaComponent(0.5)
+        // No glass tint. The system HUDs use untinted glass, and a tint layer
+        // sits over the whole glass stack: at the 52% we used to apply, it
+        // flattened the refraction and the specular rim into a uniform grey
+        // slab with a hard dark outline, which read as un-smoothed corners.
         if #available(macOS 26.0, *),
-           let glass = panel.contentView as? NSGlassEffectView {
-            // Glass remains backdrop-adaptive even with a forced appearance, so
-            // explicitly bias it toward the opposite luminance as well.
-            let tint = (systemUsesDarkColors ? NSColor.white : NSColor.black)
-                .withAlphaComponent(0.52)
-            if glass.tintColor?.isEqual(tint) != true {
-                glass.tintColor = tint
-            }
+           let glass = panel.contentView as? NSGlassEffectView,
+           glass.tintColor != nil {
+            glass.tintColor = nil
         }
     }
+
+    /// Outer corner radius of the glass. Measured against the macOS volume
+    /// HUD: its corner curve runs ~21-22 pt along each edge, which the glass's
+    /// continuous corner produces at about 26 (24 gave a visibly tighter turn).
+    static let glassCornerRadius: CGFloat = 26
+    /// The glass content's horizontal inset; picker rows sit this far inside
+    /// the glass edge, so their radius is `glassCornerRadius - contentInset`
+    /// to stay concentric with it.
+    static let contentInset: CGFloat = 12
 
     private func ensurePanel() -> NSPanel {
         if let panel {
@@ -804,19 +812,19 @@ final class HookHUD {
             bar.heightAnchor.constraint(equalToConstant: 7),
             loudSpeaker.widthAnchor.constraint(equalToConstant: 22),
             loudSpeaker.heightAnchor.constraint(equalToConstant: 20),
-            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
-            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12),
+            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: Self.contentInset),
+            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -Self.contentInset),
             stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 14),
             stack.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -14),
         ])
 
         let chrome: NSView
         if #available(macOS 26.0, *) {
-            // Keep the system's regular optical treatment; applyContrastingAppearance
-            // supplies the opposite light/dark tint after this becomes contentView.
+            // The system's regular, untinted glass, like the native HUDs; see
+            // applyContrastingAppearance for why there is no tint.
             let glass = NSGlassEffectView()
             glass.style = .regular
-            glass.cornerRadius = 24
+            glass.cornerRadius = Self.glassCornerRadius
             glass.contentView = content
             chrome = glass
             // Liquid Glass supplies its own adaptive shadow and rim. A second
@@ -827,7 +835,7 @@ final class HookHUD {
             frosted.material = .hudWindow
             frosted.blendingMode = .behindWindow
             frosted.state = .active
-            frosted.maskImage = Self.roundedMask(radius: 24)
+            frosted.maskImage = Self.roundedMask(radius: Self.glassCornerRadius)
             content.frame = frosted.bounds
             content.autoresizingMask = [.width, .height]
             frosted.addSubview(content)
@@ -1027,9 +1035,13 @@ final class HookHUD {
         line.spacing = 6
         line.edgeInsets = NSEdgeInsets(top: row.indented ? 6 : 12, left: row.indented ? 24 : 8, bottom: row.indented ? 6 : 12, right: 12)
         line.wantsLayer = true
-        // Tab rows are ~32 pt tall; 18 would exceed half their height and pinch
-        // the highlight's ends, so keep the same proportion as the app rows.
-        line.layer?.cornerRadius = row.indented ? 12 : 18
+        // App rows are concentric with the glass (they sit `contentInset` in
+        // from its edge). A continuous corner runs ~1.53× its radius along
+        // each edge, so it only keeps its smooth shape while 2 × 1.53 × radius
+        // fits the row height: ≤ 14 for the 44 pt app rows, ≤ 10 for the
+        // 32 pt tab rows. The old 18 / 12 overshot that and Core Animation
+        // pinched the ends into lumpy half-pills.
+        line.layer?.cornerRadius = row.indented ? 10 : Self.glassCornerRadius - Self.contentInset
         line.layer?.cornerCurve = .continuous
         let dark = panel?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         if selected {
