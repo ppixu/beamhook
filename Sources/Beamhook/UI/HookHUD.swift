@@ -242,6 +242,11 @@ final class HookHUD {
     private var sourceScroll: NSScrollView?
     private var sourceHeight: NSLayoutConstraint?
     private var box: NSView?
+    /// The SwiftUI glass's corner radius; nil on the pre-26 frosted fallback.
+    private var glassShape: HUDGlassShape?
+    /// Transparent border between the window edge and the glass, so the
+    /// glass's rim isn't clipped. Zero for the frosted fallback.
+    private var margin: CGFloat { glassShape == nil ? 0 : Self.glassMargin }
     /// The padded stack inside the chrome; its fitting size drives the panel size.
     private var content: NSView?
     private var hideWork: DispatchWorkItem?
@@ -254,7 +259,7 @@ final class HookHUD {
     func prewarm(completion: @escaping @MainActor () -> Void) {
         observeSystemAppearance()
         let panel = ensurePanel()
-        if #available(macOS 26.0, *), box is NSGlassEffectView {
+        if glassShape != nil {
             panel.alphaValue = 1
             parkOffscreen(panel)
             panel.orderFrontRegardless()
@@ -343,9 +348,23 @@ final class HookHUD {
         guard generation == expected, let panel, panel.isVisible else { return }
         trackSubtitle?.stringValue = text
         trackSubtitle?.isHidden = text.isEmpty
-        content?.layoutSubtreeIfNeeded()
-        if let fitting = content?.fittingSize { panel.setContentSize(fitting) }
+        resizeToContent(panel, picker: false)
         position(panel)
+    }
+
+    /// Fit the panel to its content and give the glass the radius that height
+    /// can carry (see `glassCornerRadius(forHeight:picker:)`).
+    private func resizeToContent(_ panel: NSPanel, picker: Bool) {
+        guard let content else { return }
+        content.layoutSubtreeIfNeeded()
+        let size = content.fittingSize
+        panel.setContentSize(NSSize(width: size.width + 2 * margin, height: size.height + 2 * margin))
+        let radius = Self.glassCornerRadius(forHeight: size.height, picker: picker)
+        if let glassShape {
+            if glassShape.radius != radius { glassShape.radius = radius }
+        } else if let frosted = box as? NSVisualEffectView {
+            frosted.maskImage = Self.roundedMask(radius: radius)
+        }
     }
 
     /// Explain a play/pause press that macOS routed instead of Beamhook.
@@ -499,8 +518,9 @@ final class HookHUD {
         }
 
         // Size the window to the (variable-width) content, then anchor it.
-        content?.layoutSubtreeIfNeeded()
-        if let fitting = content?.fittingSize { panel.setContentSize(fitting) }
+        let isPicker: Bool
+        if case .volumeSources = presentation { isPicker = true } else { isPicker = false }
+        resizeToContent(panel, picker: isPicker)
         position(panel)
         if case .volumeSources(_, let selectedIndex) = presentation,
            let sourceList, sourceList.arrangedSubviews.indices.contains(selectedIndex) {
@@ -540,8 +560,18 @@ final class HookHUD {
         return (anchor, screen)
     }
 
+    /// Places the *glass* (the window minus its transparent `margin`) where
+    /// the HUD belongs, then shifts the window out by that margin.
     private func position(_ panel: NSPanel) {
-        let size = panel.frame.size
+        let inset = self.margin
+        let visible = NSSize(width: panel.frame.width - 2 * inset,
+                             height: panel.frame.height - 2 * inset)
+        placeGlass(size: visible) { origin in
+            panel.setFrameOrigin(NSPoint(x: origin.x - inset, y: origin.y - inset))
+        }
+    }
+
+    private func placeGlass(size: NSSize, at setOrigin: (NSPoint) -> Void) {
         let gap: CGFloat = 6, margin: CGFloat = 10
 
         if let popover = menuPopoverFrame?(),
@@ -553,7 +583,7 @@ final class HookHUD {
                 : min(right, screen.frame.maxX - size.width - margin)
             let y = min(popover.maxY - size.height,
                         screen.frame.maxY - size.height - margin)
-            panel.setFrameOrigin(NSPoint(x: x, y: y))
+            setOrigin(NSPoint(x: x, y: y))
             return
         }
 
@@ -561,10 +591,10 @@ final class HookHUD {
             var x = anchor.midX - size.width / 2
             let y = anchor.minY - gap - size.height   // just below the menu bar
             x = min(max(x, screen.frame.minX + margin), screen.frame.maxX - size.width - margin)
-            panel.setFrameOrigin(NSPoint(x: x, y: y))
+            setOrigin(NSPoint(x: x, y: y))
         } else if let f = (NSScreen.main ?? NSScreen.screens.first)?.frame {
             // Fallback: top-right, just under the menu bar (where the item lives).
-            panel.setFrameOrigin(NSPoint(x: f.maxX - size.width - 16, y: f.maxY - size.height - 32 - gap))
+            setOrigin(NSPoint(x: f.maxX - size.width - 16, y: f.maxY - size.height - 32 - gap))
         }
     }
 
@@ -602,7 +632,7 @@ final class HookHUD {
 
     private func rebuildIfAppearanceChanged() {
         guard let panel,
-              panel.appearance?.name != Self.contrastingAppearance().name
+              panel.appearance?.name != Self.hudAppearance().name
         else { return }
         hideWork?.cancel()
         commandReleaseTimer?.invalidate()
@@ -620,16 +650,25 @@ final class HookHUD {
         prewarm {}
     }
 
-    /// The opposite of the system appearance, keeping high contrast, plus
-    /// whether the system itself is dark.
-    private static func contrastingAppearance()
+    /// The HUD's appearance, plus whether the system itself is dark.
+    ///
+    /// With Liquid Glass (macOS 26+) the HUD follows the system appearance,
+    /// like the native volume HUD. Forcing the opposite one, as earlier builds
+    /// did, rendered light glass in dark mode and dark in light: a flat slab
+    /// that never looked like the system's own glass. The pre-26 frosted
+    /// `.hudWindow` fallback keeps the contrasting look it was designed with.
+    /// High-contrast preferences are preserved either way.
+    private static func hudAppearance()
         -> (name: NSAppearance.Name, systemUsesDarkColors: Bool) {
-        switch NSApp.effectiveAppearance.bestMatch(from: [
+        let system = NSApp.effectiveAppearance.bestMatch(from: [
             .aqua,
             .darkAqua,
             .accessibilityHighContrastAqua,
             .accessibilityHighContrastDarkAqua,
-        ]) {
+        ]) ?? .aqua
+        let dark = system == .darkAqua || system == .accessibilityHighContrastDarkAqua
+        if #available(macOS 26.0, *) { return (system, dark) }
+        switch system {
         case .darkAqua: return (.aqua, true)
         case .accessibilityHighContrastDarkAqua: return (.accessibilityHighContrastAqua, true)
         case .accessibilityHighContrastAqua: return (.accessibilityHighContrastDarkAqua, false)
@@ -637,23 +676,20 @@ final class HookHUD {
         }
     }
 
-    /// Use the opposite of the system appearance so the HUD stands apart from
-    /// the desktop while preserving the user's high-contrast preference.
-    private func applyContrastingAppearance(to panel: NSPanel) {
-        let (contrastingAppearance, systemUsesDarkColors) = Self.contrastingAppearance()
+    private func applyHUDAppearance(to panel: NSPanel) {
+        let (appearance, systemUsesDarkColors) = Self.hudAppearance()
         // Reassigning an identical appearance makes Liquid Glass rebuild its
         // backdrop, producing a black first frame on the launch notification.
-        if panel.appearance?.name != contrastingAppearance {
-            panel.appearance = NSAppearance(named: contrastingAppearance)
+        if panel.appearance?.name != appearance {
+            panel.appearance = NSAppearance(named: appearance)
         }
         // The subtitle follows the system theme: half-opacity black in light
-        // mode, white in dark mode. The glass's contrasting tint is separate.
+        // mode, white in dark mode.
         trackSubtitle?.textColor = (systemUsesDarkColors ? NSColor.white : NSColor.black)
             .withAlphaComponent(0.5)
-        // No glass tint. The system HUDs use untinted glass, and a tint layer
-        // sits over the whole glass stack: at the 52% we used to apply, it
-        // flattened the refraction and the specular rim into a uniform grey
-        // slab with a hard dark outline, which read as un-smoothed corners.
+        // Clear, untinted glass. A tint layer sits over the whole glass stack:
+        // at the 52% earlier builds applied it flattened the refraction and the
+        // specular rim into a uniform grey slab with a hard dark outline.
         if #available(macOS 26.0, *),
            let glass = panel.contentView as? NSGlassEffectView,
            glass.tintColor != nil {
@@ -661,18 +697,32 @@ final class HookHUD {
         }
     }
 
-    /// Outer corner radius of the glass. Measured against the macOS volume
-    /// HUD: its corner curve runs ~21-22 pt along each edge, which the glass's
-    /// continuous corner produces at about 26 (24 gave a visibly tighter turn).
-    static let glassCornerRadius: CGFloat = 26
-    /// The glass content's horizontal inset; picker rows sit this far inside
-    /// the glass edge, so their radius is `glassCornerRadius - contentInset`
-    /// to stay concentric with it.
+    /// Corner radius of the one- and two-line HUDs (play/pause, volume, hooked…).
+    /// The macOS volume HUD's corner is a circular arc of ~21 pt on a ~61 pt
+    /// HUD; this one is ~62 pt tall.
+    static let compactCornerRadius: CGFloat = 21
+    /// Corner radius of the taller source picker.
+    static let pickerCornerRadius: CGFloat = 24
+    /// Transparent space between the window edge and the glass.
+    static let glassMargin: CGFloat = 10
+
+    /// The glass radius for a glass `height` points tall.
+    ///
+    /// The corner is circular, like the system HUDs'. NSGlassEffectView only
+    /// draws a continuous corner, whose curve runs ~1.53 × the radius along
+    /// each edge; on a ~62 pt HUD anything past ~20 overran the height and
+    /// collapsed into a straight 45° chamfer (1.5.5 shipped 26), and anything
+    /// under it read too tight. A circular corner only needs radius ≤ height / 2.
+    static func glassCornerRadius(forHeight height: CGFloat, picker: Bool) -> CGFloat {
+        min(picker ? pickerCornerRadius : compactCornerRadius, (height / 2).rounded(.down))
+    }
+
+    /// The glass content's horizontal inset.
     static let contentInset: CGFloat = 12
 
     private func ensurePanel() -> NSPanel {
         if let panel {
-            applyContrastingAppearance(to: panel)
+            applyHUDAppearance(to: panel)
             return panel
         }
 
@@ -820,13 +870,24 @@ final class HookHUD {
 
         let chrome: NSView
         if #available(macOS 26.0, *) {
-            // The system's regular, untinted glass, like the native HUDs; see
-            // applyContrastingAppearance for why there is no tint.
-            let glass = NSGlassEffectView()
-            glass.style = .regular
-            glass.cornerRadius = Self.glassCornerRadius
-            glass.contentView = content
-            chrome = glass
+            // SwiftUI glass behind the AppKit content, not NSGlassEffectView:
+            // the native HUDs use a *circular* corner and NSGlassEffectView can
+            // only draw a continuous one (see glassCornerRadius). The window is
+            // `glassMargin` larger than the glass on every side, because the
+            // glass draws its rim and lensing slightly outside its shape and a
+            // window the size of the shape shaved 1–2 px off every edge.
+            let shape = HUDGlassShape(radius: Self.compactCornerRadius)
+            let container = NSView(frame: NSRect(origin: .zero, size: panel.frame.size))
+            let host = NSHostingView(rootView: HUDGlassBackground(shape: shape, margin: Self.glassMargin))
+            host.sizingOptions = []
+            host.frame = container.bounds
+            host.autoresizingMask = [.width, .height]
+            container.addSubview(host)
+            content.frame = container.bounds.insetBy(dx: Self.glassMargin, dy: Self.glassMargin)
+            content.autoresizingMask = [.width, .height]
+            container.addSubview(content)
+            chrome = container
+            glassShape = shape
             // Liquid Glass supplies its own adaptive shadow and rim. A second
             // NSWindow shadow produces the heavy outline seen in earlier builds.
             panel.hasShadow = false
@@ -835,7 +896,7 @@ final class HookHUD {
             frosted.material = .hudWindow
             frosted.blendingMode = .behindWindow
             frosted.state = .active
-            frosted.maskImage = Self.roundedMask(radius: Self.glassCornerRadius)
+            frosted.maskImage = Self.roundedMask(radius: Self.compactCornerRadius)
             content.frame = frosted.bounds
             content.autoresizingMask = [.width, .height]
             frosted.addSubview(content)
@@ -844,7 +905,7 @@ final class HookHUD {
 
         panel.contentView = chrome
         self.trackSubtitle = subtitle
-        applyContrastingAppearance(to: panel)
+        applyHUDAppearance(to: panel)
         self.panel = panel
         self.label = text
         self.header = header
@@ -1035,22 +1096,22 @@ final class HookHUD {
         line.spacing = 6
         line.edgeInsets = NSEdgeInsets(top: row.indented ? 6 : 12, left: row.indented ? 24 : 8, bottom: row.indented ? 6 : 12, right: 12)
         line.wantsLayer = true
-        // App rows are concentric with the glass (they sit `contentInset` in
-        // from its edge). A continuous corner runs ~1.53× its radius along
-        // each edge, so it only keeps its smooth shape while 2 × 1.53 × radius
-        // fits the row height: ≤ 14 for the 44 pt app rows, ≤ 10 for the
-        // 32 pt tab rows. The old 18 / 12 overshot that and Core Animation
-        // pinched the ends into lumpy half-pills.
-        line.layer?.cornerRadius = row.indented ? 10 : Self.glassCornerRadius - Self.contentInset
+        // App rows are concentric with the picker's glass (they sit
+        // `contentInset` in from its edge). A continuous corner runs ~1.53×
+        // its radius along each edge, so it only keeps its smooth shape while
+        // 2 × 1.53 × radius fits the row height: ≤ 14 for the 44 pt app rows,
+        // ≤ 10 for the 32 pt tab rows. The old 18 / 12 overshot that and the
+        // ends were pinched into lumpy half-pills.
+        line.layer?.cornerRadius = row.indented ? 10 : Self.pickerCornerRadius - Self.contentInset
         line.layer?.cornerCurve = .continuous
         let dark = panel?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         if selected {
-            // Glass content follows the system theme despite the panel's
-            // contrasting appearance. Give light glass a brighter selection
-            // and a dark edge so it remains distinct on pale backgrounds.
+            // Give light glass a brighter selection and a dark edge so it
+            // remains distinct on pale backgrounds. The glass content follows
+            // the system theme, which on macOS 26+ is also the panel's.
             let lightContent: Bool
             if #available(macOS 26.0, *) {
-                lightContent = !Self.contrastingAppearance().systemUsesDarkColors
+                lightContent = !Self.hudAppearance().systemUsesDarkColors
             } else {
                 lightContent = !dark
             }
@@ -1173,5 +1234,27 @@ private final class VolumeBarView: NSView {
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         needsDisplay = true
+    }
+}
+
+/// The HUD glass's corner radius, shared between AppKit sizing and SwiftUI.
+@MainActor
+final class HUDGlassShape: ObservableObject {
+    @Published var radius: CGFloat
+    init(radius: CGFloat) { self.radius = radius }
+}
+
+/// The HUD's Liquid Glass surface: clear, untinted glass with a circular
+/// corner, inset from the window by `margin` so its rim isn't clipped.
+/// The AppKit content is laid over it, not inside it.
+@available(macOS 26.0, *)
+struct HUDGlassBackground: View {
+    @ObservedObject var shape: HUDGlassShape
+    let margin: CGFloat
+
+    var body: some View {
+        Color.clear
+            .glassEffect(.clear, in: RoundedRectangle(cornerRadius: shape.radius, style: .circular))
+            .padding(margin)
     }
 }
