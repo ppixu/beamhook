@@ -15,6 +15,20 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.5.6</title>
+            <pubDate>Fri, 13 Nov 2026 14:01:06 +0200</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.5.6</link>
+            <sparkle:version>36</sparkle:version>
+            <sparkle:shortVersionString>1.5.6</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Fixed</h3>
+<ul>
+<li>The overlays now really use clear Liquid Glass that follows your light or dark appearance, with round corners matching the macOS volume overlay. 1.5.5 still drew a flat panel with clipped edges and cut-off corners.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.5.6.zip" length="2825643" type="application/octet-stream" sparkle:edSignature="0vs5Jvq9QheEiwMzSVz9VObIbI/9n0egRQ7h1KFs3ID1Nyyoqpn6BkK6ZJxzvi4Alh7O046JqxsYhZQjQSN8Dg=="/>
+        </item>
+        <item>
             <title>1.5.5</title>
             <pubDate>Fri, 13 Nov 2026 11:26:31 +0200</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.5.5</link>
@@ -553,6 +567,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: uLNupuJtA8WDPjUry2yQmdvi8sVPTygr/pk5NSd0yjuwpBAECgT5qQHmC8q7dLsPtFo5d6hT6A+SszJ18NuoAw==
-length: 43797
+edSignature: wDoSKy3+46O79ClKr5dyyQKSzKkMeFFPmOqr8Z4dpWSoQZrodiEf+Z90ZfwIU0hpjJtYrMW75JSgwk+Ri0WqCQ==
+length: 44747
 -->

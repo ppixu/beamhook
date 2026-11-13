@@ -4,6 +4,14 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.5.6] — 2026-11-13
+
+### Fixed
+
+- The overlays now really use clear Liquid Glass that follows your light or
+  dark appearance, with round corners matching the macOS volume overlay. 1.5.5
+  still drew a flat panel with clipped edges and cut-off corners.
+
 ## [1.5.5] — 2026-11-13
 
 ### Changed
