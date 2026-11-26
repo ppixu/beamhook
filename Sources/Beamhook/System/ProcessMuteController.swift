@@ -89,6 +89,7 @@ final class ProcessMuteController: ObservableObject {
         self.mutedBundleIDs = PerAppMutePreference.mutedBundleIDs(defaults)
         self.volumes = PerAppMutePreference.volumes(defaults)
         observeDefaultOutputChanges()
+        observeProcessListChanges()
     }
 
     /// Begin managing taps (feature enabled — at launch or via Settings).
@@ -667,6 +668,25 @@ final class ProcessMuteController: ObservableObject {
             self?.rebuildAssemblies()
         }
         engine.async { [weak self] in self?.observeOutputFormat() }
+    }
+
+    /// Browsers and Electron apps start fresh helper processes for new tabs
+    /// and windows, and a helper plays as soon as it connects. Waiting for the
+    /// 2s poll let those play audibly for up to two seconds before the mute
+    /// caught them, so reconcile the moment Core Audio lists a new process.
+    /// The poll stays as the safety net, and gates this: the listener only
+    /// runs the poll's work early, never before `start()` armed it.
+    private func observeProcessListChanges() {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyProcessObjectList,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject), &address, .main
+        ) { [weak self] _, _ in
+            guard let self, self.timer != nil else { return }
+            self.applyAndReschedule()
+        }
     }
 
     /// A Bluetooth profile or Audio MIDI Setup can change the format without
