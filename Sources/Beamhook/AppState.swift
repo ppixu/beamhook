@@ -211,6 +211,10 @@ final class AppState: ObservableObject {
     /// the caches wholesale; these win over scanned values until the session
     /// ends, so the next press steps from what was actually set.
     private var sessionTabVolumes: [String: Int] = [:]
+    /// Apps hooked earlier in this session. Each was listed because it was the
+    /// hook; once something else is hooked it stays as an ordinary row until the
+    /// overlay closes, instead of vanishing because it hasn't played lately.
+    private var sessionUnhookedApps: [String] = []
     /// Pre-mute volumes of browser tabs, so a session's ⌘+Mute can undo itself.
     /// Apps use the process-tap mute instead. Outlives sessions.
     private var muteMemory = MuteMemory()
@@ -1541,6 +1545,18 @@ final class AppState: ObservableObject {
         muteController.setMeterWatchlist(menuMeterWatchlist.union(overlay).union(candidates))
     }
 
+    /// The overlay's row identity for motion. `source.id` names the hooked row
+    /// `target`, so hooking an app would read as one row vanishing and another
+    /// appearing; this names it after the app or tab it really is, letting the
+    /// overlay slide that row to the top instead.
+    func volumeSourceMotionID(_ source: VolumeSource) -> String {
+        guard source == .hookedTarget else { return source.id }
+        if selectedTargetIsBrowser, let tabID = selectedBrowserMediaID {
+            return VolumeSource.browserTab(id: tabID).id
+        }
+        return targetManager.targetBundleID.map { VolumeSource.app(bundleID: $0).id } ?? source.id
+    }
+
     private func volumeSourceBundleID(_ source: VolumeSource) -> String? {
         switch source {
         case .hookedTarget: return targetManager.targetBundleID
@@ -2094,6 +2110,10 @@ final class AppState: ObservableObject {
                 guard selected else { return }
             }
             guard activeVolumeSession == session else { return }
+            if !selectedTargetIsBrowser, let previous = targetManager.targetBundleID,
+               previous != bundleID {
+                sessionUnhookedApps.append(previous)
+            }
             setTarget(definition.id, showConfirmation: false)
             if selectedTargetIsBrowser { await refreshBrowserMedia() }
             guard activeVolumeSession == session else { return }
@@ -2208,6 +2228,7 @@ final class AppState: ObservableObject {
             guard !list.entries.isEmpty else { return }
             volumeSessionGeneration &+= 1
             sessionTabVolumes = [:]
+            sessionUnhookedApps = []
             volumeSession = list
             startVolumeSessionRefresh(audible: audible)
             startSpotifyTrackRefresh()
@@ -2264,6 +2285,7 @@ final class AppState: ObservableObject {
                               canMute: canMuteVolumeSource($0.source),
                               indented: $0.parentSource != nil,
                               sourceID: $0.source.id,
+                              motionID: volumeSourceMotionID($0.source),
                               isEmitting: volumeSourceIsEmitting($0.source),
                               isHooked: $0.source == .hookedTarget,
                               isPlaying: volumeSourceIsPlaying($0.source),
@@ -2443,10 +2465,15 @@ final class AppState: ObservableObject {
         // Rows already on screen this session stay (while their app runs) and
         // keep their place, so a refresh never drops a row out from under the
         // selection. The next session starts from the plain shortlist again.
-        let shownOrder = (volumeSession?.entries ?? []).compactMap { entry -> String? in
-            if case .app(let id) = entry.source, isRunning(bundleID: id) { return id }
-            return nil
-        }
+        let shownOrder = (volumeSession?.entries ?? []).flatMap { entry -> [String] in
+            switch entry.source {
+            // The hooked row heads the list; an app unhooked this session takes
+            // its place at the top of the others.
+            case .hookedTarget: return sessionUnhookedApps.reversed()
+            case .app(let id): return [id]
+            case .browserTab: return []
+            }
+        }.filter { isRunning(bundleID: $0) }
         let shown = Set(shownOrder)
         var ordered = candidates.map(\.bundleID)
         for id in shownOrder where !ordered.contains(id) {

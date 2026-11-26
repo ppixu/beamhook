@@ -24,6 +24,8 @@ final class HookHUD {
         var canMute = false
         var indented = false
         var sourceID = ""
+        /// What the row is across refreshes, for its motion; see `AppState.volumeSourceMotionID`.
+        var motionID = ""
         var isEmitting = false
         var isHooked = false
         var isPlaying = false
@@ -186,9 +188,6 @@ final class HookHUD {
     /// Frame of Beamhook's open menu popover. When present, the HUD sits beside
     /// it rather than covering the controls the user is interacting with.
     var menuPopoverFrame: (() -> NSRect?)?
-    /// Invoked when a hook confirmation appears — the AppDelegate uses it to run
-    /// the status-item "fishing bob" animation at the same time.
-    var onPresent: (() -> Void)?
     /// Arms picker shortcuts for any visible HUD, including playback and hook confirmations.
     var onVisibilityChange: ((Bool) -> Void)?
     /// Told when a volume presentation appears or is hidden/replaced, so the
@@ -540,7 +539,6 @@ final class HookHUD {
         panel.alphaValue = 1
         panel.orderFrontRegardless()
         panel.invalidateShadow()
-        if case .hooked = presentation { onPresent?() }
         setVolumeVisible(presentation.isVolume)
         onVisibilityChange?(true)
         Self.log.info("HUD shown for \(presentation.appName, privacy: .public); frame=\(NSStringFromRect(panel.frame), privacy: .public)")
@@ -1207,7 +1205,7 @@ final class HookHUD {
         // ends were pinched into lumpy half-pills.
         line.layer?.cornerRadius = row.indented ? 10 : Self.pickerCornerRadius - Self.contentInset
         line.layer?.cornerCurve = .continuous
-        line.identifier = NSUserInterfaceItemIdentifier(row.sourceID)
+        line.identifier = NSUserInterfaceItemIdentifier(row.motionID.isEmpty ? row.sourceID : row.motionID)
         let dark = panel?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         // The glass content follows the system theme, which on macOS 26+ is
         // also the panel's.

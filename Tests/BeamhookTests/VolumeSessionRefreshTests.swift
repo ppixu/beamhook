@@ -88,6 +88,22 @@ final class VolumeSessionRefreshTests: XCTestCase {
         }
     }
 
+    func testHookedRowKeepsItsAppsMotionIdentity() {
+        withState { state, tab in
+            state.targetManager.selectedTargetID = BuiltInApps.spotify.id
+            state.selectedTargetID = BuiltInApps.spotify.id
+            defer {
+                state.targetManager.selectedTargetID = nil
+                state.selectedTargetID = nil
+            }
+            // Hooking turns Spotify's `app:` row into the `target` row; the overlay
+            // must see the same row so it can slide it to the top.
+            XCTAssertEqual(state.volumeSourceMotionID(.hookedTarget),
+                           state.volumeSourceMotionID(.app(bundleID: BuiltInApps.spotify.bundleID)))
+            XCTAssertEqual(state.volumeSourceMotionID(.browserTab(id: tab.id)), "tab:\(tab.id)")
+        }
+    }
+
     func testRefreshDoesNotReopenClosedSession() {
         withState { state, tab in
             XCTAssertNil(state.volumeSession)
