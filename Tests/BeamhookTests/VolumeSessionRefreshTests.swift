@@ -70,6 +70,24 @@ final class VolumeSessionRefreshTests: XCTestCase {
         }
     }
 
+    func testRefreshKeepsAShownRunningAppUntilTheSessionEnds() {
+        withState { state, tab in
+            // Finder is always running but never plays, so only the session keeps it.
+            let finder = VolumeSourceEntry(source: .app(bundleID: "com.apple.finder"), name: "Finder")
+            state.volumeSession = VolumeSourceList(target: nil, apps: [finder], tabs: [])
+            state.replaceVolumeSessionSources(audible: [])
+            XCTAssertTrue(state.volumeSession?.entries.contains { $0.source == finder.source } == true,
+                          "A row on screen must not disappear while the overlay is up")
+
+            let gone = VolumeSourceEntry(source: .app(bundleID: "com.example.beamhook-not-running"),
+                                         name: "Quit")
+            state.volumeSession = VolumeSourceList(target: nil, apps: [gone], tabs: [])
+            state.replaceVolumeSessionSources(audible: [])
+            XCTAssertFalse(state.volumeSession?.entries.contains { $0.source == gone.source } == true,
+                           "A quit app still leaves the list")
+        }
+    }
+
     func testRefreshDoesNotReopenClosedSession() {
         withState { state, tab in
             XCTAssertNil(state.volumeSession)

@@ -426,6 +426,8 @@ final class HookHUD {
         }
 
         let panel = ensurePanel()
+        // Read before the rows are hidden or rebuilt below.
+        let shownRows = visibleSourceRows(in: panel)
         // Only the passthrough presentation uses the notice line; hide it here
         // so the cases below stay a checklist of what they *do* show.
         noticeLabel?.isHidden = true
@@ -468,9 +470,11 @@ final class HookHUD {
                 sourceList.layoutSubtreeIfNeeded()
                 let size = sourceList.fittingSize
                 sourceList.setFrameSize(size)
+                sourceList.layoutSubtreeIfNeeded()
                 let screenHeight = panel.screen?.visibleFrame.height ?? 700
                 sourceHeight?.constant = min(size.height, max(100, screenHeight - 120))
                 sourceScroll?.isHidden = false
+                if let shownRows { animateSourceRows(from: shownRows, in: sourceList) }
             }
         case .launching(let appName):
             label?.stringValue = "Starting \(appName)…"
@@ -1000,6 +1004,105 @@ final class HookHUD {
         return legend
     }
 
+    // MARK: Row motion
+
+    /// A picker row as last drawn: its view and its distance from the list's top.
+    private struct ShownSourceRow {
+        let view: NSView
+        let top: CGFloat
+    }
+
+    private static let rowMotionDuration: CFTimeInterval = 0.26
+    private static let rowMotionTiming = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1)
+
+    /// The rows of a picker that is on screen right now, by source id. Nil when
+    /// the picker isn't showing, so a fresh overlay appears without motion.
+    private func visibleSourceRows(in panel: NSPanel) -> [String: ShownSourceRow]? {
+        guard panel.isVisible, panel.alphaValue > 0.5,
+              let sourceList, sourceScroll?.isHidden == false,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        else { return nil }
+        var rows: [String: ShownSourceRow] = [:]
+        for view in sourceList.arrangedSubviews {
+            guard let id = view.identifier?.rawValue else { continue }
+            rows[id] = ShownSourceRow(view: view, top: Self.top(of: view.frame, in: sourceList))
+        }
+        return rows
+    }
+
+    /// Distance from the list's top edge; the list's height changes as rows
+    /// come and go, and the panel stays pinned by its top.
+    private static func top(of frame: NSRect, in list: NSView) -> CGFloat {
+        list.isFlipped ? frame.minY : list.bounds.height - frame.maxY
+    }
+
+    private static func originY(top: CGFloat, height: CGFloat, in list: NSView) -> CGFloat {
+        list.isFlipped ? top : list.bounds.height - top - height
+    }
+
+    /// Every refresh rebuilds the rows, so motion is reconstructed by source id:
+    /// a row that moved slides from its old slot, a new one fades in, and one
+    /// that had to go (its app quit, its tab closed) shrinks away in place
+    /// while the rows around it close the gap.
+    private func animateSourceRows(from shown: [String: ShownSourceRow], in list: NSStackView) {
+        var remaining = shown
+        for view in list.arrangedSubviews {
+            guard let layer = view.layer, let id = view.identifier?.rawValue else { continue }
+            if let before = remaining.removeValue(forKey: id) {
+                let from = Self.originY(top: before.top, height: view.frame.height, in: list)
+                let dy = from - view.frame.minY
+                guard abs(dy) > 0.5 else { continue }
+                // Additive, so the model position AppKit owns is never touched.
+                let slide = CABasicAnimation(keyPath: "position")
+                slide.isAdditive = true
+                slide.fromValue = NSValue(point: NSPoint(x: 0, y: dy))
+                slide.toValue = NSValue(point: .zero)
+                slide.duration = Self.rowMotionDuration
+                slide.timingFunction = Self.rowMotionTiming
+                layer.add(slide, forKey: "rowSlide")
+            } else {
+                layer.add(Self.fadeScale(from: 0.92, to: 1, opacity: (0, 1), size: view.frame.size),
+                          forKey: "rowAppear")
+            }
+        }
+        for (_, gone) in remaining {
+            let view = gone.view
+            view.translatesAutoresizingMaskIntoConstraints = true
+            view.frame.origin.y = Self.originY(top: gone.top, height: view.frame.height, in: list)
+            list.addSubview(view, positioned: .below, relativeTo: nil)
+            guard let layer = view.layer else { view.removeFromSuperview(); continue }
+            CATransaction.begin()
+            CATransaction.setCompletionBlock { [weak view] in view?.removeFromSuperview() }
+            layer.add(Self.fadeScale(from: 1, to: 0.6, opacity: (1, 0), size: view.frame.size),
+                      forKey: "rowLeave")
+            CATransaction.commit()
+        }
+    }
+
+    /// Scale about the row's centre (AppKit anchors layers at a corner) plus fade.
+    private static func fadeScale(from: CGFloat, to: CGFloat, opacity: (Float, Float),
+                                  size: NSSize) -> CAAnimationGroup {
+        func centred(_ scale: CGFloat) -> NSValue {
+            var t = CATransform3DMakeTranslation(size.width / 2, size.height / 2, 0)
+            t = CATransform3DScale(t, scale, scale, 1)
+            t = CATransform3DTranslate(t, -size.width / 2, -size.height / 2, 0)
+            return NSValue(caTransform3D: t)
+        }
+        let scale = CABasicAnimation(keyPath: "transform")
+        scale.fromValue = centred(from)
+        scale.toValue = centred(to)
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = opacity.0
+        fade.toValue = opacity.1
+        let group = CAAnimationGroup()
+        group.animations = [scale, fade]
+        group.duration = rowMotionDuration
+        group.timingFunction = rowMotionTiming
+        group.fillMode = .forwards
+        group.isRemovedOnCompletion = false
+        return group
+    }
+
     /// Match the menu: hooked name, playback control, speaker, then volume.
     private func makeSourceRow(_ row: SourceRow, selected: Bool) -> NSView {
         let marker = NSImageView()
@@ -1104,27 +1207,35 @@ final class HookHUD {
         // ends were pinched into lumpy half-pills.
         line.layer?.cornerRadius = row.indented ? 10 : Self.pickerCornerRadius - Self.contentInset
         line.layer?.cornerCurve = .continuous
+        line.identifier = NSUserInterfaceItemIdentifier(row.sourceID)
         let dark = panel?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        // The glass content follows the system theme, which on macOS 26+ is
+        // also the panel's.
+        let lightContent: Bool
+        if #available(macOS 26.0, *) {
+            lightContent = !Self.hudAppearance().systemUsesDarkColors
+        } else {
+            lightContent = !dark
+        }
         if selected {
             // Give light glass a brighter selection and a dark edge so it
-            // remains distinct on pale backgrounds. The glass content follows
-            // the system theme, which on macOS 26+ is also the panel's.
-            let lightContent: Bool
-            if #available(macOS 26.0, *) {
-                lightContent = !Self.hudAppearance().systemUsesDarkColors
-            } else {
-                lightContent = !dark
-            }
+            // remains distinct on pale backgrounds.
             line.layer?.backgroundColor = NSColor.white.withAlphaComponent(lightContent ? 0.65 : 0.18).cgColor
             if lightContent {
                 line.layer?.borderColor = NSColor.black.withAlphaComponent(0.14).cgColor
                 line.layer?.borderWidth = 1
             }
         } else if row.isMuted {
-            let tint: NSColor = dark ? .white : .black
-            line.layer?.backgroundColor = tint.withAlphaComponent(0.12).cgColor
-            line.layer?.borderColor = tint.withAlphaComponent(0.2).cgColor
+            // On light glass the dark-mode pill (12% fill, 20% edge) read as a
+            // raised grey button, louder than the live rows. Recede instead:
+            // a fainter pill and faded content.
+            let tint: NSColor = lightContent ? .black : .white
+            line.layer?.backgroundColor = tint.withAlphaComponent(lightContent ? 0.05 : 0.12).cgColor
+            line.layer?.borderColor = tint.withAlphaComponent(lightContent ? 0.08 : 0.2).cgColor
             line.layer?.borderWidth = 1
+            if lightContent {
+                for view in line.arrangedSubviews { view.alphaValue = 0.55 }
+            }
         }
         line.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([

@@ -178,6 +178,7 @@ private struct PlayingAppsList: View {
 }
 
 private struct MenuAppRows: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let apps: [PlayingApp]
     let emittingIDs: Set<String>
 
@@ -190,9 +191,25 @@ private struct MenuAppRows: View {
             }
             ForEach(apps) { app in
                 AppVolumeRow(playing: app, isEmitting: emittingIDs.contains(app.bundleID))
+                    .transition(MenuRowMotion.transition)
             }
         }
+        // Reordered rows glide to their new places; see MenuRowMotion.
+        .animation(MenuRowMotion.animation(reduceMotion: reduceMotion), value: apps.map(\.id))
     }
+}
+
+/// Shared motion for rows that move, arrive or leave while the popover is open.
+/// The shortlist only drops rows while the popover is closed (`recentAppRows`),
+/// so the leave transition is for the unavoidable cases: an app quit, a tab closed.
+enum MenuRowMotion {
+    static func animation(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .spring(response: 0.26, dampingFraction: 0.86)
+    }
+
+    static let transition: AnyTransition = .asymmetric(
+        insertion: .opacity.combined(with: .scale(scale: 0.92, anchor: .top)),
+        removal: .opacity.combined(with: .scale(scale: 0.6)))
 }
 
 @available(macOS 14.2, *)
@@ -346,6 +363,7 @@ private struct MenuVolumeSlider: View {
 
 private struct AppVolumeRow: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let playing: PlayingApp
     let isEmitting: Bool
     @State private var volume: Double = 50
@@ -449,8 +467,11 @@ private struct AppVolumeRow: View {
                     .pickerStyle(.menu).controlSize(.small).padding(.horizontal, 9)
                 }
             }
-            ForEach(browserSources) { candidate in BrowserVolumeRow(candidate: candidate) }
+            ForEach(browserSources) { candidate in
+                BrowserVolumeRow(candidate: candidate).transition(MenuRowMotion.transition)
+            }
         }
+        .animation(MenuRowMotion.animation(reduceMotion: reduceMotion), value: browserSources.map(\.id))
         .task(id: "\(state.isMenuVisible):\(state.perAppMuteEnabled):\(automationDenied)") {
             guard state.isMenuVisible else { return }
             if let value = await state.volume(for: playing.bundleID) {

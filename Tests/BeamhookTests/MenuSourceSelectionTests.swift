@@ -145,6 +145,32 @@ final class MenuSourceSelectionTests: XCTestCase {
         XCTAssertTrue(state.recentAppRows([recent, idle], now: now.addingTimeInterval(7200)).isEmpty)
     }
 
+    func testShownRowStaysWhileMenuIsOpenAndDropsOnceItCloses() {
+        let state = AppState()
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let app = PlayingApp(id: "fading", displayName: "Fading", bundleID: "com.example.fading")
+        state.recordAppPlayback([app.bundleID], now: now)
+        state.setMenuVisible(true)
+        XCTAssertEqual(state.recentAppRows([app], now: now), [app])
+        // Recency lapses while the menu is on screen: the row must not vanish under the pointer.
+        XCTAssertEqual(state.recentAppRows([app], now: now.addingTimeInterval(7200)), [app])
+        // A quit app (no longer in the input rows) still goes.
+        XCTAssertTrue(state.recentAppRows([], now: now.addingTimeInterval(7200)).isEmpty)
+        state.setMenuVisible(false)
+        XCTAssertTrue(state.recentAppRows([app], now: now.addingTimeInterval(7200)).isEmpty)
+    }
+
+    func testRowsSeenWhileMenuIsHiddenAreNotHeldOpen() {
+        let state = AppState()
+        let now = Date(timeIntervalSince1970: 2_000_000)
+        let app = PlayingApp(id: "bg", displayName: "Background", bundleID: "com.example.bg")
+        state.recordAppPlayback([app.bundleID], now: now)
+        XCTAssertEqual(state.recentAppRows([app], now: now), [app])
+        state.setMenuVisible(true)
+        XCTAssertTrue(state.recentAppRows([app], now: now.addingTimeInterval(7200)).isEmpty)
+        state.setMenuVisible(false)
+    }
+
     func testTurnedDownAppStaysInShortlistWithoutPlaybackHistory() {
         let state = AppState()
         let quiet = PlayingApp(id: "quiet", displayName: "Quiet", bundleID: "com.example.quiet")

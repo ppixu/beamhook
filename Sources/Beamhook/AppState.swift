@@ -225,6 +225,10 @@ final class AppState: ObservableObject {
     private var menuMeterWatchlist: Set<String> = []
     @Published var showAllMenuApps = false
     private var recentAppPlayback: [String: Date] = [:]
+    /// Shortlist rows drawn since the popover opened. Recency can lapse while
+    /// the menu is up; dropping the row then would yank it from under the
+    /// pointer, so it stays until the menu closes and is re-filtered unseen.
+    private var menuShownAppIDs: Set<String> = []
 
     func recordAppPlayback(_ bundleIDs: Set<String>, now: Date = Date()) {
         for id in bundleIDs { recentAppPlayback[id] = now }
@@ -275,8 +279,10 @@ final class AppState: ObservableObject {
     }
 
     func recentAppRows(_ rows: [PlayingApp], now: Date = Date()) -> [PlayingApp] {
-        let recent = recentlyActiveAppIDs(now: now)
-        return rows.filter { recent.contains($0.bundleID) || $0.bundleID == targetManager.targetBundleID }
+        let recent = recentlyActiveAppIDs(now: now).union(isMenuVisible ? menuShownAppIDs : [])
+        let shown = rows.filter { recent.contains($0.bundleID) || $0.bundleID == targetManager.targetBundleID }
+        if isMenuVisible { menuShownAppIDs.formUnion(shown.map(\.bundleID)) }
+        return shown
     }
 
     /// The session's background refresh (volumes, browser tabs).
@@ -727,6 +733,7 @@ final class AppState: ObservableObject {
 
     func setMenuVisible(_ visible: Bool) {
         isMenuVisible = visible
+        menuShownAppIDs = []
         if visible { refreshInstalledApps() }
     }
 
@@ -2433,11 +2440,25 @@ final class AppState: ObservableObject {
             return nil
         })
         let hookedBrowser = selectedTargetIsBrowser && selectedBrowserMediaCandidate != nil
+        // Rows already on screen this session stay (while their app runs) and
+        // keep their place, so a refresh never drops a row out from under the
+        // selection. The next session starts from the plain shortlist again.
+        let shownOrder = (volumeSession?.entries ?? []).compactMap { entry -> String? in
+            if case .app(let id) = entry.source, isRunning(bundleID: id) { return id }
+            return nil
+        }
+        let shown = Set(shownOrder)
         var ordered = candidates.map(\.bundleID)
+        for id in shownOrder where !ordered.contains(id) {
+            // Slot a kept row back in after the row it followed last time.
+            let before = shownOrder.prefix { $0 != id }.last { ordered.contains($0) }
+            let index = before.flatMap { ordered.firstIndex(of: $0) }.map { $0 + 1 } ?? 0
+            ordered.insert(id, at: index)
+        }
         let missing = audible.union(parents).union(hookedBrowser ? Set([targetBundleID].compactMap { $0 }) : [])
             .subtracting(ordered)
         ordered.append(contentsOf: missing.sorted())
-        let recent = recentlyActiveAppIDs().union(parents)
+        let recent = recentlyActiveAppIDs().union(parents).union(shown)
         let shortlist = ordered.filter { recent.contains($0) || $0 == targetBundleID }
         let remainder = showsAll ? ordered.filter { !recent.contains($0) && $0 != targetBundleID } : []
         return (shortlist + remainder)
