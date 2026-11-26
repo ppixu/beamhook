@@ -4,6 +4,15 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.5.8] — 2026-11-26
+
+### Changed
+
+- Hooking an app from the source-picker overlay slides its row smoothly to
+  the top, and the app it replaced stays listed until the overlay closes.
+- The menu-bar icon no longer bobs when an app is hooked; moving it made the
+  menu bar jump and glitch.
+
 ## [1.5.7] — 2026-11-26
 
 ### Fixed

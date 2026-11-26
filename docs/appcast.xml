@@ -15,6 +15,21 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.5.8</title>
+            <pubDate>Thu, 26 Nov 2026 11:46:11 +0200</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.5.8</link>
+            <sparkle:version>38</sparkle:version>
+            <sparkle:shortVersionString>1.5.8</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Changed</h3>
+<ul>
+<li>Hooking an app from the source-picker overlay slides its row smoothly to the top, and the app it replaced stays listed until the overlay closes.</li>
+<li>The menu-bar icon no longer bobs when an app is hooked; moving it made the menu bar jump and glitch.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.5.8.zip" length="2789529" type="application/octet-stream" sparkle:edSignature="aeOm/QTdf5naOfQhZNfE9x4ml/ZZk7KzzIwsayee5hGCi9uQYLKGHspADQM8/HcGgPugJVRrdqkl5WXWmiPgAQ=="/>
+        </item>
+        <item>
             <title>1.5.7</title>
             <pubDate>Thu, 26 Nov 2026 11:33:06 +0200</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.5.7</link>
@@ -586,6 +601,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: EXGESkyYnoR7TsEbFYmhHjFnyqePp93cGracuzScQSYVJiGWavna9cFK4Bj4I8vWy6xArl2Tt7e2fee1vwCtAA==
-length: 46029
+edSignature: uJDne8sqyJ0ohGnkK3npXNKUZUKnlGsALVc7oarWuaDSPT/nq5rYiJpHAOulzJpfw1F22nI8u584XFepyCejCQ==
+length: 47021
 -->
