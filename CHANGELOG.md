@@ -4,6 +4,22 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.5.7] — 2026-11-26
+
+### Fixed
+
+- A muted app no longer plays a second or two of sound when it opens a new
+  window or tab. Chrome, Brave, Claude and other browser-based apps start a
+  fresh process for those, and Beamhook now mutes it the moment it appears.
+
+### Changed
+
+- Rows in the menu and in the source-picker overlay slide to their new place
+  when the order changes, and a row stays put while the menu is open instead
+  of vanishing from under the pointer.
+- Muted rows in the overlay recede in light mode instead of looking like a
+  raised grey button.
+
 ## [1.5.6] — 2026-11-13
 
 ### Fixed
