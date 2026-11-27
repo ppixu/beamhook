@@ -15,6 +15,20 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <description>Updates for the official Beamhook build.</description>
         <language>en</language>
         <item>
+            <title>1.5.9</title>
+            <pubDate>Fri, 27 Nov 2026 13:04:19 +0200</pubDate>
+            <link>https://github.com/ppixu/beamhook/releases/tag/v1.5.9</link>
+            <sparkle:version>39</sparkle:version>
+            <sparkle:shortVersionString>1.5.9</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<h3>Fixed</h3>
+<ul>
+<li>Chrome media tabs now appear in Beamhook when another app runs a headless copy of Chrome. Playback and volume controls target the tabs in your browser.</li>
+</ul>
+]]></description>
+            <enclosure url="https://updates.beamhook.app/Beamhook-1.5.9.zip" length="2795529" type="application/octet-stream" sparkle:edSignature="HreWh01VHNDT+ic9EAv8HnzOscQsjtSbnRxq3/1Bq7wc8q5XeQ7hW9PPlK92/sQPtkHbgVap2Rljp3LfAdm1Cg=="/>
+        </item>
+        <item>
             <title>1.5.8</title>
             <pubDate>Thu, 26 Nov 2026 11:46:11 +0200</pubDate>
             <link>https://github.com/ppixu/beamhook/releases/tag/v1.5.8</link>
@@ -601,6 +615,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: uJDne8sqyJ0ohGnkK3npXNKUZUKnlGsALVc7oarWuaDSPT/nq5rYiJpHAOulzJpfw1F22nI8u584XFepyCejCQ==
-length: 47021
+edSignature: HC/cDFUSczmkHUVabMN+NttdLQfWjx7oKI/S8ruK31ckgOF79o2+LxyY7RgaFO3FaPNvY13l1R6wu7pcmuKeCA==
+length: 47908
 -->

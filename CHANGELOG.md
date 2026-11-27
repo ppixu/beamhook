@@ -4,6 +4,13 @@ Notable changes to Beamhook. The signed & notarized official build for each
 release is available on [Gumroad](https://ppixu.gumroad.com/l/beamhook) (€5,
 one-time, includes all 1.x updates); building from source is always free.
 
+## [1.5.9] — 2026-11-27
+
+### Fixed
+
+- Chrome media tabs now appear in Beamhook when another app runs a headless
+  copy of Chrome. Playback and volume controls target the tabs in your browser.
+
 ## [1.5.8] — 2026-11-26
 
 ### Changed
