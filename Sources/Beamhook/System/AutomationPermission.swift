@@ -13,17 +13,16 @@ enum AutomationPermission {
     /// macOS returned something other than a clear allow/deny. Callers must treat
     /// nil as "no opinion" rather than as a denial.
     static func isAllowed(bundleID: String) -> Bool? {
-        guard NSRunningApplication
-            .runningApplications(withBundleIdentifier: bundleID).first != nil else { return nil }
-
-        var target = AEAddressDesc()
-        let created = bundleID.withCString { pointer in
-            AECreateDesc(typeApplicationBundleID, pointer, strlen(pointer), &target)
+        let target: NSAppleEventDescriptor
+        if let browser = BrowserKind.browser(bundleID: bundleID), browser != .safari {
+            guard let app = browser.desktopApplication else { return nil }
+            target = NSAppleEventDescriptor(processIdentifier: app.processIdentifier)
+        } else {
+            guard !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty else { return nil }
+            target = NSAppleEventDescriptor(bundleIdentifier: bundleID)
         }
-        guard created == noErr else { return nil }
-        defer { AEDisposeDesc(&target) }
 
-        switch AEDeterminePermissionToAutomateTarget(&target, typeWildCard, typeWildCard, false) {
+        switch AEDeterminePermissionToAutomateTarget(target.aeDesc, typeWildCard, typeWildCard, false) {
         case noErr:
             return true
         case OSStatus(errAEEventNotPermitted):

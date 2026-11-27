@@ -198,7 +198,7 @@ final class MenuSourceSelectionTests: XCTestCase {
 
 }
 
-private final class MenuSelectionExecutor: ScriptExecuting {
+private final class MenuSelectionExecutor: BrowserScriptExecuting {
     var succeeds: Bool
     let beforeReply: () -> Void
     private(set) var script = ""
@@ -207,6 +207,10 @@ private final class MenuSelectionExecutor: ScriptExecuting {
     init(succeeds: Bool = true, beforeReply: @escaping () -> Void = {}) {
         self.succeeds = succeeds
         self.beforeReply = beforeReply
+    }
+
+    func run(_ source: String, targeting target: ChromiumTarget) -> ScriptResult {
+        run(source)
     }
 
     func run(_ source: String) -> ScriptResult {

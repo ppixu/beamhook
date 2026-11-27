@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import CoreServices
 import BeamhookKit
 
@@ -15,7 +15,7 @@ import BeamhookKit
 /// job that needs real parallelism — asking every Chromium tab during a scan —
 /// bypasses the interpreter with `AppleEventTabEvaluator`. Each send is bounded
 /// by `timeoutSeconds`, so a wedged target delays the next script at most that.
-final class AppleScriptExecutor: ScriptExecuting {
+final class AppleScriptExecutor: BrowserScriptExecuting {
     private static let lock = NSLock()
 
     /// Cap on how long a single send waits for the target's Apple-event reply.
@@ -26,9 +26,8 @@ final class AppleScriptExecutor: ScriptExecuting {
     private static let timeoutSeconds = 5
 
     func run(_ source: String) -> ScriptResult {
-        let bounded = "with timeout of \(Self.timeoutSeconds) seconds\n\(source)\nend timeout"
         return Self.lock.withLock {
-            guard let script = NSAppleScript(source: bounded) else {
+            guard let script = NSAppleScript(source: bounded(source)) else {
                 return ScriptResult(output: nil, succeeded: false)
             }
             var errorInfo: NSDictionary?
@@ -40,13 +39,29 @@ final class AppleScriptExecutor: ScriptExecuting {
             return ScriptResult(output: descriptor.stringValue, succeeded: true)
         }
     }
+
+    func run(_ source: String, targeting target: ChromiumTarget) -> ScriptResult {
+        Self.lock.withLock { target.execute(bounded(source)) }
+    }
+
+    private func bounded(_ source: String) -> String {
+        "with timeout of \(Self.timeoutSeconds) seconds\n\(source)\nend timeout"
+    }
+}
+
+extension ScriptResult {
+    static var scriptFailed: Self { Self(output: nil, succeeded: false) }
+}
+
+protocol BrowserScriptExecuting: ScriptExecuting {
+    func run(_ source: String, targeting target: ChromiumTarget) -> ScriptResult
 }
 
 /// Asks one Chromium tab to evaluate JavaScript. Called from many threads at once.
 protocol ChromiumTabEvaluating: Sendable {
     /// The page's result as text — `nil` output for a `null`/`undefined` result —
     /// or `succeeded == false` when the tab did not answer within `timeout`.
-    func evaluate(_ javascript: String, in browser: BrowserKind,
+    func evaluate(_ javascript: String, in target: ChromiumTarget,
                   window: Int, tab: Int, timeout: TimeInterval) -> ScriptResult
 }
 
@@ -56,9 +71,9 @@ protocol ChromiumTabEvaluating: Sendable {
 /// turns in `AppleScriptExecutor`. The tab is addressed as
 /// `tab <tab> of window <window>`, built from the browser's own class codes.
 struct AppleEventTabEvaluator: ChromiumTabEvaluating {
-    func evaluate(_ javascript: String, in browser: BrowserKind,
+    func evaluate(_ javascript: String, in target: ChromiumTarget,
                   window: Int, tab: Int, timeout: TimeInterval) -> ScriptResult {
-        let event = Self.executeEvent(javascript, in: browser, window: window, tab: tab)
+        let event = Self.executeEvent(javascript, in: target, window: window, tab: tab)
         do {
             // Never interact: a frozen tab must cost its timeout, nothing more.
             let reply = try event.sendEvent(options: [.waitForReply, .neverInteract],
@@ -76,14 +91,14 @@ struct AppleEventTabEvaluator: ChromiumTabEvaluating {
         }
     }
 
-    static func executeEvent(_ javascript: String, in browser: BrowserKind,
+    static func executeEvent(_ javascript: String, in target: ChromiumTarget,
                              window: Int, tab: Int) -> NSAppleEventDescriptor {
         // Arc's dictionary has its own window and tab classes; the command and
         // its parameter are Chromium's in every browser.
-        let (windowClass, tabClass) = browser == .arc ? ("WiND", "tAbB") : ("cwin", "CrTb")
+        let (windowClass, tabClass) = target.browser == .arc ? ("WiND", "tAbB") : ("cwin", "CrTb")
         let event = NSAppleEventDescriptor.appleEvent(
             withEventClass: code("CrSu"), eventID: code("ExJa"),
-            targetDescriptor: NSAppleEventDescriptor(bundleIdentifier: browser.bundleID),
+            targetDescriptor: NSAppleEventDescriptor(processIdentifier: target.processID),
             returnID: AEReturnID(kAutoGenerateReturnID),
             transactionID: AETransactionID(kAnyTransactionID))
         let windowSpecifier = indexSpecifier(windowClass, window, in: .null())
@@ -128,6 +143,11 @@ enum BrowserKind: String, CaseIterable, Sendable {
 
     static func browser(bundleID: String) -> BrowserKind? {
         allCases.first { $0.bundleID == bundleID }
+    }
+
+    var desktopApplication: NSRunningApplication? {
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .first { $0.activationPolicy == .regular && !$0.isTerminated }
     }
 
     var applicationName: String {
@@ -198,7 +218,8 @@ struct BrowserMediaScan: Sendable {
 /// tab cannot be playing — Chrome never freezes an audible one — and the next
 /// scan asks it again, so a tab the user revives is found.
 final class BrowserMediaController: @unchecked Sendable {
-    private let executor: ScriptExecuting
+    private let executor: BrowserScriptExecuting
+    private let resolveTarget: (BrowserKind) -> ChromiumTarget?
     private let tabEvaluator: ChromiumTabEvaluating
     private static let tabTimeoutSeconds = 2
     /// How many tabs a Chromium scan asks at once. Chrome answers concurrent
@@ -222,8 +243,10 @@ final class BrowserMediaController: @unchecked Sendable {
         let volume: Int?
     }
 
-    init(executor: ScriptExecuting = AppleScriptExecutor(),
-         tabEvaluator: ChromiumTabEvaluating = AppleEventTabEvaluator()) {
+    init(executor: BrowserScriptExecuting = AppleScriptExecutor(),
+         tabEvaluator: ChromiumTabEvaluating = AppleEventTabEvaluator(),
+         resolveTarget: @escaping (BrowserKind) -> ChromiumTarget? = ChromiumTarget.desktop) {
+        self.resolveTarget = resolveTarget
         self.executor = executor
         self.tabEvaluator = tabEvaluator
     }
@@ -238,7 +261,10 @@ final class BrowserMediaController: @unchecked Sendable {
                                     candidates: candidates(from: output, browser: browser))
         }
 
-        let listing = executor.run(tabListScript(browser))
+        guard let target = resolveTarget(browser) else {
+            return BrowserMediaScan(injectionAvailable: false, candidates: [])
+        }
+        let listing = executor.run(tabListScript(browser), targeting: target)
         guard listing.succeeded, let output = listing.output, output.hasPrefix("OK") else {
             return BrowserMediaScan(injectionAvailable: false, candidates: [])
         }
@@ -256,7 +282,7 @@ final class BrowserMediaController: @unchecked Sendable {
         }
 
         let answers = Self.concurrentMap(tabs.count, width: Self.scanWidth) { [tabEvaluator] index in
-            tabEvaluator.evaluate(Self.scanJavaScript, in: browser,
+            tabEvaluator.evaluate(Self.scanJavaScript, in: target,
                                   window: tabs[index].window, tab: tabs[index].tab,
                                   timeout: TimeInterval(Self.tabTimeoutSeconds))
         }
@@ -345,8 +371,14 @@ final class BrowserMediaController: @unchecked Sendable {
         return results.map { $0! }
     }
 
+    private func run(_ source: String, in browser: BrowserKind) -> ScriptResult {
+        if browser == .safari { return executor.run(source) }
+        guard let target = resolveTarget(browser) else { return .scriptFailed }
+        return executor.run(source, targeting: target)
+    }
+
     func select(_ candidate: BrowserMediaCandidate) -> Bool {
-        executor.run(selectionScript(candidate)).succeeded
+        run(selectionScript(candidate), in: candidate.browser).succeeded
     }
 
     /// Make one exact browser source the frontmost tab of the frontmost window.
@@ -356,11 +388,11 @@ final class BrowserMediaController: @unchecked Sendable {
     /// browser's own selection — so it is aimed by the page-owned source ID and
     /// never by the scan's cached position.
     func focus(_ candidate: BrowserMediaCandidate) -> Bool {
-        executor.run(focusScript(candidate)).succeeded
+        run(focusScript(candidate), in: candidate.browser).succeeded
     }
 
     func setVolume(_ percent: Int, for candidate: BrowserMediaCandidate) -> Bool {
-        executor.run(volumeScript(percent, candidate: candidate)).succeeded
+        run(volumeScript(percent, candidate: candidate), in: candidate.browser).succeeded
     }
 
     /// Discovery is an explicit request to start playback, never to toggle a
@@ -369,7 +401,7 @@ final class BrowserMediaController: @unchecked Sendable {
         let js = """
         (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; \(BrowserJS.pick) const p = bhPick(); if (!p || p.live) return 'NO'; if (p.el.paused || p.el.ended) void p.el.play(); return 'MATCH'; })()
         """
-        return executor.run(targetedActionScript(js, candidate: candidate)).succeeded
+        return run(targetedActionScript(js, candidate: candidate), in: candidate.browser).succeeded
     }
 
     func togglePlayPause(_ candidate: BrowserMediaCandidate) -> Bool {
@@ -379,7 +411,7 @@ final class BrowserMediaController: @unchecked Sendable {
     /// Read one exact browser source using the scan's cached location as a fast
     /// path and its page-owned source ID as the authority.
     func isPlaying(_ candidate: BrowserMediaCandidate) -> Bool? {
-        let result = executor.run(playbackStateScript(candidate))
+        let result = run(playbackStateScript(candidate), in: candidate.browser)
         guard result.succeeded else { return nil }
         switch result.output?.trimmingCharacters(in: .whitespacesAndNewlines) {
         case "PLAYING": return true
@@ -395,7 +427,7 @@ final class BrowserMediaController: @unchecked Sendable {
         case .next: script = nextScript(candidate)
         case .previous: script = previousScript(candidate)
         }
-        return executor.run(script).succeeded
+        return run(script, in: candidate.browser).succeeded
     }
 
     /// What the page says about its media right now, for the short-skip
@@ -405,7 +437,7 @@ final class BrowserMediaController: @unchecked Sendable {
         let js = """
         (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; \(BrowserJS.pick) const p = bhPick(); if (!p) return 'NO'; const d = p.el.duration; const nb = document.querySelector('ytmusic-player-bar .next-button') || document.querySelector('.ytp-next-button') || document.querySelector('.inline_player .nextbutton'); const disabled = nb && (nb.getAttribute('aria-disabled') === 'true' || nb.classList.contains('hiddenelem') || nb.style.display === 'none'); return JSON.stringify({host: location.hostname.replace(/^www[.]/, ''), duration: isFinite(d) && d > 0 ? d : null, hasListParam: new URLSearchParams(location.search).has('list'), nextButton: !nb ? 'absent' : (disabled ? 'disabled' : 'enabled'), live: p.live}); })()
         """
-        let result = executor.run(targetedQueryScript(js, candidate: candidate))
+        let result = run(targetedQueryScript(js, candidate: candidate), in: candidate.browser)
         guard result.succeeded,
               let output = result.output?.trimmingCharacters(in: .whitespacesAndNewlines),
               output.hasPrefix("{") else { return nil }
@@ -417,7 +449,7 @@ final class BrowserMediaController: @unchecked Sendable {
         let js = """
         (() => { const key = '__beamhookSourceID_v1'; if (globalThis[key] !== '\(candidate.sourceID)') return 'NO'; \(BrowserJS.pick) const p = bhPick(); if (!p || p.live) return 'NO'; const d = p.el.duration; if (!isFinite(d) || d <= 0) return 'NO'; p.el.currentTime = Math.max(0, Math.min(d - 0.5, p.el.currentTime + (\(seconds)))); return 'MATCH'; })()
         """
-        return executor.run(targetedActionScript(js, candidate: candidate)).succeeded
+        return run(targetedActionScript(js, candidate: candidate), in: candidate.browser).succeeded
     }
 
     private static let scanJavaScript = """

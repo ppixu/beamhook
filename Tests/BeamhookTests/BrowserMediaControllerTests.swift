@@ -4,9 +4,16 @@ import BeamhookKit
 @testable import Beamhook
 
 final class BrowserMediaControllerTests: XCTestCase {
+    private func makeController<T: BrowserScriptExecuting & ChromiumTabEvaluating>(
+        _ executor: T
+    ) -> BrowserMediaController {
+        BrowserMediaController(executor: executor, tabEvaluator: executor,
+                               resolveTarget: { ChromiumTarget(browser: $0, processID: 1234) })
+    }
+
     func testCandidateIdentitySurvivesTabReordering() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         let sourceID = "550e8400-e29b-41d4-a716-446655440000"
 
         executor.output = scanOutput(window: 1, tab: 2, sourceID: sourceID)
@@ -24,7 +31,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testInvalidPageSuppliedSourceIdentityIsRejected() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         executor.output = scanOutput(window: 1, tab: 1,
                                      sourceID: "'; do shell script \"bad\"; '")
 
@@ -33,7 +40,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testSelectionResolvesSourceIdentityInsideBrowser() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         let candidate = makeCandidate()
 
         XCTAssertTrue(controller.select(candidate))
@@ -46,7 +53,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testVolumeWriteResolvesSourceIdentityInsideBrowser() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         let candidate = makeCandidate()
 
         XCTAssertTrue(controller.setVolume(75, for: candidate))
@@ -60,7 +67,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testPlayPauseResolvesExactSourceIdentityInsideBrowser() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         let candidate = makeCandidate()
 
         XCTAssertTrue(controller.togglePlayPause(candidate))
@@ -84,7 +91,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testPlaybackStateReadsExactSourceIdentity() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         let candidate = makeCandidate()
 
         executor.output = "PLAYING"
@@ -107,7 +114,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testPlaybackStateReturnsNilWhenExactSourceCannotBeRead() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         executor.output = "NO"
 
         XCTAssertNil(controller.isPlaying(makeCandidate()))
@@ -118,7 +125,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testTargetedSafariPlaybackStateAppleScriptCompiles() throws {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         executor.output = "PLAYING"
 
         XCTAssertEqual(controller.isPlaying(makeCandidate(browser: .safari)), true)
@@ -131,7 +138,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testNextAndPreviousUseValidatedCachedTarget() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         let candidate = makeCandidate()
 
         XCTAssertTrue(controller.perform(.next, on: candidate))
@@ -146,7 +153,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testTargetedSafariActionAppleScriptCompiles() throws {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
 
         XCTAssertTrue(controller.togglePlayPause(makeCandidate(browser: .safari)))
 
@@ -158,7 +165,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testFocusResolvesSourceIdentityInsideBrowser() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         let candidate = makeCandidate()
 
         XCTAssertTrue(controller.focus(candidate))
@@ -174,7 +181,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testFocusRaisesTheMatchingTabAndItsWindow() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
 
         XCTAssertTrue(controller.focus(makeCandidate(browser: .safari)))
         let safari = try? XCTUnwrap(executor.scripts.last)
@@ -189,7 +196,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testSafariFocusAppleScriptCompiles() throws {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
 
         XCTAssertTrue(controller.focus(makeCandidate(browser: .safari)))
 
@@ -201,7 +208,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testChromiumFocusAppleScriptCompiles() throws {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
 
         XCTAssertTrue(controller.focus(makeCandidate(browser: .brave)))
 
@@ -216,7 +223,7 @@ final class BrowserMediaControllerTests: XCTestCase {
     func testChromiumScanAsksEveryTabAtOnce() {
         let executor = ChromiumTabsExecutor(tabs: [(1, 1, "101"), (1, 2, "102"), (2, 1, "103")])
         executor.delay = 0.2
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
 
         let scan = controller.scan(.chrome)
 
@@ -230,7 +237,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testChromiumScanAsksTabsWithoutTheAppleScriptInterpreter() {
         let executor = ChromiumTabsExecutor(tabs: [(1, 1, "101"), (1, 2, "102")])
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
 
         _ = controller.scan(.chrome)
 
@@ -242,14 +249,14 @@ final class BrowserMediaControllerTests: XCTestCase {
     }
 
     func testExecuteEventAddressesAChromeTabByPosition() throws {
-        let event = AppleEventTabEvaluator.executeEvent("1 + 1", in: .chrome, window: 2, tab: 3)
+        let target = ChromiumTarget(browser: .chrome, processID: 1234)
+        let event = AppleEventTabEvaluator.executeEvent("1 + 1", in: target, window: 2, tab: 3)
 
         XCTAssertEqual(event.eventClass, fourCharCode("CrSu"))
         XCTAssertEqual(event.eventID, fourCharCode("ExJa"))
         XCTAssertEqual(event.paramDescriptor(forKeyword: fourCharCode("JvSc"))?.stringValue, "1 + 1")
-        XCTAssertEqual(
-            targetBundleID(event),
-            "com.google.Chrome")
+        XCTAssertEqual(event.attributeDescriptor(forKeyword: AEKeyword(keyAddressAttr)),
+                       NSAppleEventDescriptor(processIdentifier: target.processID))
         let tab = try XCTUnwrap(specifier(event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))))
         XCTAssertEqual(tab.desiredClass, fourCharCode("CrTb"))
         XCTAssertEqual(tab.index, 3)
@@ -260,21 +267,21 @@ final class BrowserMediaControllerTests: XCTestCase {
     }
 
     func testExecuteEventUsesArcsOwnClassCodes() throws {
-        let event = AppleEventTabEvaluator.executeEvent("1 + 1", in: .arc, window: 1, tab: 4)
+        let target = ChromiumTarget(browser: .arc, processID: 5678)
+        let event = AppleEventTabEvaluator.executeEvent("1 + 1", in: target, window: 1, tab: 4)
 
         // Arc's dictionary names its windows and tabs differently from Chromium's.
         let tab = try XCTUnwrap(specifier(event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))))
         XCTAssertEqual(tab.desiredClass, fourCharCode("tAbB"))
         XCTAssertEqual(try XCTUnwrap(specifier(tab.container)).desiredClass, fourCharCode("WiND"))
-        XCTAssertEqual(
-            targetBundleID(event),
-            "company.thebrowser.Browser")
+        XCTAssertEqual(event.attributeDescriptor(forKeyword: AEKeyword(keyAddressAttr)),
+                       NSAppleEventDescriptor(processIdentifier: target.processID))
     }
 
     func testSilentChromiumTabIsLeftOutAndSkippedByTheWalks() throws {
         let executor = ChromiumTabsExecutor(tabs: [(1, 1, "101"), (1, 2, "102"), (1, 3, "103")])
         executor.silentTabIDs = ["102"]
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
 
         let scan = controller.scan(.chrome)
 
@@ -292,7 +299,7 @@ final class BrowserMediaControllerTests: XCTestCase {
     func testChromiumTabThatAnswersAgainIsNoLongerSkipped() {
         let executor = ChromiumTabsExecutor(tabs: [(1, 1, "101"), (1, 2, "102")])
         executor.silentTabIDs = ["102"]
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         _ = controller.scan(.chrome)
 
         // A frozen tab revives when the user switches to it, and may start playing.
@@ -307,14 +314,38 @@ final class BrowserMediaControllerTests: XCTestCase {
     func testChromiumScanWhereNoTabAnswersIsUnavailable() {
         let executor = ChromiumTabsExecutor(tabs: [(1, 1, "101"), (1, 2, "102")])
         executor.silentTabIDs = ["101", "102"]
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
 
         XCTAssertFalse(controller.scan(.chrome).injectionAvailable)
     }
 
+    func testScanResolvesOneProcessForTheListingAndEveryTab() {
+        let executor = ChromiumTabsExecutor(tabs: [(1, 1, "101"), (1, 2, "102")])
+        var lookups: Int32 = 0
+        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor) { browser in
+            lookups += 1
+            return ChromiumTarget(browser: browser, processID: lookups)
+        }
+
+        XCTAssertEqual(controller.scan(.chrome).candidates.count, 2)
+        XCTAssertEqual(lookups, 1)
+        XCTAssertEqual(executor.targetPIDs, [1, 1, 1])
+    }
+
+    func testHeadlessOnlyBrowserReceivesNoScanOrTabCommands() {
+        let executor = ChromiumTabsExecutor(tabs: [(1, 1, "101")])
+        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor,
+                                               resolveTarget: { _ in nil })
+
+        XCTAssertFalse(controller.scan(.chrome).injectionAvailable)
+        XCTAssertFalse(controller.togglePlayPause(makeCandidate(browser: .chrome)))
+        XCTAssertTrue(executor.scripts.isEmpty)
+        XCTAssertEqual(executor.evaluations, 0)
+    }
+
     func testChromiumScanWithoutWindowsIsAvailableAndEmpty() {
         let executor = ChromiumTabsExecutor(tabs: [])
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
 
         let scan = controller.scan(.chrome)
 
@@ -325,7 +356,7 @@ final class BrowserMediaControllerTests: XCTestCase {
     func testChromiumScanAndWalkAppleScriptsCompile() throws {
         let executor = ChromiumTabsExecutor(tabs: [(1, 1, "101"), (1, 2, "102")])
         executor.silentTabIDs = ["102"]
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         let candidate = try XCTUnwrap(controller.scan(.brave).candidates.first)
         _ = controller.select(candidate)
         _ = controller.togglePlayPause(candidate)
@@ -342,7 +373,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testCallTabIsListedButCannotBeDrivenByTransport() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         executor.output = scanOutput(window: 1, tab: 1,
                                      sourceID: "550e8400-e29b-41d4-a716-446655440000",
                                      live: true)
@@ -357,7 +388,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testRegularMediaTabSupportsTransport() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         executor.output = scanOutput(window: 1, tab: 1,
                                      sourceID: "550e8400-e29b-41d4-a716-446655440000")
 
@@ -366,7 +397,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testEachSourceCarriesItsOwnTransportCapability() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         let meeting = "550e8400-e29b-41d4-a716-446655440000"
         let video = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
         executor.output = """
@@ -386,7 +417,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testScanCarriesTheTabHostname() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         executor.output = scanOutput(window: 1, tab: 1,
                                      sourceID: "550e8400-e29b-41d4-a716-446655440000",
                                      host: "music.youtube.com")
@@ -398,7 +429,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testTabWithoutAHostStillYieldsACandidate() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         executor.output = """
         OK
         1\t1\t{"sourceID":"550e8400-e29b-41d4-a716-446655440000","title":"Local file","artist":"","playing":true,"selected":false,"live":false,"volume":50}
@@ -413,7 +444,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testTransportScriptsDeclineALiveStream() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
 
         _ = controller.togglePlayPause(makeCandidate())
         let playPause = executor.scripts.last
@@ -466,7 +497,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testTransportFactsDecodeThePagesAnswer() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         executor.output = #"{"host":"youtube.com","duration":3600.5,"hasListParam":false,"nextButton":"enabled","live":false}"#
         let facts = controller.transportFacts(makeCandidate())
         XCTAssertEqual(facts, BrowserPlaybackFacts(host: "youtube.com", duration: 3600.5,
@@ -480,7 +511,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testTransportFactsAreNilWhenTheSourceIsGoneOrScriptFails() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         executor.output = "NO"
         XCTAssertNil(controller.transportFacts(makeCandidate()))
         executor.output = "{}"
@@ -490,7 +521,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testSeekMovesCurrentTimeBySignedSeconds() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         XCTAssertTrue(controller.seek(by: -10, on: makeCandidate()))
         let script = executor.scripts.last ?? ""
         XCTAssertTrue(script.contains("currentTime"))
@@ -499,7 +530,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testBrowserScriptsKeepJavaScriptFreeOfDoubleQuotes() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         _ = controller.transportFacts(makeCandidate())
         _ = controller.seek(by: 15, on: makeCandidate())
         let prefix = "set javascriptSource to \""
@@ -518,7 +549,7 @@ final class BrowserMediaControllerTests: XCTestCase {
 
     func testNextAndPreviousAlsoReachBandcampAndYouTubeMusicButtons() {
         let executor = RecordingScriptExecutor()
-        let controller = BrowserMediaController(executor: executor, tabEvaluator: executor)
+        let controller = makeController(executor)
         _ = controller.perform(.next, on: makeCandidate())
         _ = controller.perform(.previous, on: makeCandidate())
         XCTAssertTrue(executor.scripts[0].contains(".inline_player .nextbutton"))
@@ -726,13 +757,6 @@ private func fourCharCode(_ code: String) -> FourCharCode {
     code.utf8.reduce(0) { $0 << 8 | FourCharCode($1) }
 }
 
-/// The bundle id an Apple Event is addressed to.
-private func targetBundleID(_ event: NSAppleEventDescriptor) -> String? {
-    guard let address = event.attributeDescriptor(forKeyword: AEKeyword(keyAddressAttr)),
-          address.descriptorType == DescType(typeApplicationBundleID) else { return nil }
-    return String(data: address.data, encoding: .utf8)
-}
-
 /// The class, index and container of an index-form object specifier.
 private func specifier(_ descriptor: NSAppleEventDescriptor?)
     -> (desiredClass: FourCharCode, index: Int32, container: NSAppleEventDescriptor?)? {
@@ -748,7 +772,7 @@ private func specifier(_ descriptor: NSAppleEventDescriptor?)
 /// one page evaluation per tab, run concurrently. A tab in `silentTabIDs` fails
 /// the way a frozen tab does — the send times out — and every other tab answers
 /// with media.
-private final class ChromiumTabsExecutor: ScriptExecuting, ChromiumTabEvaluating,
+private final class ChromiumTabsExecutor: BrowserScriptExecuting, ChromiumTabEvaluating,
                                           @unchecked Sendable {
     let tabs: [(window: Int, tab: Int, id: String)]
     var silentTabIDs: Set<String> = []
@@ -765,6 +789,14 @@ private final class ChromiumTabsExecutor: ScriptExecuting, ChromiumTabEvaluating
         self.tabs = tabs
     }
 
+    private var pids: [pid_t] = []
+    var targetPIDs: [pid_t] { lock.withLock { pids } }
+
+    func run(_ source: String, targeting target: ChromiumTarget) -> ScriptResult {
+        lock.withLock { pids.append(target.processID) }
+        return run(source)
+    }
+
     func run(_ source: String) -> ScriptResult {
         lock.withLock { recorded.append(source) }
         if source.contains("id of tab") {
@@ -774,9 +806,10 @@ private final class ChromiumTabsExecutor: ScriptExecuting, ChromiumTabEvaluating
         return ScriptResult(output: "true", succeeded: true)
     }
 
-    func evaluate(_ javascript: String, in browser: BrowserKind,
+    func evaluate(_ javascript: String, in target: ChromiumTarget,
                   window: Int, tab: Int, timeout: TimeInterval) -> ScriptResult {
         lock.withLock {
+            pids.append(target.processID)
             evaluated += 1
             inFlight += 1
             maxInFlight = max(maxInFlight, inFlight)
@@ -797,18 +830,22 @@ private final class ChromiumTabsExecutor: ScriptExecuting, ChromiumTabEvaluating
 
 /// Answers every script with `output`. As a Chromium browser it lists the rows
 /// of `output` as its tabs, and each tab's page answers with its row's JSON.
-private final class RecordingScriptExecutor: ScriptExecuting, ChromiumTabEvaluating,
+private final class RecordingScriptExecutor: BrowserScriptExecuting, ChromiumTabEvaluating,
                                              @unchecked Sendable {
     var scripts: [String] = []
     var output: String? = "true"
     var succeeds = true
+
+    func run(_ source: String, targeting target: ChromiumTarget) -> ScriptResult {
+        run(source)
+    }
 
     func run(_ source: String) -> ScriptResult {
         scripts.append(source)
         return ScriptResult(output: output, succeeded: succeeds)
     }
 
-    func evaluate(_ javascript: String, in browser: BrowserKind,
+    func evaluate(_ javascript: String, in target: ChromiumTarget,
                   window: Int, tab: Int, timeout: TimeInterval) -> ScriptResult {
         let row = output?.split(separator: "\n").dropFirst().first {
             $0.hasPrefix("\(window)\t\(tab)\t")

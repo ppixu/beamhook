@@ -2610,6 +2610,10 @@ final class AppState: ObservableObject {
     /// popover names a running app, so a miss here means it quit since the last
     /// refresh — the row is about to disappear anyway, so do nothing.
     func activate(bundleID: String) {
+        if let browser = BrowserKind.browser(bundleID: bundleID), browser != .safari {
+            browser.desktopApplication?.activate()
+            return
+        }
         NSRunningApplication
             .runningApplications(withBundleIdentifier: bundleID)
             .first?
